@@ -26,7 +26,7 @@ function exportGroupLayer(group: LayerGroup, options: PsdExportOptions): AgLayer
   return {
     name: group.name,
     hidden: !group.visible,
-    opacity: Math.round(group.opacity * 255),
+    opacity: group.opacity,
     blendMode: group.blendMode,
     children: group.children.map((child) => exportLayer(child, options)),
     opened: group.expanded,
@@ -37,7 +37,7 @@ function exportRasterLayer(layer: RasterLayer): AgLayer {
   const result: AgLayer = {
     name: layer.name,
     hidden: !layer.visible,
-    opacity: Math.round(layer.opacity * 255),
+    opacity: layer.opacity,
     blendMode: layer.blendMode,
     left: layer.position.x,
     top: layer.position.y,
@@ -56,7 +56,7 @@ function exportTextLayer(layer: TextLayer, options: PsdExportOptions): AgLayer {
   const result: AgLayer = {
     name: layer.name,
     hidden: !layer.visible,
-    opacity: Math.round(layer.opacity * 255),
+    opacity: layer.opacity,
     blendMode: layer.blendMode,
     left: layer.position.x,
     top: layer.position.y,
