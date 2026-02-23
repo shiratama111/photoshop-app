@@ -76,7 +76,8 @@ export function registerFileDialogHandlers(
     if (!win) return null;
     const result = await dialog.showOpenDialog(win, {
       filters: [
-        { name: 'Supported Files', extensions: ['psd', 'psxp'] },
+        { name: 'Supported Files', extensions: ['psd', 'psxp', 'png', 'jpg', 'jpeg', 'webp'] },
+        { name: 'Image Files', extensions: ['png', 'jpg', 'jpeg', 'webp'] },
         { name: 'PSD Files', extensions: ['psd'] },
         { name: 'Project Files', extensions: ['psxp'] },
         { name: 'All Files', extensions: ['*'] },

@@ -333,6 +333,95 @@ function getElectronAPI(): ElectronBridgeAPI {
 }
 
 /**
+ * Open a raster image (PNG/JPEG/WebP) as a new single-layer Document.
+ * Uses createImageBitmap + OffscreenCanvas to decode the image data.
+ */
+async function openImageAsDocument(
+  data: ArrayBuffer,
+  filePath: string,
+  set: (partial: Partial<AppState>) => void,
+): Promise<void> {
+  try {
+    const blob = new Blob([data]);
+    const bitmap = await createImageBitmap(blob);
+    const { width, height } = bitmap;
+
+    // Draw to OffscreenCanvas to extract ImageData
+    const offscreen = new OffscreenCanvas(width, height);
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) {
+      set({ statusMessage: 'Failed to create canvas context' });
+      bitmap.close();
+      return;
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    bitmap.close();
+
+    // Build the document
+    const name = getBaseName(filePath);
+    const layerId = crypto.randomUUID();
+    const doc: Document = {
+      id: crypto.randomUUID(),
+      name,
+      canvas: {
+        size: { width, height },
+        dpi: 72,
+        colorMode: 'rgb',
+        bitDepth: 8,
+      },
+      rootGroup: {
+        id: crypto.randomUUID(),
+        name: 'Root',
+        type: 'group',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal' as Document['rootGroup']['blendMode'],
+        position: { x: 0, y: 0 },
+        locked: false,
+        effects: [],
+        parentId: null,
+        children: [
+          {
+            id: layerId,
+            name: 'Background',
+            type: 'raster' as const,
+            visible: true,
+            opacity: 1,
+            blendMode: 'normal' as Document['rootGroup']['blendMode'],
+            position: { x: 0, y: 0 },
+            locked: false,
+            effects: [],
+            parentId: null,
+            imageData,
+            bounds: { x: 0, y: 0, width, height },
+          },
+        ],
+        expanded: true,
+      },
+      selectedLayerId: layerId,
+      filePath,
+      dirty: false,
+      createdAt: new Date().toISOString(),
+      modifiedAt: new Date().toISOString(),
+    };
+
+    commandHistory.clear();
+    set({
+      document: doc,
+      selectedLayerId: layerId,
+      canUndo: false,
+      canRedo: false,
+      revision: 0,
+      statusMessage: `Opened: ${name} (${width}×${height})`,
+    });
+    eventBus.emit('document:changed');
+  } catch {
+    set({ statusMessage: `Failed to open image: ${getBaseName(filePath)}` });
+  }
+}
+
+/**
  * Open a PSD from raw binary data and file path.
  * Shared logic used by openFile, openFileByPath, and recoverDocument.
  */
@@ -342,6 +431,14 @@ function openPsdFromData(
   set: (partial: Partial<AppState>) => void,
 ): void {
   const ext = getExtension(filePath);
+  const imageExtensions = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
+  if (imageExtensions.has(ext)) {
+    // Handle image import - create a single-layer document from the image
+    void openImageAsDocument(data, filePath, set);
+    return;
+  }
+
   if (ext !== 'psd') {
     set({ statusMessage: `Unsupported file format: .${ext}` });
     return;

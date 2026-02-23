@@ -54,7 +54,7 @@ for (const tool of TOOLS) {
 }
 
 /** Supported file extensions for drag-drop. */
-const SUPPORTED_EXTENSIONS = new Set(['psd']);
+const SUPPORTED_EXTENSIONS = new Set(['psd', 'png', 'jpg', 'jpeg', 'webp']);
 
 /** Check if a file path has a supported extension. */
 function isSupportedFile(filePath: string): boolean {
@@ -301,7 +301,7 @@ export function App(): React.JSX.Element {
         }
       }
 
-      useAppStore.getState().setStatusMessage('Unsupported file format. Drop a .psd file.');
+      useAppStore.getState().setStatusMessage('Unsupported file format. Drop a PSD or image file.');
     },
     [openFileByPath, setDragOverActive],
   );
