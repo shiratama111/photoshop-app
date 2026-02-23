@@ -37,7 +37,7 @@ export function parseAbr(buffer: ArrayBuffer, sourceName?: string): AbrParseResu
   }
 
   const version = reader.readUint16();
-  const subVersion = reader.readUint16();
+  reader.readUint16(); // subVersion — skip, needed to advance reader
 
   if (version < 6) {
     return {
@@ -240,8 +240,6 @@ function parseDescriptors(
 ): void {
   // desc block: count(4) + descriptors
   if (reader.remaining < 4) return;
-
-  const startOffset = reader.offset;
 
   // Try to read a top-level descriptor
   try {

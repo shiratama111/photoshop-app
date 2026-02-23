@@ -12,23 +12,26 @@
 
 import type { EventBus, EventCallback, EventMap } from '@photoshop-app/types';
 
+/** Generic callback type used internally by the event bus. */
+type Callback = (...args: unknown[]) => void;
+
 /**
  * Concrete implementation of {@link EventBus}.
  *
- * Stores listeners in a `Map<string, Set<Function>>` so that add/remove are
+ * Stores listeners in a `Map<string, Set<Callback>>` so that add/remove are
  * O(1) and iteration order matches subscription order. The `once` wrapper is
  * tracked separately so that `off` can remove it correctly.
  */
 export class EventBusImpl implements EventBus {
   /** Registered listeners keyed by event name. */
-  private listeners = new Map<string, Set<Function>>();
+  private listeners = new Map<string, Set<Callback>>();
 
   /**
    * Mapping from the original `once` callback supplied by the caller to the
    * internal wrapper that auto-unsubscribes. This lets `off()` remove a
    * `once` listener before it fires.
    */
-  private onceWrappers = new Map<Function, Function>();
+  private onceWrappers = new Map<Callback, Callback>();
 
   /** @inheritdoc */
   on<K extends keyof EventMap>(event: K, callback: EventCallback<K>): () => void {
@@ -41,7 +44,7 @@ export class EventBusImpl implements EventBus {
   once<K extends keyof EventMap>(event: K, callback: EventCallback<K>): () => void {
     const wrapper = ((...args: unknown[]) => {
       this.off(event, callback);
-      (callback as Function)(...args);
+      (callback as Callback)(...args);
     }) as EventCallback<K>;
 
     this.onceWrappers.set(callback, wrapper);
@@ -82,7 +85,7 @@ export class EventBusImpl implements EventBus {
     // Iterate over a snapshot so that listeners added/removed during
     // emission don't cause issues.
     for (const fn of [...set]) {
-      (fn as Function)(...args);
+      (fn as Callback)(...args);
     }
   }
 
@@ -95,7 +98,7 @@ export class EventBusImpl implements EventBus {
   // ── helpers ──────────────────────────────────────────────────────────
 
   /** Return the listener set for `event`, creating it if necessary. */
-  private getOrCreateSet(event: string): Set<Function> {
+  private getOrCreateSet(event: string): Set<Callback> {
     let set = this.listeners.get(event);
     if (!set) {
       set = new Set();
@@ -105,7 +108,7 @@ export class EventBusImpl implements EventBus {
   }
 
   /** Delete the set from the map when it becomes empty to avoid leaks. */
-  private cleanupSet(event: string, set: Set<Function>): void {
+  private cleanupSet(event: string, set: Set<Callback>): void {
     if (set.size === 0) {
       this.listeners.delete(event);
     }

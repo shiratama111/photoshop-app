@@ -39,7 +39,6 @@ export function CanvasView(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPanning = useRef(false);
   const lastPanPoint = useRef({ x: 0, y: 0 });
-  const mousePos = useRef({ x: 0, y: 0 });
   const cursorRef = useRef<HTMLDivElement>(null);
 
   /** Render the document to the canvas. */

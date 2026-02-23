@@ -243,7 +243,7 @@ describe('adjustBoundary', () => {
   it('should binarize input before processing', () => {
     // Mask with gray values
     const mask = new Uint8Array([100, 200, 50, 180]);
-    const result = adjustBoundary(mask, { width: 2, height: 2 }, 0);
+    adjustBoundary(mask, { width: 2, height: 2 }, 0);
 
     // amount=0 returns copy, but test that non-zero amounts binarize
     const result2 = adjustBoundary(mask, { width: 2, height: 2 }, 1);

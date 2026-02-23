@@ -149,7 +149,7 @@ describe('EventBusImpl', () => {
     bus.off('document:changed', cb);
 
     // Access private map to verify cleanup (cast for test introspection)
-    const map = (bus as unknown as { listeners: Map<string, Set<Function>> }).listeners;
+    const map = (bus as unknown as { listeners: Map<string, Set<(...args: unknown[]) => void>> }).listeners;
     expect(map.has('document:changed')).toBe(false);
   });
 
@@ -160,7 +160,7 @@ describe('EventBusImpl', () => {
     bus.once('document:changed', cb);
     bus.emit('document:changed');
 
-    const map = (bus as unknown as { listeners: Map<string, Set<Function>> }).listeners;
+    const map = (bus as unknown as { listeners: Map<string, Set<(...args: unknown[]) => void>> }).listeners;
     expect(map.has('document:changed')).toBe(false);
   });
 
@@ -171,7 +171,7 @@ describe('EventBusImpl', () => {
     bus.once('document:changed', cb);
     bus.emit('document:changed');
 
-    const wrappers = (bus as unknown as { onceWrappers: Map<Function, Function> }).onceWrappers;
+    const wrappers = (bus as unknown as { onceWrappers: Map<(...args: unknown[]) => void, (...args: unknown[]) => void> }).onceWrappers;
     expect(wrappers.size).toBe(0);
   });
 
@@ -182,7 +182,7 @@ describe('EventBusImpl', () => {
     bus.once('document:changed', cb);
     bus.off('document:changed', cb);
 
-    const wrappers = (bus as unknown as { onceWrappers: Map<Function, Function> }).onceWrappers;
+    const wrappers = (bus as unknown as { onceWrappers: Map<(...args: unknown[]) => void, (...args: unknown[]) => void> }).onceWrappers;
     expect(wrappers.size).toBe(0);
   });
 

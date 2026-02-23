@@ -17,7 +17,6 @@
 import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../store';
 import { useCutoutStore } from './cutout-store';
-import type { CutoutBrushMode } from './cutout-store';
 import type { PointPrompt } from '@photoshop-app/types';
 import { MaskOverlay } from '../overlays/MaskOverlay';
 import {
@@ -64,6 +63,7 @@ export function CutoutTool(): React.JSX.Element | null {
   });
 
   /** Handle canvas click for point prompts. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): void => {
       if (mode !== 'prompt') return;
@@ -86,6 +86,7 @@ export function CutoutTool(): React.JSX.Element | null {
   );
 
   /** Handle brush mouse down. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleBrushDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): void => {
       if (mode !== 'brush' || !cutout.currentMask) return;
@@ -101,6 +102,7 @@ export function CutoutTool(): React.JSX.Element | null {
   );
 
   /** Handle brush mouse move (drag). */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleBrushMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): void => {
       if (mode !== 'brush' || !cutout.currentMask || !lastBrushPos || e.buttons !== 1) return;
@@ -121,6 +123,7 @@ export function CutoutTool(): React.JSX.Element | null {
   );
 
   /** Handle brush mouse up. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleBrushUp = useCallback((): void => {
     setLastBrushPos(null);
   }, []);
