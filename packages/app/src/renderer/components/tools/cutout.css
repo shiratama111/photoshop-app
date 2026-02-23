@@ -1,0 +1,166 @@
+/**
+ * AI Cutout Tool styles — APP-006.
+ * Standalone CSS for the cutout tool panel, mask overlay, and related UI.
+ */
+
+/* Cutout Tool Panel (floating options panel) */
+.cutout-tool-panel {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 220px;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.cutout-tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cutout-tool-close {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.cutout-tool-close:hover { color: var(--text-primary); }
+
+.cutout-tool-section {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cutout-tool-section:last-child { border-bottom: none; }
+
+.cutout-tool-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+/* Mode Toggle (Prompt / Brush) */
+.cutout-tool-toggle {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.cutout-toggle-btn {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cutout-toggle-btn:hover { background: var(--bg-hover); }
+.cutout-toggle-btn--active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Sliders */
+.cutout-tool-slider {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  margin: 4px 0;
+}
+
+.cutout-tool-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.cutout-tool-value {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+/* Action Buttons */
+.cutout-tool-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.cutout-action-btn {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cutout-action-btn:hover { background: var(--bg-hover); }
+.cutout-action-btn:disabled { color: var(--text-disabled); cursor: default; }
+.cutout-action-btn:disabled:hover { background: var(--bg-tertiary); }
+.cutout-action-btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cutout-action-btn--primary:hover { background: #006abc; }
+.cutout-action-btn--primary:disabled { background: var(--bg-tertiary); border-color: var(--border); color: var(--text-disabled); }
+
+/* Info displays */
+.cutout-confidence {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.cutout-processing {
+  text-align: center;
+  font-size: 10px;
+  color: var(--accent);
+  padding: 4px 0;
+}
+
+/* Mask Overlay */
+.mask-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.mask-overlay--interactive {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.mask-overlay--brush {
+  cursor: none;
+}

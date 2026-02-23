@@ -22,13 +22,16 @@
  * @see APP-002: Canvas view + layer panel integration
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from './store';
 import type { Tool } from './store';
 import { CanvasView } from './components/canvas/CanvasView';
 import { LayerPanel } from './components/panels/LayerPanel';
 import { LayerContextMenu } from './components/panels/LayerContextMenu';
 import { PsdDialog } from './components/dialogs/PsdDialog';
+import { LayerStyleDialog } from './components/dialogs/LayerStyleDialog';
+import { AssetBrowser } from './components/panels/AssetBrowser';
+import { TextPropertiesPanel, InlineTextEditor } from './components/text-editor';
 
 /** Available tools with display labels. */
 const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
@@ -92,6 +95,43 @@ function StatusBar(): React.JSX.Element {
   );
 }
 
+/** Active sidebar panel — APP-007. */
+type SidebarPanel = 'layers' | 'assets';
+
+/** Sidebar wrapper with Layers / Assets tabs — APP-007. */
+function SidebarWrapper(): React.JSX.Element {
+  const [activePanel, setActivePanel] = useState<SidebarPanel>('layers');
+
+  return (
+    <div className="sidebar-wrapper">
+      <div className="sidebar-tabs">
+        <button
+          className={`sidebar-tab ${activePanel === 'layers' ? 'sidebar-tab--active' : ''}`}
+          onClick={(): void => setActivePanel('layers')}
+        >
+          Layers
+        </button>
+        <button
+          className={`sidebar-tab ${activePanel === 'assets' ? 'sidebar-tab--active' : ''}`}
+          onClick={(): void => setActivePanel('assets')}
+        >
+          Assets
+        </button>
+      </div>
+      <div className="sidebar-content">
+        {activePanel === 'layers' ? (
+          <>
+            <LayerPanel />
+            <TextPropertiesPanel />
+          </>
+        ) : (
+          <AssetBrowser />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Root App component with CSS Grid layout. */
 export function App(): React.JSX.Element {
   const setActiveTool = useAppStore((s) => s.setActiveTool);
@@ -100,6 +140,9 @@ export function App(): React.JSX.Element {
   const removeLayer = useAppStore((s) => s.removeLayer);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const hideContextMenu = useAppStore((s) => s.hideContextMenu);
+  const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
+  const layerStyleDialog = useAppStore((s) => s.layerStyleDialog);
+  const stopEditingText = useAppStore((s) => s.stopEditingText);
 
   /** Global keyboard shortcut handler. */
   const handleKeyDown = useCallback(
@@ -132,7 +175,11 @@ export function App(): React.JSX.Element {
       }
 
       if (e.key === 'Escape') {
-        hideContextMenu();
+        if (useAppStore.getState().editingTextLayerId) {
+          stopEditingText();
+        } else {
+          hideContextMenu();
+        }
         return;
       }
 
@@ -144,7 +191,7 @@ export function App(): React.JSX.Element {
         }
       }
     },
-    [undo, redo, removeLayer, selectedLayerId, setActiveTool, hideContextMenu],
+    [undo, redo, removeLayer, selectedLayerId, setActiveTool, hideContextMenu, stopEditingText],
   );
 
   useEffect(() => {
@@ -167,11 +214,13 @@ export function App(): React.JSX.Element {
   return (
     <div className="app-layout">
       <Toolbar />
-      <LayerPanel />
+      <SidebarWrapper />
       <CanvasView />
       <StatusBar />
       <LayerContextMenu />
       <PsdDialog />
+      {editingTextLayerId && <InlineTextEditor />}
+      {layerStyleDialog && <LayerStyleDialog />}
     </div>
   );
 }

@@ -21,9 +21,11 @@ export function LayerPanel(): React.JSX.Element {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const revision = useAppStore((s) => s.revision);
   const addRasterLayer = useAppStore((s) => s.addRasterLayer);
+  const addTextLayer = useAppStore((s) => s.addTextLayer);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
+  const openLayerStyleDialog = useAppStore((s) => s.openLayerStyleDialog);
 
   // Track drag state
   const dragIndexRef = useRef<number | null>(null);
@@ -82,15 +84,28 @@ export function LayerPanel(): React.JSX.Element {
         <>
           <div className="layer-list">
             {layers.map((layer, displayIndex) => (
-              <LayerItem
-                key={layer.id}
-                layer={layer}
-                index={displayIndex}
-                isSelected={selectedLayerId === layer.id}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              />
+              <div key={layer.id} className="layer-item-row">
+                <LayerItem
+                  layer={layer}
+                  index={displayIndex}
+                  isSelected={selectedLayerId === layer.id}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                />
+                {selectedLayerId === layer.id && (
+                  <button
+                    className="layer-fx-btn"
+                    onClick={(e): void => {
+                      e.stopPropagation();
+                      openLayerStyleDialog(layer.id);
+                    }}
+                    title="Layer styles"
+                  >
+                    fx
+                  </button>
+                )}
+              </div>
             ))}
             {layers.length === 0 && <div className="layer-empty">No layers</div>}
           </div>
@@ -103,6 +118,13 @@ export function LayerPanel(): React.JSX.Element {
               title="Add new layer"
             >
               + Layer
+            </button>
+            <button
+              className="layer-action-btn"
+              onClick={(): void => addTextLayer()}
+              title="Add new text layer"
+            >
+              + Text
             </button>
             <button
               className="layer-action-btn"

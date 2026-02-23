@@ -25,6 +25,7 @@ import type {
   CompatibilityReport,
   Document,
   Layer,
+  LayerEffect,
   LayerGroup,
   RasterLayer,
 } from '@photoshop-app/types';
@@ -33,6 +34,7 @@ import {
   EventBusImpl,
   createRasterLayer,
   createLayerGroup,
+  createTextLayer,
   findLayerById,
   findParentGroup,
   AddLayerCommand,
@@ -87,6 +89,10 @@ export interface AppState {
   pendingPsdImport: { document: Document; report: CompatibilityReport } | null;
   /** Recent files list (APP-004). */
   recentFiles: RecentFileEntry[];
+  /** ID of the text layer currently being inline-edited (APP-005). */
+  editingTextLayerId: string | null;
+  /** Layer style dialog state (APP-005). */
+  layerStyleDialog: { layerId: string } | null;
 }
 
 /** Actions on the state. */
@@ -127,6 +133,30 @@ export interface AppActions {
   renameLayer: (layerId: string, name: string) => void;
   /** Move a layer to a new index within its parent. */
   reorderLayer: (layerId: string, newIndex: number) => void;
+
+  // Text layer operations — APP-005
+  /** Add a new text layer. */
+  addTextLayer: (name?: string, text?: string) => void;
+  /** Set a text-specific property (undoable). */
+  setTextProperty: (layerId: string, key: string, value: unknown) => void;
+  /** Add an effect to a layer (undoable). */
+  addLayerEffect: (layerId: string, effect: LayerEffect) => void;
+  /** Remove an effect from a layer by index (undoable). */
+  removeLayerEffect: (layerId: string, index: number) => void;
+  /** Update an effect on a layer by index (undoable). */
+  updateLayerEffect: (layerId: string, index: number, effect: LayerEffect) => void;
+  /** Start inline editing a text layer. */
+  startEditingText: (layerId: string) => void;
+  /** Stop inline editing. */
+  stopEditingText: () => void;
+  /** Open the layer style dialog. */
+  openLayerStyleDialog: (layerId: string) => void;
+  /** Close the layer style dialog. */
+  closeLayerStyleDialog: () => void;
+
+  // Effect operations — APP-007
+  /** Replace all effects on a layer in a single undoable operation. */
+  setLayerEffects: (layerId: string, effects: LayerEffect[]) => void;
 
   // History
   /** Undo the last command. */
@@ -259,6 +289,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   contextMenu: null,
   pendingPsdImport: null,
   recentFiles: [],
+  editingTextLayerId: null,
+  layerStyleDialog: null,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -443,6 +475,103 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:reordered', { parentId: parent.id });
+  },
+
+  setLayerEffects: (layerId, effects): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer) return;
+    const cmd = new SetLayerPropertyCommand(layer, 'effects', [...effects]);
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+  },
+
+  // Text layer operations — APP-005
+  addTextLayer: (name, text): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layerName = name ?? `Text ${doc.rootGroup.children.length + 1}`;
+    const layer = createTextLayer(layerName, text ?? 'New Text');
+    const cmd = new AddLayerCommand(doc.rootGroup, layer);
+    executeCommand(cmd, set);
+    set({ selectedLayerId: layer.id, statusMessage: `Added: ${layerName}` });
+    doc.selectedLayerId = layer.id;
+    doc.dirty = true;
+    eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
+  },
+
+  setTextProperty: (layerId, key, value): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'text') return;
+    const cmd = new SetLayerPropertyCommand(
+      layer,
+      key as unknown as keyof Layer,
+      value as Layer[keyof Layer],
+    );
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: key });
+  },
+
+  addLayerEffect: (layerId, effect): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer) return;
+    const newEffects = [...layer.effects, effect];
+    const cmd = new SetLayerPropertyCommand(layer, 'effects', newEffects);
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+  },
+
+  removeLayerEffect: (layerId, index): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer) return;
+    const newEffects = layer.effects.filter((_, i) => i !== index);
+    const cmd = new SetLayerPropertyCommand(layer, 'effects', newEffects);
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+  },
+
+  updateLayerEffect: (layerId, index, effect): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer) return;
+    const newEffects = [...layer.effects];
+    newEffects[index] = effect;
+    const cmd = new SetLayerPropertyCommand(layer, 'effects', newEffects);
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+  },
+
+  startEditingText: (layerId): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'text') return;
+    set({ editingTextLayerId: layerId, selectedLayerId: layerId });
+  },
+
+  stopEditingText: (): void => {
+    set({ editingTextLayerId: null });
+  },
+
+  openLayerStyleDialog: (layerId): void => {
+    set({ layerStyleDialog: { layerId } });
+  },
+
+  closeLayerStyleDialog: (): void => {
+    set({ layerStyleDialog: null });
   },
 
   // History
