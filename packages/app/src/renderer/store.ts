@@ -9,17 +9,20 @@
  * - Viewport (zoom/pan)
  * - Canvas renderer integration
  * - Event bus for cross-module communication
+ * - PSD open/save and compatibility dialog (APP-004)
  *
  * All layer mutations go through Commands for undo/redo support.
  *
  * @see https://github.com/pmndrs/zustand
  * @see APP-002: Canvas view + layer panel integration
+ * @see APP-004: PSD open/save integration
  */
 
 import { create } from 'zustand';
 import type {
   BlendMode,
   Command,
+  CompatibilityReport,
   Document,
   Layer,
   LayerGroup,
@@ -37,10 +40,18 @@ import {
   ReorderLayerCommand,
   SetLayerPropertyCommand,
 } from '@photoshop-app/core';
+import { importPsd, exportPsd } from '@photoshop-app/adapter-psd';
 import { Canvas2DRenderer, ViewportImpl } from '@photoshop-app/render';
 
 /** Active tool in the toolbar. */
 export type Tool = 'select' | 'move' | 'brush' | 'eraser' | 'text' | 'crop' | 'segment';
+
+/** Recent file entry from the main process (APP-004). */
+export interface RecentFileEntry {
+  filePath: string;
+  name: string;
+  openedAt: string;
+}
 
 /** Shared singleton instances. */
 const commandHistory = new CommandHistoryImpl();
@@ -68,10 +79,14 @@ export interface AppState {
   canUndo: boolean;
   /** Whether redo is available. */
   canRedo: boolean;
-  /** Revision counter — incremented on every document mutation to trigger re-renders. */
+  /** Revision counter \u2014 incremented on every document mutation to trigger re-renders. */
   revision: number;
   /** Context menu state. */
   contextMenu: { x: number; y: number; layerId: string } | null;
+  /** Pending PSD import awaiting user confirmation (APP-004). */
+  pendingPsdImport: { document: Document; report: CompatibilityReport } | null;
+  /** Recent files list (APP-004). */
+  recentFiles: RecentFileEntry[];
 }
 
 /** Actions on the state. */
@@ -132,6 +147,20 @@ export interface AppActions {
   renderLayerThumbnail: (layerId: string, size: number) => HTMLCanvasElement | null;
   /** Fit the viewport to the canvas container size. */
   fitToWindow: (containerWidth: number, containerHeight: number) => void;
+
+  // File operations \u2014 APP-004
+  /** Open a PSD file via the system dialog. */
+  openFile: () => Promise<void>;
+  /** Save the current document. */
+  saveFile: () => Promise<void>;
+  /** Save As \u2014 always shows the save dialog. */
+  saveAsFile: () => Promise<void>;
+  /** Accept a pending PSD import (after reviewing compatibility report). */
+  acceptPsdImport: () => void;
+  /** Cancel a pending PSD import. */
+  cancelPsdImport: () => void;
+  /** Load the recent files list from the main process. */
+  loadRecentFiles: () => Promise<void>;
 }
 
 /**
@@ -182,8 +211,36 @@ function cloneLayer(layer: Layer): Layer {
     return group;
   }
 
-  // Text layer — all primitives, spread is sufficient
+  // Text layer \u2014 all primitives, spread is sufficient
   return base as Layer;
+}
+
+/** Extract file extension from a path (lowercase, no dot). */
+function getExtension(filePath: string): string {
+  const dot = filePath.lastIndexOf('.');
+  return dot >= 0 ? filePath.slice(dot + 1).toLowerCase() : '';
+}
+
+/** Extract the file name from a full path. */
+function getBaseName(filePath: string): string {
+  const sep = filePath.lastIndexOf('/');
+  const backSep = filePath.lastIndexOf('\\');
+  const last = Math.max(sep, backSep);
+  return last >= 0 ? filePath.slice(last + 1) : filePath;
+}
+
+/** Type-safe accessor for the Electron context bridge API. */
+interface ElectronBridgeAPI {
+  openFile: () => Promise<{ filePath: string; data: ArrayBuffer } | null>;
+  saveFile: (data: ArrayBuffer, defaultPath?: string) => Promise<string | null>;
+  exportFile: (data: ArrayBuffer, defaultPath?: string) => Promise<string | null>;
+  writeTo: (data: ArrayBuffer, filePath: string) => Promise<string | null>;
+  getRecentFiles: () => Promise<RecentFileEntry[]>;
+  clearRecentFiles: () => Promise<boolean>;
+}
+
+function getElectronAPI(): ElectronBridgeAPI {
+  return (window as unknown as { electronAPI: ElectronBridgeAPI }).electronAPI;
 }
 
 /** Zustand store for application state. */
@@ -200,6 +257,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   canRedo: false,
   revision: 0,
   contextMenu: null,
+  pendingPsdImport: null,
+  recentFiles: [],
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -440,6 +499,85 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       doc.canvas.size,
     );
     set({ zoom: viewport.zoom, panOffset: viewport.offset });
+  },
+
+  // \u2500\u2500 File operations \u2014 APP-004 \u2500\u2500
+
+  openFile: async (): Promise<void> => {
+    const api = getElectronAPI();
+    const result = await api.openFile();
+    if (!result) return;
+    const { filePath, data } = result;
+    const ext = getExtension(filePath);
+
+    if (ext === 'psd') {
+      const { document: doc, report } = importPsd(new Uint8Array(data), getBaseName(filePath));
+      doc.filePath = filePath;
+      if (report.issues.length > 0) {
+        set({ pendingPsdImport: { document: doc, report } });
+      } else {
+        commandHistory.clear();
+        set({
+          document: doc,
+          selectedLayerId: null,
+          canUndo: false,
+          canRedo: false,
+          revision: 0,
+          statusMessage: `Opened: ${getBaseName(filePath)}`,
+        });
+        eventBus.emit('document:changed');
+      }
+    } else {
+      set({ statusMessage: `Unsupported file format: .${ext}` });
+    }
+  },
+
+  saveFile: async (): Promise<void> => {
+    const { document: doc } = get();
+    if (!doc) return;
+    await get().saveAsFile();
+  },
+
+  saveAsFile: async (): Promise<void> => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const api = getElectronAPI();
+    const defaultName = doc.name || 'Untitled';
+    const psdData = exportPsd(doc);
+    const saved = await api.saveFile(psdData, `${defaultName}.psd`);
+    if (saved) {
+      doc.filePath = saved;
+      doc.dirty = false;
+      doc.modifiedAt = new Date().toISOString();
+      set({ statusMessage: `Saved: ${getBaseName(saved)}` });
+    }
+  },
+
+  acceptPsdImport: (): void => {
+    const { pendingPsdImport } = get();
+    if (!pendingPsdImport) return;
+    const { document: doc } = pendingPsdImport;
+    commandHistory.clear();
+    set({
+      document: doc,
+      pendingPsdImport: null,
+      selectedLayerId: null,
+      canUndo: false,
+      canRedo: false,
+      revision: 0,
+      statusMessage: `Opened: ${doc.name}`,
+    });
+    eventBus.emit('document:changed');
+  },
+
+  cancelPsdImport: (): void => {
+    set({ pendingPsdImport: null, statusMessage: 'Import cancelled' });
+  },
+
+  loadRecentFiles: async (): Promise<void> => {
+    const api = getElectronAPI();
+    const files = await api.getRecentFiles();
+    set({ recentFiles: files });
   },
 }));
 

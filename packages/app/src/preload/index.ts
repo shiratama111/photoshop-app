@@ -1,6 +1,6 @@
 /**
  * @module preload
- * Electron preload script — Context Bridge API.
+ * Electron preload script \u2014 Context Bridge API.
  *
  * Exposes a minimal, typed API to the renderer process.
  * All communication with the main process goes through this bridge.
@@ -9,6 +9,7 @@
  * Never exposes raw ipcRenderer or Node.js APIs.
  *
  * @see https://www.electronjs.org/docs/latest/tutorial/context-isolation
+ * @see APP-004: writeTo, getRecentFiles, clearRecentFiles
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -24,6 +25,15 @@ const electronAPI = {
 
   exportFile: (data: ArrayBuffer, defaultPath?: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:exportFile', data, defaultPath),
+
+  writeTo: (data: ArrayBuffer, filePath: string): Promise<string | null> =>
+    ipcRenderer.invoke('file:writeTo', data, filePath),
+
+  getRecentFiles: (): Promise<Array<{ filePath: string; name: string; openedAt: string }>> =>
+    ipcRenderer.invoke('file:getRecent'),
+
+  clearRecentFiles: (): Promise<boolean> =>
+    ipcRenderer.invoke('file:clearRecent'),
 
   // Menu event listeners
   onMenuNew: (callback: () => void): void => {

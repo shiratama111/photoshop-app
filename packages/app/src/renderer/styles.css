@@ -325,6 +325,94 @@ html, body, #root {
 .status-sep { margin: 0 4px; opacity: 0.5; }
 .status-hint { font-size: 10px; opacity: 0.6; }
 
+
+/* Dialog (shared) \u2014 APP-004 */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.dialog {
+  width: 360px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.dialog-header {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-body { padding: 16px; }
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dialog-btn:hover { background: var(--bg-hover); }
+.dialog-btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dialog-btn--primary:hover { background: #006cbd; }
+.dialog-btn:disabled { opacity: 0.5; cursor: default; }
+.dialog-btn:disabled:hover { background: var(--bg-tertiary); }
+
+/* PSD Compatibility Dialog \u2014 APP-004 */
+.psd-summary { margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); }
+.psd-issues-list { max-height: 240px; overflow-y: auto; margin-bottom: 12px; }
+.psd-issue {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  background: var(--bg-tertiary);
+}
+.psd-issue--info { border-left: 3px solid var(--accent); }
+.psd-issue--warning { border-left: 3px solid #cca700; }
+.psd-issue--error { border-left: 3px solid var(--danger); }
+.psd-issue-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.psd-issue--info .psd-issue-badge { background: var(--accent); color: #fff; }
+.psd-issue--warning .psd-issue-badge { background: #cca700; color: #000; }
+.psd-issue--error .psd-issue-badge { background: var(--danger); color: #fff; }
+.psd-error-notice {
+  margin-bottom: 12px;
+  padding: 8px;
+  border-radius: 3px;
+  background: rgba(241, 76, 76, 0.15);
+  color: var(--danger);
+  font-size: 11px;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }

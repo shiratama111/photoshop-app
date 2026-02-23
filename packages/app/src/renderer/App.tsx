@@ -28,6 +28,7 @@ import type { Tool } from './store';
 import { CanvasView } from './components/canvas/CanvasView';
 import { LayerPanel } from './components/panels/LayerPanel';
 import { LayerContextMenu } from './components/panels/LayerContextMenu';
+import { PsdDialog } from './components/dialogs/PsdDialog';
 
 /** Available tools with display labels. */
 const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
@@ -151,6 +152,18 @@ export function App(): React.JSX.Element {
     return (): void => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Wire Electron menu events to store actions \u2014 APP-004
+  useEffect(() => {
+    const api = (window as unknown as { electronAPI: Record<string, (cb: () => void) => void> }).electronAPI;
+    if (!api) return;
+    api.onMenuNew?.(() => useAppStore.getState().newDocument('Untitled', 1920, 1080));
+    api.onMenuOpen?.(() => void useAppStore.getState().openFile());
+    api.onMenuSave?.(() => void useAppStore.getState().saveFile());
+    api.onMenuSaveAs?.(() => void useAppStore.getState().saveAsFile());
+    api.onMenuUndo?.(() => useAppStore.getState().undo());
+    api.onMenuRedo?.(() => useAppStore.getState().redo());
+  }, []);
+
   return (
     <div className="app-layout">
       <Toolbar />
@@ -158,6 +171,7 @@ export function App(): React.JSX.Element {
       <CanvasView />
       <StatusBar />
       <LayerContextMenu />
+      <PsdDialog />
     </div>
   );
 }
