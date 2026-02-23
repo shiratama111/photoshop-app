@@ -115,6 +115,8 @@ export interface AppState {
   pendingClose: boolean;
   /** Whether a drag-drop hover is active (APP-008). */
   dragOverActive: boolean;
+  /** Current selection rectangle, or null (APP-015). */
+  selection: { x: number; y: number; width: number; height: number } | null;
 }
 
 /** Actions on the state. */
@@ -241,6 +243,14 @@ export interface AppActions {
   // Export — APP-010
   /** Export the current document as PNG/JPEG/WebP. */
   exportAsImage: (format?: 'png' | 'jpeg' | 'webp') => Promise<void>;
+
+  // Selection -- APP-015
+  /** Set the current selection. */
+  setSelection: (rect: { x: number; y: number; width: number; height: number } | null) => void;
+  /** Clear the current selection. */
+  clearSelection: () => void;
+  /** Select all (entire document). */
+  selectAll: () => void;
 }
 
 /**
@@ -486,6 +496,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   recoveryEntries: [],
   pendingClose: false,
   dragOverActive: false,
+  selection: null,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -1122,6 +1133,28 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setPendingClose: (pending): void => {
     set({ pendingClose: pending });
   },
+  // Selection -- APP-015
+  setSelection: (rect): void => {
+    set({ selection: rect });
+    if (rect) {
+      set({ statusMessage: `Selection: ${Math.round(rect.width)}×${Math.round(rect.height)}` });
+    }
+  },
+
+  clearSelection: (): void => {
+    set({ selection: null, statusMessage: 'Selection cleared' });
+  },
+
+  selectAll: (): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const { width, height } = doc.canvas.size;
+    set({
+      selection: { x: 0, y: 0, width, height },
+      statusMessage: `Selected all: ${width}×${height}`,
+    });
+  },
+
 }));
 
 /** Access the shared event bus (for component subscriptions). */
