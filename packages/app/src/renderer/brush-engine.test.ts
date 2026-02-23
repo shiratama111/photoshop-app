@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BrushEngine } from './brush-engine';
-import type { BrushStrokeOptions, BrushPoint } from './brush-engine';
+import type { BrushStrokeOptions } from './brush-engine';
 
 /** Create an empty ImageData-like object for testing. */
 function createImageData(width: number, height: number): ImageData {
@@ -167,7 +167,7 @@ describe('BrushEngine', () => {
       };
 
       engine.startStroke(img, { x: 50, y: 50 }, eraserOptions);
-      const result = engine.endStroke();
+      engine.endStroke();
 
       // Center pixel alpha should be reduced
       const idx = (50 * 100 + 50) * 4;

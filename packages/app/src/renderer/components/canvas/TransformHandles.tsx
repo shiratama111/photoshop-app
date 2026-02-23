@@ -191,7 +191,7 @@ export function TransformHandles(): React.JSX.Element | null {
       {/* Bounding box */}
       <div
         className="transform-bounding-box"
-        style={
+        style={{
           left: `${sx}px`,
           top: `${sy}px`,
           width: `${sw}px`,
@@ -204,7 +204,7 @@ export function TransformHandles(): React.JSX.Element | null {
           key={h.position}
           className="transform-handle"
           data-testid={`handle-${h.position}`}
-          style={
+          style={{
             left: `${h.x}px`,
             top: `${h.y}px`,
             width: `${HANDLE_SIZE}px`,

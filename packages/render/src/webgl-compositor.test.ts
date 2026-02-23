@@ -254,7 +254,7 @@ describe('WebGLRenderer', () => {
       renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
 
       // New text rendering calls fillText instead of translate
-      expect((ctx as any).fillText).toHaveBeenCalled();
+      expect((ctx as unknown as Record<string, unknown>).fillText).toHaveBeenCalled();
     });
 
     it('should render effects via fallback', () => {

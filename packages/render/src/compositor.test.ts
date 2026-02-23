@@ -285,7 +285,7 @@ describe('Canvas2DRenderer', () => {
       renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
 
       // New text rendering calls fillText instead of translate
-      expect((ctx as any).fillText).toHaveBeenCalled();
+      expect((ctx as unknown as Record<string, unknown>).fillText).toHaveBeenCalled();
     });
   });
 
@@ -352,7 +352,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should skip effects when renderEffects is false', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')!;
+      canvas.getContext('2d')!;
       const layer = makeRasterLayer('Shadowed', {
         effects: [{
           type: 'drop-shadow',
@@ -421,7 +421,7 @@ describe('Canvas2DRenderer', () => {
   describe('RENDER-004: Text Layer Canvas Rendering', () => {
     it('should render text with correct font settings', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Bold Italic', 'Styled');
       layer.bold = true;
       layer.italic = true;
@@ -441,7 +441,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should render multi-line text with one fillText per line', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Multi', 'Line 1\nLine 2\nLine 3');
       const doc = createTestDocument([layer]);
       const options = createRenderOptions();
@@ -453,7 +453,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should convert color to rgba CSS string', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Colored', 'Red');
       layer.color = { r: 128, g: 64, b: 32, a: 0.5 };
       const doc = createTestDocument([layer]);
@@ -466,7 +466,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should apply text alignment with textBounds', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Centered', 'Center me');
       layer.alignment = 'center';
       layer.textBounds = { x: 10, y: 20, width: 200, height: 100 };
@@ -484,7 +484,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should not render invisible text layers', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Hidden', 'Should not appear');
       layer.visible = false;
       const doc = createTestDocument([layer]);
@@ -497,7 +497,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should handle empty text', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Empty', '');
       const doc = createTestDocument([layer]);
       const options = createRenderOptions();
@@ -509,7 +509,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should word-wrap text when textBounds width is set', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       // Each char ~8px (mock measureText), 'Hello World' = 11 chars = 88px
       // With maxWidth 50, 'Hello World' > 50 -> wraps
       const layer = makeTextLayer('Wrapped', 'Hello World Test');
@@ -524,7 +524,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should set textBaseline to top', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Baseline', 'Test');
       const doc = createTestDocument([layer]);
       const options = createRenderOptions();
@@ -536,7 +536,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should position text at layer position for left alignment', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Positioned', 'At position');
       layer.position = { x: 50, y: 30 };
       layer.alignment = 'left';
@@ -552,7 +552,7 @@ describe('Canvas2DRenderer', () => {
 
     it('should use correct line height spacing', () => {
       const canvas = createMockCanvas(100, 100);
-      const ctx = canvas.getContext('2d')! as any;
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
       const layer = makeTextLayer('Spaced', 'Line1\nLine2');
       layer.fontSize = 20;
       layer.lineHeight = 1.5;

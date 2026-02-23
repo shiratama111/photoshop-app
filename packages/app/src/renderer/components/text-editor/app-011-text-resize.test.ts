@@ -3,7 +3,7 @@
  * Tests for text box resize feature (APP-011).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from '../../store';
 
 function resetStore(): void {
