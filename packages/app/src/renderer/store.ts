@@ -126,6 +126,8 @@ export interface AppState {
   brushOpacity: number;
   /** Brush color RGBA (APP-014). */
   brushColor: { r: number; g: number; b: number; a: number };
+  /** Current selection rectangle, or null (APP-015). */
+  selection: { x: number; y: number; width: number; height: number } | null;
 }
 
 /** Actions on the state. */
@@ -270,6 +272,14 @@ export interface AppActions {
   setBrushHardness: (hardness: number) => void;
   /** Commit a completed brush stroke (for undo). */
   commitBrushStroke: (layerId: string, region: { x: number; y: number; width: number; height: number }, oldPixels: Uint8ClampedArray, newPixels: Uint8ClampedArray) => void;
+
+  // Selection -- APP-015
+  /** Set the current selection. */
+  setSelection: (rect: { x: number; y: number; width: number; height: number } | null) => void;
+  /** Clear the current selection. */
+  clearSelection: () => void;
+  /** Select all (entire document). */
+  selectAll: () => void;
 }
 
 /**
@@ -520,6 +530,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   brushHardness: 0.8,
   brushOpacity: 1,
   brushColor: { r: 0, g: 0, b: 0, a: 1 },
+  selection: null,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -1261,6 +1272,29 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.dirty = true;
     get().updateTitleBar();
   },
+
+  // Selection -- APP-015
+  setSelection: (rect): void => {
+    set({ selection: rect });
+    if (rect) {
+      set({ statusMessage: `Selection: ${Math.round(rect.width)}×${Math.round(rect.height)}` });
+    }
+  },
+
+  clearSelection: (): void => {
+    set({ selection: null, statusMessage: 'Selection cleared' });
+  },
+
+  selectAll: (): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const { width, height } = doc.canvas.size;
+    set({
+      selection: { x: 0, y: 0, width, height },
+      statusMessage: `Selected all: ${width}×${height}`,
+    });
+  },
+
 }));
 
 /** Access the shared event bus (for component subscriptions). */
