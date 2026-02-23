@@ -737,9 +737,9 @@ html, body, #root {
   border: 1px dashed var(--accent);
   background: transparent;
   color: inherit;
-  resize: none;
+  resize: both;
   outline: none;
-  overflow: hidden;
+  overflow: auto;
   min-width: 100px;
   min-height: 1.5em;
   white-space: pre-wrap;

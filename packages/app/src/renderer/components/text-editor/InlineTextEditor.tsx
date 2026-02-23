@@ -4,8 +4,11 @@
  *
  * Positioned over the canvas at the text layer's screen coordinates.
  * Matches the layer's font styling for WYSIWYG preview.
+ * Supports resize via CSS `resize: both`; on blur the new dimensions
+ * are committed to the layer's `textBounds` property (APP-011).
  *
  * @see APP-005: Text editing UI
+ * @see APP-011: Text box resize with textBounds commit on blur
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
@@ -51,8 +54,30 @@ export function InlineTextEditor(): React.JSX.Element | null {
   );
 
   const handleBlur = useCallback((): void => {
+    // Commit the resized dimensions as textBounds before stopping edit
+    if (editingTextLayerId && textareaRef.current) {
+      const el = textareaRef.current;
+      const vp = getViewport();
+      const docWidth = el.offsetWidth / vp.zoom;
+      const docHeight = el.offsetHeight / vp.zoom;
+
+      const state = useAppStore.getState();
+      const doc = state.document;
+      if (doc) {
+        const layer = findLayerById(doc.rootGroup, editingTextLayerId);
+        if (layer && layer.type === 'text') {
+          const tl = layer as TextLayer;
+          setTextProperty(editingTextLayerId, 'textBounds', {
+            x: tl.position.x,
+            y: tl.position.y,
+            width: docWidth,
+            height: docHeight,
+          });
+        }
+      }
+    }
     stopEditingText();
-  }, [stopEditingText]);
+  }, [editingTextLayerId, setTextProperty, stopEditingText]);
 
   if (!editingTextLayerId || !document) return null;
 
@@ -74,6 +99,13 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const top = canvasRect.top + screenPos.y;
   const fontSize = textLayer.fontSize * zoom;
 
+  // If textBounds exists, set initial size in screen coordinates
+  const sizeStyle: React.CSSProperties = {};
+  if (textLayer.textBounds) {
+    sizeStyle.width = `${textLayer.textBounds.width * zoom}px`;
+    sizeStyle.height = `${textLayer.textBounds.height * zoom}px`;
+  }
+
   return (
     <textarea
       ref={textareaRef}
@@ -93,6 +125,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
         textAlign: textLayer.alignment,
         lineHeight: textLayer.lineHeight,
         letterSpacing: `${textLayer.letterSpacing * zoom}px`,
+        ...sizeStyle,
       }}
     />
   );
