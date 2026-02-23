@@ -10,3 +10,6 @@
 // PSD Import — PSD-001
 export { importPsd } from './import-psd';
 export type { PsdImportResult } from './import-psd';
+
+// PSD Export — PSD-002
+export { exportPsd } from './export-psd';
