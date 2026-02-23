@@ -118,6 +118,14 @@ export interface AppState {
   dragOverActive: boolean;
   /** Whether a transform operation is active (APP-012). */
   transformActive: boolean;
+  /** Brush size in pixels (APP-014). */
+  brushSize: number;
+  /** Brush hardness 0-1 (APP-014). */
+  brushHardness: number;
+  /** Brush opacity 0-1 (APP-014). */
+  brushOpacity: number;
+  /** Brush color RGBA (APP-014). */
+  brushColor: { r: number; g: number; b: number; a: number };
 }
 
 /** Actions on the state. */
@@ -250,6 +258,18 @@ export interface AppActions {
   resizeLayer: (layerId: string, newWidth: number, newHeight: number) => void;
   /** Set whether a transform operation is active. */
   setTransformActive: (active: boolean) => void;
+
+  // Brush — APP-014
+  /** Set the brush size. */
+  setBrushSize: (size: number) => void;
+  /** Set the brush opacity. */
+  setBrushOpacity: (opacity: number) => void;
+  /** Set the brush color. */
+  setBrushColor: (color: { r: number; g: number; b: number; a: number }) => void;
+  /** Set the brush hardness. */
+  setBrushHardness: (hardness: number) => void;
+  /** Commit a completed brush stroke (for undo). */
+  commitBrushStroke: (layerId: string, region: { x: number; y: number; width: number; height: number }, oldPixels: Uint8ClampedArray, newPixels: Uint8ClampedArray) => void;
 }
 
 /**
@@ -496,6 +516,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   pendingClose: false,
   dragOverActive: false,
   transformActive: false,
+  brushSize: 10,
+  brushHardness: 0.8,
+  brushOpacity: 1,
+  brushColor: { r: 0, g: 0, b: 0, a: 1 },
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -1212,6 +1236,30 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setTransformActive: (active): void => {
     set({ transformActive: active });
+  },
+
+  // Brush — APP-014
+  setBrushSize: (size): void => {
+    set({ brushSize: Math.max(1, Math.min(500, size)) });
+  },
+  setBrushOpacity: (opacity): void => {
+    set({ brushOpacity: Math.max(0, Math.min(1, opacity)) });
+  },
+  setBrushColor: (color): void => {
+    set({ brushColor: color });
+  },
+  setBrushHardness: (hardness): void => {
+    set({ brushHardness: Math.max(0, Math.min(1, hardness)) });
+  },
+  commitBrushStroke: (layerId, region, oldPixels, newPixels): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'raster') return;
+    const cmd = new ModifyPixelsCommand(layer as RasterLayer, region, oldPixels, newPixels);
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    get().updateTitleBar();
   },
 }));
 

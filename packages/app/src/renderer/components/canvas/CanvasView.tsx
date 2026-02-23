@@ -15,12 +15,17 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { RasterLayer, TextLayer } from '@photoshop-app/types';
 import { flattenLayers } from '@photoshop-app/core';
+import type { RasterLayer } from '@photoshop-app/types';
+import { BrushEngine } from '../../brush-engine';
 import { useAppStore, getViewport } from '../../store';
 import { BrushEngine } from '../../brush-engine';
 
 /** Shared brush engine instance. */
 const brushEngine = new BrushEngine();
 import { TransformHandles } from './TransformHandles';
+
+/** Module-level brush engine instance (APP-014). */
+const brushEngine = new BrushEngine();
 
 /** CanvasView renders the document to a canvas with zoom/pan controls. */
 export function CanvasView(): React.JSX.Element {
@@ -112,39 +117,114 @@ export function CanvasView(): React.JSX.Element {
     [document],
   );
 
-  /** Handle mouse down for pan start. */
+  /** Handle mouse down for pan start or brush stroke (APP-014). */
   const handleMouseDown = useCallback(
     (e: React.MouseEvent): void => {
-      // Middle button (button 1) or Space + left button
+      // Middle button (button 1) — pan
       if (e.button === 1) {
         e.preventDefault();
         isPanning.current = true;
         lastPanPoint.current = { x: e.clientX, y: e.clientY };
+        return;
+      }
+
+      // Left button + brush/eraser tool — start stroke (APP-014)
+      const tool = useAppStore.getState().activeTool;
+      if (
+        e.button === 0 &&
+        (tool === 'brush' || tool === 'eraser') &&
+        document
+      ) {
+        const state = useAppStore.getState();
+        const activeId = state.activeLayerId;
+        if (!activeId) return;
+        const allLayers = flattenLayers(document.rootGroup);
+        const layer = allLayers.find((l) => l.id === activeId);
+        if (!layer || layer.type !== 'raster') return;
+        const raster = layer as RasterLayer;
+
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const vp = getViewport();
+        const docPt = vp.screenToDocument({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
+        const lx = docPt.x - raster.position.x;
+        const ly = docPt.y - raster.position.y;
+
+        brushEngine.startStroke(
+          raster.pixelData,
+          raster.size.width,
+          raster.size.height,
+          { x: lx, y: ly },
+          {
+            size: state.brushSize,
+            hardness: state.brushHardness,
+            opacity: state.brushOpacity,
+            color: state.brushColor,
+            eraser: tool === 'eraser',
+          },
+        );
       }
     },
-    [],
+    [document],
   );
 
-  /** Handle mouse move for pan. */
+  /** Handle mouse move for pan or brush continuation (APP-014). */
   const handleMouseMove = useCallback(
     (e: React.MouseEvent): void => {
-      if (!isPanning.current) return;
+      // Pan path
+      if (isPanning.current) {
+        const vp = getViewport();
+        const dx = e.clientX - lastPanPoint.current.x;
+        const dy = e.clientY - lastPanPoint.current.y;
+        lastPanPoint.current = { x: e.clientX, y: e.clientY };
 
-      const vp = getViewport();
-      const dx = e.clientX - lastPanPoint.current.x;
-      const dy = e.clientY - lastPanPoint.current.y;
-      lastPanPoint.current = { x: e.clientX, y: e.clientY };
+        const offset = vp.offset;
+        vp.setOffset({ x: offset.x + dx, y: offset.y + dy });
+        setPanOffset(vp.offset);
+        return;
+      }
 
-      const offset = vp.offset;
-      vp.setOffset({ x: offset.x + dx, y: offset.y + dy });
-      setPanOffset(vp.offset);
+      // Brush continuation (APP-014)
+      if (brushEngine.isActive && document) {
+        const state = useAppStore.getState();
+        const activeId = state.activeLayerId;
+        if (!activeId) return;
+        const allLayers = flattenLayers(document.rootGroup);
+        const layer = allLayers.find((l) => l.id === activeId);
+        if (!layer || layer.type !== 'raster') return;
+        const raster = layer as RasterLayer;
+
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const vp = getViewport();
+        const docPt = vp.screenToDocument({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
+        brushEngine.continueStroke({
+          x: docPt.x - raster.position.x,
+          y: docPt.y - raster.position.y,
+        });
+      }
     },
-    [setPanOffset],
+    [document, setPanOffset],
   );
 
-  /** Handle mouse up for pan end. */
+  /** Handle mouse up for pan end or brush commit (APP-014). */
   const handleMouseUp = useCallback((): void => {
     isPanning.current = false;
+
+    // Brush commit (APP-014)
+    if (brushEngine.isActive) {
+      const result = brushEngine.endStroke();
+      if (result) {
+        const { activeLayerId, commitBrushStroke } = useAppStore.getState();
+        if (activeLayerId) {
+          commitBrushStroke(activeLayerId, result.region, result.oldPixels, result.newPixels);
+        }
+      }
+    }
   }, []);
 
   /** Handle double-click to start text editing — APP-005. */
