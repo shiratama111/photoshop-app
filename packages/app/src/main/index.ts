@@ -4,19 +4,20 @@
  *
  * Responsibilities:
  * - Create the BrowserWindow with security-hardened settings
- * - Register IPC handlers for file operations
+ * - Register IPC handlers for file operations (via file-dialog module)
  * - Build the application menu
  *
  * Security: contextIsolation=true, sandbox=true, nodeIntegration=false.
- * All renderer↔main communication goes through the Context Bridge.
+ * All renderer-main communication goes through the Context Bridge.
  *
  * @see https://www.electronjs.org/docs/latest/tutorial/security
+ * @see APP-004: PSD open/save integration
  */
 
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
 import { buildMenu } from './menu';
+import { registerFileDialogHandlers } from './file-dialog';
 
 /** The main application window. */
 let mainWindow: BrowserWindow | null = null;
@@ -61,62 +62,9 @@ function createWindow(): void {
   buildMenu(mainWindow);
 }
 
-/**
- * Register IPC handlers for file operations.
- */
-function registerIpcHandlers(): void {
-  // File > Open
-  ipcMain.handle('dialog:openFile', async () => {
-    if (!mainWindow) return null;
-    const result = await dialog.showOpenDialog(mainWindow, {
-      filters: [
-        { name: 'PSD Files', extensions: ['psd'] },
-        { name: 'Project Files', extensions: ['psxp'] },
-        { name: 'All Files', extensions: ['*'] },
-      ],
-      properties: ['openFile'],
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    const filePath = result.filePaths[0];
-    const data = fs.readFileSync(filePath);
-    return { filePath, data: data.buffer };
-  });
-
-  // File > Save
-  ipcMain.handle('dialog:saveFile', async (_event, data: ArrayBuffer, defaultPath?: string) => {
-    if (!mainWindow) return null;
-    const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath,
-      filters: [
-        { name: 'PSD Files', extensions: ['psd'] },
-        { name: 'Project Files', extensions: ['psxp'] },
-      ],
-    });
-    if (result.canceled || !result.filePath) return null;
-    fs.writeFileSync(result.filePath, Buffer.from(data));
-    return result.filePath;
-  });
-
-  // File > Export
-  ipcMain.handle('dialog:exportFile', async (_event, data: ArrayBuffer, defaultPath?: string) => {
-    if (!mainWindow) return null;
-    const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath,
-      filters: [
-        { name: 'PNG Image', extensions: ['png'] },
-        { name: 'JPEG Image', extensions: ['jpg', 'jpeg'] },
-        { name: 'PSD File', extensions: ['psd'] },
-      ],
-    });
-    if (result.canceled || !result.filePath) return null;
-    fs.writeFileSync(result.filePath, Buffer.from(data));
-    return result.filePath;
-  });
-}
-
 // App lifecycle
 app.whenReady().then(() => {
-  registerIpcHandlers();
+  registerFileDialogHandlers(() => mainWindow);
   createWindow();
 
   app.on('activate', () => {
