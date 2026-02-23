@@ -19,3 +19,10 @@ export {
   calculateConfidence,
   SAM_INPUT_SIZE,
 } from './image-utils';
+
+// Mask refinement — AI-002
+export { applyBrushStroke, featherMask, adjustBoundary } from './mask-refinement';
+export type { BrushConfig, BrushMode } from './mask-refinement';
+
+// Mask commands (undo/redo) — AI-002
+export { BrushMaskCommand, FeatherMaskCommand, AdjustBoundaryCommand } from './mask-commands';
