@@ -223,6 +223,7 @@ export function App(): React.JSX.Element {
     api.onMenuOpen?.(() => void useAppStore.getState().openFile());
     api.onMenuSave?.(() => void useAppStore.getState().saveFile());
     api.onMenuSaveAs?.(() => void useAppStore.getState().saveAsFile());
+    api.onMenuExport?.(() => void useAppStore.getState().exportAsImage());
     api.onMenuUndo?.(() => useAppStore.getState().undo());
     api.onMenuRedo?.(() => useAppStore.getState().redo());
   }, []);
