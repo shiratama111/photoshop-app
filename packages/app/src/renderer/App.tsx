@@ -20,6 +20,7 @@
  * - V/M/B/E/T/C/W: Tool shortcuts
  *
  * @see APP-002: Canvas view + layer panel integration
+ * @see APP-008: Drag-drop file open, close confirmation, recovery dialog
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -30,6 +31,8 @@ import { LayerPanel } from './components/panels/LayerPanel';
 import { LayerContextMenu } from './components/panels/LayerContextMenu';
 import { PsdDialog } from './components/dialogs/PsdDialog';
 import { LayerStyleDialog } from './components/dialogs/LayerStyleDialog';
+import { RecoveryDialog } from './components/dialogs/RecoveryDialog';
+import { CloseConfirmDialog } from './components/dialogs/CloseConfirmDialog';
 import { AssetBrowser } from './components/panels/AssetBrowser';
 import { TextPropertiesPanel, InlineTextEditor } from './components/text-editor';
 
@@ -50,7 +53,17 @@ for (const tool of TOOLS) {
   TOOL_SHORTCUTS[tool.shortcut.toLowerCase()] = tool.id;
 }
 
-/** Toolbar component — top horizontal bar. */
+/** Supported file extensions for drag-drop. */
+const SUPPORTED_EXTENSIONS = new Set(['psd']);
+
+/** Check if a file path has a supported extension. */
+function isSupportedFile(filePath: string): boolean {
+  const dot = filePath.lastIndexOf('.');
+  if (dot < 0) return false;
+  return SUPPORTED_EXTENSIONS.has(filePath.slice(dot + 1).toLowerCase());
+}
+
+/** Toolbar component \u2014 top horizontal bar. */
 function Toolbar(): React.JSX.Element {
   const { activeTool, setActiveTool } = useAppStore();
 
@@ -70,7 +83,7 @@ function Toolbar(): React.JSX.Element {
   );
 }
 
-/** Status bar — bottom information bar. */
+/** Status bar \u2014 bottom information bar. */
 function StatusBar(): React.JSX.Element {
   const { document, zoom, statusMessage, canUndo, canRedo } = useAppStore();
 
@@ -95,10 +108,10 @@ function StatusBar(): React.JSX.Element {
   );
 }
 
-/** Active sidebar panel — APP-007. */
+/** Active sidebar panel \u2014 APP-007. */
 type SidebarPanel = 'layers' | 'assets';
 
-/** Sidebar wrapper with Layers / Assets tabs — APP-007. */
+/** Sidebar wrapper with Layers / Assets tabs \u2014 APP-007. */
 function SidebarWrapper(): React.JSX.Element {
   const [activePanel, setActivePanel] = useState<SidebarPanel>('layers');
 
@@ -143,6 +156,9 @@ export function App(): React.JSX.Element {
   const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const layerStyleDialog = useAppStore((s) => s.layerStyleDialog);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
+  const dragOverActive = useAppStore((s) => s.dragOverActive);
+  const setDragOverActive = useAppStore((s) => s.setDragOverActive);
+  const openFileByPath = useAppStore((s) => s.openFileByPath);
 
   /** Global keyboard shortcut handler. */
   const handleKeyDown = useCallback(
@@ -211,16 +227,109 @@ export function App(): React.JSX.Element {
     api.onMenuRedo?.(() => useAppStore.getState().redo());
   }, []);
 
+  // Check for recovery files on startup \u2014 APP-008
+  useEffect(() => {
+    void useAppStore.getState().checkRecovery();
+    void useAppStore.getState().loadRecentFiles();
+  }, []);
+
+  // Listen for close confirmation from main process \u2014 APP-008
+  useEffect(() => {
+    const api = (window as unknown as { electronAPI: { onBeforeClose: (cb: () => void) => void } }).electronAPI;
+    if (!api) return;
+    api.onBeforeClose?.(() => {
+      const state = useAppStore.getState();
+      if (state.document?.dirty) {
+        state.setPendingClose(true);
+      } else {
+        // No unsaved changes, close immediately
+        (window as unknown as { electronAPI: { confirmClose: (a: string) => void } })
+          .electronAPI.confirmClose('discard');
+      }
+    });
+  }, []);
+
+  // Drag-drop file open \u2014 APP-008
+  const handleDragOver = useCallback(
+    (e: React.DragEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer.types.includes('Files')) {
+        e.dataTransfer.dropEffect = 'copy';
+        if (!dragOverActive) setDragOverActive(true);
+      }
+    },
+    [dragOverActive, setDragOverActive],
+  );
+
+  const handleDragLeave = useCallback(
+    (e: React.DragEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only deactivate when leaving the app-layout element itself
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const { clientX, clientY } = e;
+      if (
+        clientX <= rect.left ||
+        clientX >= rect.right ||
+        clientY <= rect.top ||
+        clientY >= rect.bottom
+      ) {
+        setDragOverActive(false);
+      }
+    },
+    [setDragOverActive],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOverActive(false);
+
+      const files = e.dataTransfer.files;
+      if (files.length === 0) return;
+
+      // Open the first supported file
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // Electron provides the path property on dropped files
+        const filePath = (file as unknown as { path: string }).path;
+        if (filePath && isSupportedFile(filePath)) {
+          void openFileByPath(filePath);
+          return;
+        }
+      }
+
+      useAppStore.getState().setStatusMessage('Unsupported file format. Drop a .psd file.');
+    },
+    [openFileByPath, setDragOverActive],
+  );
+
   return (
-    <div className="app-layout">
+    <div
+      className="app-layout"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <Toolbar />
       <SidebarWrapper />
       <CanvasView />
       <StatusBar />
       <LayerContextMenu />
       <PsdDialog />
+      <RecoveryDialog />
+      <CloseConfirmDialog />
       {editingTextLayerId && <InlineTextEditor />}
       {layerStyleDialog && <LayerStyleDialog />}
+      {dragOverActive && (
+        <div className="drag-overlay">
+          <div className="drag-overlay__content">
+            <p className="drag-overlay__text">Drop file to open</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

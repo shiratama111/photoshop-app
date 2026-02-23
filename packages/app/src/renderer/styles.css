@@ -853,6 +853,91 @@ html, body, #root {
   color: var(--text-secondary);
 }
 
+/* Recovery Dialog — APP-008 */
+.recovery-dialog { width: 420px; }
+
+.recovery-description {
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.recovery-list { max-height: 240px; overflow-y: auto; }
+
+.recovery-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 4px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+}
+
+.recovery-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recovery-item__name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recovery-item__date {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* Close Confirm Dialog — APP-008 */
+.close-confirm-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.dialog-btn--danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.dialog-btn--danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Drag-Drop Overlay — APP-008 */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 120, 212, 0.15);
+  pointer-events: none;
+}
+
+.drag-overlay__content {
+  padding: 32px 48px;
+  border: 3px dashed var(--accent);
+  border-radius: 12px;
+  background: rgba(30, 30, 30, 0.9);
+}
+
+.drag-overlay__text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }

@@ -10,6 +10,7 @@
  *
  * @see https://www.electronjs.org/docs/latest/tutorial/context-isolation
  * @see APP-004: writeTo, getRecentFiles, clearRecentFiles
+ * @see APP-008: auto-save, recovery, title bar, close confirmation, drag-drop
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -34,6 +35,51 @@ const electronAPI = {
 
   clearRecentFiles: (): Promise<boolean> =>
     ipcRenderer.invoke('file:clearRecent'),
+
+  // Auto-save and recovery \u2014 APP-008
+  autoSaveWrite: (
+    documentId: string,
+    documentName: string,
+    filePath: string | null,
+    data: ArrayBuffer,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke('autosave:write', documentId, documentName, filePath, data),
+
+  autoSaveClear: (documentId: string): Promise<boolean> =>
+    ipcRenderer.invoke('autosave:clear', documentId),
+
+  autoSaveClearAll: (): Promise<boolean> =>
+    ipcRenderer.invoke('autosave:clearAll'),
+
+  listRecoveryFiles: (): Promise<
+    Array<{
+      documentId: string;
+      documentName: string;
+      filePath: string | null;
+      savedAt: string;
+    }>
+  > => ipcRenderer.invoke('autosave:listRecovery'),
+
+  readRecoveryFile: (
+    documentId: string,
+  ): Promise<{ data: ArrayBuffer } | null> =>
+    ipcRenderer.invoke('autosave:readRecovery', documentId),
+
+  // Title bar \u2014 APP-008
+  setTitle: (title: string): Promise<void> =>
+    ipcRenderer.invoke('window:setTitle', title),
+
+  // Read file by path (for drag-drop) \u2014 APP-008
+  readFileByPath: (filePath: string): Promise<{ filePath: string; data: ArrayBuffer } | null> =>
+    ipcRenderer.invoke('file:readByPath', filePath),
+
+  // Close confirmation \u2014 APP-008
+  onBeforeClose: (callback: () => void): void => {
+    ipcRenderer.on('app:beforeClose', callback);
+  },
+  confirmClose: (action: 'save' | 'discard' | 'cancel'): void => {
+    ipcRenderer.send('app:confirmClose', action);
+  },
 
   // Menu event listeners
   onMenuNew: (callback: () => void): void => {

@@ -10,12 +10,14 @@
  * - Canvas renderer integration
  * - Event bus for cross-module communication
  * - PSD open/save and compatibility dialog (APP-004)
+ * - Auto-save, title bar, recovery, drag-drop (APP-008)
  *
  * All layer mutations go through Commands for undo/redo support.
  *
  * @see https://github.com/pmndrs/zustand
  * @see APP-002: Canvas view + layer panel integration
  * @see APP-004: PSD open/save integration
+ * @see APP-008: Auto-save + finishing touches
  */
 
 import { create } from 'zustand';
@@ -55,11 +57,25 @@ export interface RecentFileEntry {
   openedAt: string;
 }
 
+/** Recovery file entry from auto-save (APP-008). */
+export interface RecoveryEntry {
+  documentId: string;
+  documentName: string;
+  filePath: string | null;
+  savedAt: string;
+}
+
 /** Shared singleton instances. */
 const commandHistory = new CommandHistoryImpl();
 const eventBus = new EventBusImpl();
 const viewport = new ViewportImpl();
 const renderer = new Canvas2DRenderer();
+
+/** Auto-save interval in ms (2 minutes). */
+const AUTO_SAVE_INTERVAL_MS = 2 * 60 * 1000;
+
+/** Auto-save interval handle. */
+let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Application state. */
 export interface AppState {
@@ -93,6 +109,12 @@ export interface AppState {
   editingTextLayerId: string | null;
   /** Layer style dialog state (APP-005). */
   layerStyleDialog: { layerId: string } | null;
+  /** Recovery entries found on startup (APP-008). */
+  recoveryEntries: RecoveryEntry[];
+  /** Whether a close confirmation is pending (APP-008). */
+  pendingClose: boolean;
+  /** Whether a drag-drop hover is active (APP-008). */
+  dragOverActive: boolean;
 }
 
 /** Actions on the state. */
@@ -134,7 +156,7 @@ export interface AppActions {
   /** Move a layer to a new index within its parent. */
   reorderLayer: (layerId: string, newIndex: number) => void;
 
-  // Text layer operations — APP-005
+  // Text layer operations \u2014 APP-005
   /** Add a new text layer. */
   addTextLayer: (name?: string, text?: string) => void;
   /** Set a text-specific property (undoable). */
@@ -154,7 +176,7 @@ export interface AppActions {
   /** Close the layer style dialog. */
   closeLayerStyleDialog: () => void;
 
-  // Effect operations — APP-007
+  // Effect operations \u2014 APP-007
   /** Replace all effects on a layer in a single undoable operation. */
   setLayerEffects: (layerId: string, effects: LayerEffect[]) => void;
 
@@ -191,6 +213,30 @@ export interface AppActions {
   cancelPsdImport: () => void;
   /** Load the recent files list from the main process. */
   loadRecentFiles: () => Promise<void>;
+
+  // Auto-save and recovery \u2014 APP-008
+  /** Start the auto-save timer. */
+  startAutoSave: () => void;
+  /** Stop the auto-save timer. */
+  stopAutoSave: () => void;
+  /** Trigger an immediate auto-save. */
+  doAutoSave: () => Promise<void>;
+  /** Update the window title bar (includes dirty indicator). */
+  updateTitleBar: () => void;
+  /** Check for recovery files and populate recoveryEntries. */
+  checkRecovery: () => Promise<void>;
+  /** Recover a document from an auto-save entry. */
+  recoverDocument: (documentId: string) => Promise<void>;
+  /** Discard all recovery entries. */
+  discardRecovery: () => Promise<void>;
+  /** Open a file from a drag-drop file path. */
+  openFileByPath: (filePath: string) => Promise<void>;
+  /** Set drag-over active state. */
+  setDragOverActive: (active: boolean) => void;
+  /** Handle close confirmation (save, discard, or cancel). */
+  handleCloseConfirmation: (action: 'save' | 'discard' | 'cancel') => Promise<void>;
+  /** Set pending close state. */
+  setPendingClose: (pending: boolean) => void;
 }
 
 /**
@@ -267,10 +313,55 @@ interface ElectronBridgeAPI {
   writeTo: (data: ArrayBuffer, filePath: string) => Promise<string | null>;
   getRecentFiles: () => Promise<RecentFileEntry[]>;
   clearRecentFiles: () => Promise<boolean>;
+  autoSaveWrite: (
+    documentId: string,
+    documentName: string,
+    filePath: string | null,
+    data: ArrayBuffer,
+  ) => Promise<boolean>;
+  autoSaveClear: (documentId: string) => Promise<boolean>;
+  autoSaveClearAll: () => Promise<boolean>;
+  listRecoveryFiles: () => Promise<RecoveryEntry[]>;
+  readRecoveryFile: (documentId: string) => Promise<{ data: ArrayBuffer } | null>;
+  setTitle: (title: string) => Promise<void>;
+  readFileByPath: (filePath: string) => Promise<{ filePath: string; data: ArrayBuffer } | null>;
+  confirmClose: (action: 'save' | 'discard' | 'cancel') => void;
 }
 
 function getElectronAPI(): ElectronBridgeAPI {
   return (window as unknown as { electronAPI: ElectronBridgeAPI }).electronAPI;
+}
+
+/**
+ * Open a PSD from raw binary data and file path.
+ * Shared logic used by openFile, openFileByPath, and recoverDocument.
+ */
+function openPsdFromData(
+  data: ArrayBuffer,
+  filePath: string,
+  set: (partial: Partial<AppState>) => void,
+): void {
+  const ext = getExtension(filePath);
+  if (ext !== 'psd') {
+    set({ statusMessage: `Unsupported file format: .${ext}` });
+    return;
+  }
+  const { document: doc, report } = importPsd(new Uint8Array(data), getBaseName(filePath));
+  doc.filePath = filePath;
+  if (report.issues.length > 0) {
+    set({ pendingPsdImport: { document: doc, report } });
+  } else {
+    commandHistory.clear();
+    set({
+      document: doc,
+      selectedLayerId: null,
+      canUndo: false,
+      canRedo: false,
+      revision: 0,
+      statusMessage: `Opened: ${getBaseName(filePath)}`,
+    });
+    eventBus.emit('document:changed');
+  }
 }
 
 /** Zustand store for application state. */
@@ -291,6 +382,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   recentFiles: [],
   editingTextLayerId: null,
   layerStyleDialog: null,
+  recoveryEntries: [],
+  pendingClose: false,
+  dragOverActive: false,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -346,6 +440,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       statusMessage: `Created: ${name} (${width}x${height})`,
     });
     eventBus.emit('document:changed');
+    get().updateTitleBar();
+    get().startAutoSave();
   },
 
   // Layer operations
@@ -369,6 +465,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.selectedLayerId = layer.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
+    get().updateTitleBar();
   },
 
   addLayerGroup: (name): void => {
@@ -382,6 +479,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.selectedLayerId = group.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer: group, parentId: doc.rootGroup.id });
+    get().updateTitleBar();
   },
 
   removeLayer: (layerId): void => {
@@ -400,6 +498,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.dirty = true;
     set({ statusMessage: `Removed: ${layer.name}` });
     eventBus.emit('layer:removed', { layerId, parentId: parent.id });
+    get().updateTitleBar();
   },
 
   duplicateLayer: (layerId): void => {
@@ -417,6 +516,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.selectedLayerId = cloned.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer: cloned, parentId: parent.id });
+    get().updateTitleBar();
   },
 
   toggleLayerVisibility: (layerId): void => {
@@ -428,6 +528,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'visible' });
+    get().updateTitleBar();
   },
 
   setLayerOpacity: (layerId, opacity): void => {
@@ -440,6 +541,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'opacity' });
+    get().updateTitleBar();
   },
 
   setLayerBlendMode: (layerId, blendMode): void => {
@@ -451,6 +553,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'blendMode' });
+    get().updateTitleBar();
   },
 
   renameLayer: (layerId, name): void => {
@@ -462,6 +565,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'name' });
+    get().updateTitleBar();
   },
 
   reorderLayer: (layerId, newIndex): void => {
@@ -475,6 +579,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:reordered', { parentId: parent.id });
+    get().updateTitleBar();
   },
 
   setLayerEffects: (layerId, effects): void => {
@@ -486,9 +591,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+    get().updateTitleBar();
   },
 
-  // Text layer operations — APP-005
+  // Text layer operations \u2014 APP-005
   addTextLayer: (name, text): void => {
     const { document: doc } = get();
     if (!doc) return;
@@ -500,6 +606,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.selectedLayerId = layer.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
+    get().updateTitleBar();
   },
 
   setTextProperty: (layerId, key, value): void => {
@@ -515,6 +622,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: key });
+    get().updateTitleBar();
   },
 
   addLayerEffect: (layerId, effect): void => {
@@ -527,6 +635,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+    get().updateTitleBar();
   },
 
   removeLayerEffect: (layerId, index): void => {
@@ -539,6 +648,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+    get().updateTitleBar();
   },
 
   updateLayerEffect: (layerId, index, effect): void => {
@@ -552,6 +662,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'effects' });
+    get().updateTitleBar();
   },
 
   startEditingText: (layerId): void => {
@@ -637,33 +748,31 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const result = await api.openFile();
     if (!result) return;
     const { filePath, data } = result;
-    const ext = getExtension(filePath);
-
-    if (ext === 'psd') {
-      const { document: doc, report } = importPsd(new Uint8Array(data), getBaseName(filePath));
-      doc.filePath = filePath;
-      if (report.issues.length > 0) {
-        set({ pendingPsdImport: { document: doc, report } });
-      } else {
-        commandHistory.clear();
-        set({
-          document: doc,
-          selectedLayerId: null,
-          canUndo: false,
-          canRedo: false,
-          revision: 0,
-          statusMessage: `Opened: ${getBaseName(filePath)}`,
-        });
-        eventBus.emit('document:changed');
-      }
-    } else {
-      set({ statusMessage: `Unsupported file format: .${ext}` });
-    }
+    openPsdFromData(data, filePath, set);
+    get().updateTitleBar();
+    get().startAutoSave();
   },
 
   saveFile: async (): Promise<void> => {
     const { document: doc } = get();
     if (!doc) return;
+
+    // Quick-save if we already have a file path
+    if (doc.filePath) {
+      const api = getElectronAPI();
+      const psdData = exportPsd(doc);
+      const saved = await api.writeTo(psdData, doc.filePath);
+      if (saved) {
+        doc.dirty = false;
+        doc.modifiedAt = new Date().toISOString();
+        set({ statusMessage: `Saved: ${getBaseName(saved)}` });
+        get().updateTitleBar();
+        // Clear auto-save after successful save
+        await api.autoSaveClear(doc.id);
+      }
+      return;
+    }
+
     await get().saveAsFile();
   },
 
@@ -679,6 +788,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       doc.dirty = false;
       doc.modifiedAt = new Date().toISOString();
       set({ statusMessage: `Saved: ${getBaseName(saved)}` });
+      get().updateTitleBar();
+      // Clear auto-save after successful save
+      await api.autoSaveClear(doc.id);
     }
   },
 
@@ -697,6 +809,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       statusMessage: `Opened: ${doc.name}`,
     });
     eventBus.emit('document:changed');
+    get().updateTitleBar();
+    get().startAutoSave();
   },
 
   cancelPsdImport: (): void => {
@@ -707,6 +821,158 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const api = getElectronAPI();
     const files = await api.getRecentFiles();
     set({ recentFiles: files });
+  },
+
+  // \u2500\u2500 Auto-save and recovery \u2014 APP-008 \u2500\u2500
+
+  startAutoSave: (): void => {
+    if (autoSaveTimer) clearInterval(autoSaveTimer);
+    autoSaveTimer = setInterval(() => {
+      void get().doAutoSave();
+    }, AUTO_SAVE_INTERVAL_MS);
+  },
+
+  stopAutoSave: (): void => {
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+  },
+
+  doAutoSave: async (): Promise<void> => {
+    const { document: doc } = get();
+    if (!doc || !doc.dirty) return;
+    try {
+      const api = getElectronAPI();
+      const psdData = exportPsd(doc);
+      await api.autoSaveWrite(doc.id, doc.name, doc.filePath, psdData);
+      set({ statusMessage: 'Auto-saved' });
+    } catch {
+      // Silently ignore auto-save failures
+    }
+  },
+
+  updateTitleBar: (): void => {
+    const { document: doc } = get();
+    try {
+      const api = getElectronAPI();
+      if (!doc) {
+        void api.setTitle('Photoshop App');
+        return;
+      }
+      const name = doc.filePath ? getBaseName(doc.filePath) : doc.name || 'Untitled';
+      const dirtyIndicator = doc.dirty ? '*' : '';
+      void api.setTitle(`${dirtyIndicator}${name} \u2014 Photoshop App`);
+    } catch {
+      // Ignore if electronAPI not available (e.g. in tests)
+    }
+  },
+
+  checkRecovery: async (): Promise<void> => {
+    try {
+      const api = getElectronAPI();
+      const entries = await api.listRecoveryFiles();
+      if (entries.length > 0) {
+        set({ recoveryEntries: entries });
+      }
+    } catch {
+      // Ignore
+    }
+  },
+
+  recoverDocument: async (documentId): Promise<void> => {
+    try {
+      const api = getElectronAPI();
+      const result = await api.readRecoveryFile(documentId);
+      if (!result) {
+        set({ statusMessage: 'Recovery failed: file not found' });
+        return;
+      }
+      const entry = get().recoveryEntries.find((e) => e.documentId === documentId);
+      const name = entry?.documentName ?? 'Recovered';
+      const { document: doc, report } = importPsd(new Uint8Array(result.data), name);
+      doc.filePath = entry?.filePath ?? null;
+      doc.dirty = true; // Mark as dirty since it's recovered, not saved
+
+      commandHistory.clear();
+      if (report.issues.length > 0) {
+        set({
+          pendingPsdImport: { document: doc, report },
+          recoveryEntries: [],
+        });
+      } else {
+        set({
+          document: doc,
+          recoveryEntries: [],
+          selectedLayerId: null,
+          canUndo: false,
+          canRedo: false,
+          revision: 0,
+          statusMessage: `Recovered: ${name}`,
+        });
+        eventBus.emit('document:changed');
+      }
+      // Clear the recovered auto-save file
+      await api.autoSaveClear(documentId);
+      get().updateTitleBar();
+      get().startAutoSave();
+    } catch {
+      set({ statusMessage: 'Recovery failed' });
+    }
+  },
+
+  discardRecovery: async (): Promise<void> => {
+    try {
+      const api = getElectronAPI();
+      await api.autoSaveClearAll();
+      set({ recoveryEntries: [] });
+    } catch {
+      set({ recoveryEntries: [] });
+    }
+  },
+
+  openFileByPath: async (filePath): Promise<void> => {
+    try {
+      const api = getElectronAPI();
+      const result = await api.readFileByPath(filePath);
+      if (!result) {
+        set({ statusMessage: `Could not read: ${getBaseName(filePath)}` });
+        return;
+      }
+      openPsdFromData(result.data, result.filePath, set);
+      get().updateTitleBar();
+      get().startAutoSave();
+    } catch {
+      set({ statusMessage: `Failed to open: ${getBaseName(filePath)}` });
+    }
+  },
+
+  setDragOverActive: (active): void => {
+    set({ dragOverActive: active });
+  },
+
+  handleCloseConfirmation: async (action): Promise<void> => {
+    const api = getElectronAPI();
+    if (action === 'cancel') {
+      set({ pendingClose: false });
+      api.confirmClose('cancel');
+      return;
+    }
+    if (action === 'save') {
+      await get().saveFile();
+      set({ pendingClose: false });
+      get().stopAutoSave();
+      api.confirmClose('save');
+      return;
+    }
+    // discard
+    set({ pendingClose: false });
+    get().stopAutoSave();
+    api.confirmClose('discard');
+  },
+
+  setPendingClose: (pending): void => {
+    set({ pendingClose: pending });
   },
 }));
 
