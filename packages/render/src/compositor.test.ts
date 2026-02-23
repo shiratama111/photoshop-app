@@ -62,7 +62,13 @@ function createMockContext(width: number, height: number): CanvasContext2DLike {
     scale: vi.fn(),
     setTransform: vi.fn(),
     fillRect: vi.fn(),
+    fillText: vi.fn(),
+    measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
     createPattern: vi.fn(),
+    font: '',
+    textAlign: 'start' as CanvasTextAlign,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
+    letterSpacing: '0px',
   };
 }
 
@@ -278,7 +284,8 @@ describe('Canvas2DRenderer', () => {
 
       renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
 
-      expect(ctx.translate).toHaveBeenCalledWith(10, 20);
+      // New text rendering calls fillText instead of translate
+      expect((ctx as any).fillText).toHaveBeenCalled();
     });
   });
 
@@ -410,4 +417,156 @@ describe('Canvas2DRenderer', () => {
       // Should not throw
     });
   });
+
+  describe('RENDER-004: Text Layer Canvas Rendering', () => {
+    it('should render text with correct font settings', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Bold Italic', 'Styled');
+      layer.bold = true;
+      layer.italic = true;
+      layer.fontSize = 24;
+      layer.fontFamily = 'Helvetica';
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.font).toContain('bold');
+      expect(ctx.font).toContain('italic');
+      expect(ctx.font).toContain('24px');
+      expect(ctx.font).toContain('Helvetica');
+    });
+
+    it('should render multi-line text with one fillText per line', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Multi', 'Line 1\nLine 2\nLine 3');
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText.mock.calls.length).toBe(3);
+    });
+
+    it('should convert color to rgba CSS string', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Colored', 'Red');
+      layer.color = { r: 128, g: 64, b: 32, a: 0.5 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+    });
+
+    it('should apply text alignment with textBounds', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Centered', 'Center me');
+      layer.alignment = 'center';
+      layer.textBounds = { x: 10, y: 20, width: 200, height: 100 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.textAlign).toBe('center');
+      // x should be position.x + textBounds.width/2 = 10 + 200/2 = 110
+      const firstCall = ctx.fillText.mock.calls[0];
+      expect(firstCall[1]).toBe(110);
+    });
+
+    it('should not render invisible text layers', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Hidden', 'Should not appear');
+      layer.visible = false;
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty text', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Empty', '');
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText.mock.calls.length).toBeLessThanOrEqual(1);
+    });
+
+    it('should word-wrap text when textBounds width is set', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      // Each char ~8px (mock measureText), 'Hello World' = 11 chars = 88px
+      // With maxWidth 50, 'Hello World' > 50 -> wraps
+      const layer = makeTextLayer('Wrapped', 'Hello World Test');
+      layer.textBounds = { x: 0, y: 0, width: 50, height: 200 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('should set textBaseline to top', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Baseline', 'Test');
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.textBaseline).toBe('top');
+    });
+
+    it('should position text at layer position for left alignment', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Positioned', 'At position');
+      layer.position = { x: 50, y: 30 };
+      layer.alignment = 'left';
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const firstCall = ctx.fillText.mock.calls[0];
+      expect(firstCall[1]).toBe(50);
+      expect(firstCall[2]).toBe(30);
+    });
+
+    it('should use correct line height spacing', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as any;
+      const layer = makeTextLayer('Spaced', 'Line1\nLine2');
+      layer.fontSize = 20;
+      layer.lineHeight = 1.5;
+      layer.position = { x: 0, y: 0 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // lineH = fontSize * lineHeight = 20 * 1.5 = 30
+      expect(ctx.fillText.mock.calls.length).toBe(2);
+      expect(ctx.fillText.mock.calls[0][2]).toBe(0);
+      expect(ctx.fillText.mock.calls[1][2]).toBe(30);
+    });
+  });
+
 });

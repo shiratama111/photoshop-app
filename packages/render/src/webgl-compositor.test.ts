@@ -51,7 +51,13 @@ function createMockCanvas(width: number, height: number): CanvasLike {
     scale: vi.fn(),
     setTransform: vi.fn(),
     fillRect: vi.fn(),
+    fillText: vi.fn(),
+    measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
     createPattern: vi.fn(),
+    font: '',
+    textAlign: 'start' as CanvasTextAlign,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
+    letterSpacing: '0px',
   };
   const canvas: CanvasLike = {
     width,
@@ -247,7 +253,8 @@ describe('WebGLRenderer', () => {
 
       renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
 
-      expect(ctx.translate).toHaveBeenCalledWith(10, 20);
+      // New text rendering calls fillText instead of translate
+      expect((ctx as any).fillText).toHaveBeenCalled();
     });
 
     it('should render effects via fallback', () => {

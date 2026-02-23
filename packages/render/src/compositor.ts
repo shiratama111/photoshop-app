@@ -250,14 +250,99 @@ export class Canvas2DRenderer implements Renderer {
   }
 
   /**
-   * Draw a text layer using canvas text rendering.
+   * Draw a text layer using Canvas 2D text rendering.
+   * Supports font styling, color, alignment, multi-line text, and word wrapping.
    */
   private drawTextLayer(ctx: CanvasContext2DLike, layer: TextLayer): void {
-    // Text rendering is handled by the UI framework (React).
-    // At the compositor level, we just translate to position.
-    // Actual text rendering would use ctx.fillText but depends on
-    // font loading which is complex. Placeholder for now.
-    ctx.translate(layer.position.x, layer.position.y);
+    // Canvas 2D text APIs are not in CanvasContext2DLike, so we cast
+    // for fillText / measureText / font / textAlign / textBaseline access.
+    const tc = ctx as unknown as CanvasRenderingContext2D;
+
+    ctx.save();
+
+    // Build font string
+    const fontStyle = layer.italic ? 'italic' : 'normal';
+    const fontWeight = layer.bold ? 'bold' : 'normal';
+    tc.font = `${fontStyle} ${fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
+
+    // Color -> CSS rgba
+    const { r, g, b, a } = layer.color;
+    ctx.fillStyle = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
+
+    // Alignment
+    tc.textAlign = layer.alignment as CanvasTextAlign;
+    tc.textBaseline = 'top';
+
+    // Letter spacing (Chrome 99+)
+    if ('letterSpacing' in tc) {
+      (tc as unknown as Record<string, string>).letterSpacing = `${layer.letterSpacing}px`;
+    }
+
+    const lineH = layer.fontSize * layer.lineHeight;
+    let x = layer.position.x;
+    const y = layer.position.y;
+
+    // Adjust x for alignment
+    if (layer.textBounds) {
+      if (layer.alignment === 'center') {
+        x = layer.position.x + layer.textBounds.width / 2;
+      } else if (layer.alignment === 'right') {
+        x = layer.position.x + layer.textBounds.width;
+      }
+    }
+
+    // Split text into lines, with optional word wrapping
+    const lines = this.getTextLines(tc, layer);
+
+    for (let i = 0; i < lines.length; i++) {
+      tc.fillText(lines[i], x, y + i * lineH);
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Get text lines, applying word wrap if textBounds is set.
+   */
+  private getTextLines(
+    ctx: CanvasRenderingContext2D | { measureText(text: string): { width: number } },
+    layer: TextLayer,
+  ): string[] {
+    const rawLines = layer.text.split('\n');
+
+    if (!layer.textBounds || layer.textBounds.width <= 0) {
+      return rawLines;
+    }
+
+    const maxWidth = layer.textBounds.width;
+    const wrapped: string[] = [];
+
+    for (const line of rawLines) {
+      if (line === '') {
+        wrapped.push('');
+        continue;
+      }
+
+      const words = line.split(' ');
+      let current = '';
+
+      for (const word of words) {
+        const test = current ? `${current} ${word}` : word;
+        const metrics = ctx.measureText(test);
+        if (metrics.width > maxWidth && current) {
+          wrapped.push(current);
+          current = word;
+        } else {
+          current = test;
+        }
+      }
+
+      if (current) {
+        wrapped.push(current);
+      }
+    }
+
+    return wrapped;
   }
 
   /**
