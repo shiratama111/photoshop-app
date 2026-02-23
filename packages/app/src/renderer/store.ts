@@ -237,6 +237,10 @@ export interface AppActions {
   handleCloseConfirmation: (action: 'save' | 'discard' | 'cancel') => Promise<void>;
   /** Set pending close state. */
   setPendingClose: (pending: boolean) => void;
+
+  // Export — APP-010
+  /** Export the current document as PNG/JPEG/WebP. */
+  exportAsImage: (format?: 'png' | 'jpeg' | 'webp') => Promise<void>;
 }
 
 /**
@@ -888,6 +892,53 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       get().updateTitleBar();
       // Clear auto-save after successful save
       await api.autoSaveClear(doc.id);
+    }
+  },
+
+  exportAsImage: async (format): Promise<void> => {
+    const { document: doc } = get();
+    if (!doc) {
+      set({ statusMessage: 'No document to export' });
+      return;
+    }
+
+    try {
+      const { width, height } = doc.canvas.size;
+      const offscreen = new OffscreenCanvas(width, height);
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) {
+        set({ statusMessage: 'Failed to create export canvas' });
+        return;
+      }
+
+      // Draw white background for JPEG (no alpha)
+      const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
+      if (format === 'jpeg') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // Render document at 1:1 scale using the renderer
+      renderer.render(doc, offscreen as unknown as HTMLCanvasElement, {
+        viewport: { zoom: 1, offset: { x: 0, y: 0 }, visibleArea: { x: 0, y: 0, width, height } },
+        renderEffects: true,
+        showSelection: false,
+        showGuides: false,
+        background: format === 'jpeg' ? 'white' : 'checkerboard',
+      });
+
+      const blob = await offscreen.convertToBlob({ type: mimeType, quality: 0.92 });
+      const arrayBuffer = await blob.arrayBuffer();
+
+      const api = getElectronAPI();
+      const ext = format === 'jpeg' ? 'jpg' : format ?? 'png';
+      const defaultName = `${doc.name || 'Untitled'}.${ext}`;
+      const saved = await api.exportFile(new Uint8Array(arrayBuffer).buffer, defaultName);
+      if (saved) {
+        set({ statusMessage: `Exported: ${getBaseName(saved)}` });
+      }
+    } catch {
+      set({ statusMessage: 'Export failed' });
     }
   },
 
