@@ -943,3 +943,32 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+
+/* Transform Handles — APP-012 */
+.transform-handles-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.transform-bounding-box {
+  position: absolute;
+  border: 1px dashed var(--accent);
+  pointer-events: none;
+}
+
+.transform-handle {
+  position: absolute;
+  background: #fff;
+  border: 1px solid var(--accent);
+  pointer-events: all;
+  z-index: 51;
+}
+
+.transform-handle:hover {
+  background: var(--accent);
+}

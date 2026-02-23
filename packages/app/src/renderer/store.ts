@@ -43,6 +43,7 @@ import {
   RemoveLayerCommand,
   ReorderLayerCommand,
   SetLayerPropertyCommand,
+  ModifyPixelsCommand,
 } from '@photoshop-app/core';
 import { importPsd, exportPsd } from '@photoshop-app/adapter-psd';
 import { Canvas2DRenderer, ViewportImpl } from '@photoshop-app/render';
@@ -115,6 +116,8 @@ export interface AppState {
   pendingClose: boolean;
   /** Whether a drag-drop hover is active (APP-008). */
   dragOverActive: boolean;
+  /** Whether a transform operation is active (APP-012). */
+  transformActive: boolean;
 }
 
 /** Actions on the state. */
@@ -241,6 +244,12 @@ export interface AppActions {
   // Export — APP-010
   /** Export the current document as PNG/JPEG/WebP. */
   exportAsImage: (format?: 'png' | 'jpeg' | 'webp') => Promise<void>;
+
+  // Transform — APP-012
+  /** Resize a layer to new dimensions (undoable for raster layers). */
+  resizeLayer: (layerId: string, newWidth: number, newHeight: number) => void;
+  /** Set whether a transform operation is active. */
+  setTransformActive: (active: boolean) => void;
 }
 
 /**
@@ -486,6 +495,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   recoveryEntries: [],
   pendingClose: false,
   dragOverActive: false,
+  transformActive: false,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -1121,6 +1131,87 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setPendingClose: (pending): void => {
     set({ pendingClose: pending });
+  },
+
+  // Transform — APP-012
+  resizeLayer: (layerId, newWidth, newHeight): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'raster') return;
+    const raster = layer as RasterLayer;
+    if (!raster.imageData) return;
+
+    const oldW = raster.bounds.width;
+    const oldH = raster.bounds.height;
+    if (oldW === newWidth && oldH === newHeight) return;
+
+    // Snapshot old state
+    const oldImageData = raster.imageData;
+
+    // Scale using OffscreenCanvas
+    try {
+      const srcCanvas = new OffscreenCanvas(oldW, oldH);
+      const srcCtx = srcCanvas.getContext('2d');
+      if (!srcCtx) return;
+      srcCtx.putImageData(oldImageData, 0, 0);
+
+      const dstCanvas = new OffscreenCanvas(newWidth, newHeight);
+      const dstCtx = dstCanvas.getContext('2d');
+      if (!dstCtx) return;
+      dstCtx.drawImage(srcCanvas, 0, 0, newWidth, newHeight);
+
+      const newImageData = dstCtx.getImageData(0, 0, newWidth, newHeight);
+      const newBounds = { x: 0, y: 0, width: newWidth, height: newHeight };
+
+      // Apply the resize
+      raster.imageData = newImageData;
+      raster.bounds = newBounds;
+
+      // Create an undoable command with captured old/new state
+      const capturedOldImageData = new ImageData(
+        new Uint8ClampedArray(oldImageData.data),
+        oldW,
+        oldH,
+      );
+      const capturedOldBounds = { x: 0, y: 0, width: oldW, height: oldH };
+      const capturedNewImageData = new ImageData(
+        new Uint8ClampedArray(newImageData.data),
+        newWidth,
+        newHeight,
+      );
+      const capturedNewBounds = { ...newBounds };
+
+      const resizeCmd: Command = {
+        description: `Resize "${raster.name}" to ${newWidth}×${newHeight}`,
+        execute(): void {
+          raster.imageData = capturedNewImageData;
+          raster.bounds = capturedNewBounds;
+        },
+        undo(): void {
+          raster.imageData = capturedOldImageData;
+          raster.bounds = capturedOldBounds;
+        },
+      };
+
+      // Push to history (execute() is idempotent — safe to re-apply)
+      commandHistory.execute(resizeCmd);
+      set({
+        canUndo: commandHistory.canUndo,
+        canRedo: commandHistory.canRedo,
+        revision: useAppStore.getState().revision + 1,
+      });
+      eventBus.emit('document:changed');
+      doc.dirty = true;
+      set({ statusMessage: `Resized layer: ${newWidth}×${newHeight}` });
+      get().updateTitleBar();
+    } catch {
+      set({ statusMessage: 'Resize failed' });
+    }
+  },
+
+  setTransformActive: (active): void => {
+    set({ transformActive: active });
   },
 }));
 

@@ -13,9 +13,14 @@
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import type { TextLayer } from '@photoshop-app/types';
+import type { RasterLayer, TextLayer } from '@photoshop-app/types';
 import { flattenLayers } from '@photoshop-app/core';
 import { useAppStore, getViewport } from '../../store';
+import { BrushEngine } from '../../brush-engine';
+
+/** Shared brush engine instance. */
+const brushEngine = new BrushEngine();
+import { TransformHandles } from './TransformHandles';
 
 /** CanvasView renders the document to a canvas with zoom/pan controls. */
 export function CanvasView(): React.JSX.Element {
@@ -185,10 +190,13 @@ export function CanvasView(): React.JSX.Element {
       onDoubleClick={handleDoubleClick}
     >
       {document ? (
-        <canvas
-          ref={canvasRef}
-          className="editor-canvas"
-        />
+        <>
+          <canvas
+            ref={canvasRef}
+            className="editor-canvas"
+          />
+          <TransformHandles />
+        </>
       ) : (
         <div className="canvas-empty">
           <p>No document open</p>
