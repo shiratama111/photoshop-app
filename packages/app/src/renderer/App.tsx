@@ -19,7 +19,10 @@
  * - Delete/Backspace: Remove selected layer
  * - V/M/B/E/T/C/W: Tool shortcuts
  *
+ * - Escape: Cancel cutout / close context menu
+ *
  * @see APP-002: Canvas view + layer panel integration
+ * @see APP-006: AI cutout UI
  */
 
 import React, { useCallback, useEffect } from 'react';
@@ -28,6 +31,8 @@ import type { Tool } from './store';
 import { CanvasView } from './components/canvas/CanvasView';
 import { LayerPanel } from './components/panels/LayerPanel';
 import { LayerContextMenu } from './components/panels/LayerContextMenu';
+import { CutoutTool } from './components/tools/CutoutTool';
+import { useCutoutStore } from './components/tools/cutout-store';
 
 /** Available tools with display labels. */
 const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
@@ -93,12 +98,15 @@ function StatusBar(): React.JSX.Element {
 
 /** Root App component with CSS Grid layout. */
 export function App(): React.JSX.Element {
+  const activeTool = useAppStore((s) => s.activeTool);
   const setActiveTool = useAppStore((s) => s.setActiveTool);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const hideContextMenu = useAppStore((s) => s.hideContextMenu);
+  const cutout = useCutoutStore((s) => s.cutout);
+  const cancelCutout = useCutoutStore((s) => s.cancelCutout);
 
   /** Global keyboard shortcut handler. */
   const handleKeyDown = useCallback(
@@ -131,7 +139,11 @@ export function App(): React.JSX.Element {
       }
 
       if (e.key === 'Escape') {
-        hideContextMenu();
+        if (cutout) {
+          cancelCutout();
+        } else {
+          hideContextMenu();
+        }
         return;
       }
 
@@ -143,7 +155,7 @@ export function App(): React.JSX.Element {
         }
       }
     },
-    [undo, redo, removeLayer, selectedLayerId, setActiveTool, hideContextMenu],
+    [undo, redo, removeLayer, selectedLayerId, setActiveTool, hideContextMenu, cutout, cancelCutout],
   );
 
   useEffect(() => {
@@ -158,6 +170,7 @@ export function App(): React.JSX.Element {
       <CanvasView />
       <StatusBar />
       <LayerContextMenu />
+      {activeTool === 'segment' && cutout && <CutoutTool />}
     </div>
   );
 }
