@@ -1,0 +1,2 @@
+// Electron Preload - stub
+export {};

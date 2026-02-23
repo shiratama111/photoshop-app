@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.vitest/
+out/
+release/
+*.asar
+temp/
+.auto-save/
