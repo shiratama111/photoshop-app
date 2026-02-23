@@ -15,14 +15,10 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { RasterLayer, TextLayer } from '@photoshop-app/types';
 import { flattenLayers } from '@photoshop-app/core';
-import type { RasterLayer } from '@photoshop-app/types';
 import { BrushEngine } from '../../brush-engine';
 import { useAppStore, getViewport } from '../../store';
-import { BrushEngine } from '../../brush-engine';
-
-/** Shared brush engine instance. */
-const brushEngine = new BrushEngine();
 import { TransformHandles } from './TransformHandles';
+import { SelectionOverlay } from './SelectionOverlay';
 
 /** Module-level brush engine instance (APP-014). */
 const brushEngine = new BrushEngine();
@@ -32,6 +28,8 @@ export function CanvasView(): React.JSX.Element {
   const document = useAppStore((s) => s.document);
   const revision = useAppStore((s) => s.revision);
   const zoom = useAppStore((s) => s.zoom);
+  const activeTool = useAppStore((s) => s.activeTool);
+  const brushSize = useAppStore((s) => s.brushSize);
   const renderToCanvas = useAppStore((s) => s.renderToCanvas);
   const setPanOffset = useAppStore((s) => s.setPanOffset);
   const fitToWindow = useAppStore((s) => s.fitToWindow);
@@ -41,6 +39,8 @@ export function CanvasView(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPanning = useRef(false);
   const lastPanPoint = useRef({ x: 0, y: 0 });
+  const mousePos = useRef({ x: 0, y: 0 });
+  const cursorRef = useRef<HTMLDivElement>(null);
 
   /** Render the document to the canvas. */
   const doRender = useCallback((): void => {
@@ -142,6 +142,7 @@ export function CanvasView(): React.JSX.Element {
         const layer = allLayers.find((l) => l.id === activeId);
         if (!layer || layer.type !== 'raster') return;
         const raster = layer as RasterLayer;
+        if (!raster.imageData) return;
 
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const vp = getViewport();
@@ -153,9 +154,7 @@ export function CanvasView(): React.JSX.Element {
         const ly = docPt.y - raster.position.y;
 
         brushEngine.startStroke(
-          raster.pixelData,
-          raster.size.width,
-          raster.size.height,
+          raster.imageData,
           { x: lx, y: ly },
           {
             size: state.brushSize,
@@ -173,6 +172,13 @@ export function CanvasView(): React.JSX.Element {
   /** Handle mouse move for pan or brush continuation (APP-014). */
   const handleMouseMove = useCallback(
     (e: React.MouseEvent): void => {
+      // Update brush cursor position
+      if (cursorRef.current) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        cursorRef.current.style.left = `${e.clientX - rect.left}px`;
+        cursorRef.current.style.top = `${e.clientY - rect.top}px`;
+      }
+
       // Pan path
       if (isPanning.current) {
         const vp = getViewport();
@@ -258,10 +264,14 @@ export function CanvasView(): React.JSX.Element {
     [document, startEditingText],
   );
 
+  const isBrushTool = activeTool === 'brush' || activeTool === 'eraser';
+  const cursorDiameter = brushSize * zoom;
+
   return (
     <div
       ref={containerRef}
       className="canvas-area"
+      style={isBrushTool ? { cursor: 'none' } : undefined}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -276,6 +286,17 @@ export function CanvasView(): React.JSX.Element {
             className="editor-canvas"
           />
           <TransformHandles />
+          <SelectionOverlay />
+          {isBrushTool && (
+            <div
+              ref={cursorRef}
+              className="brush-cursor"
+              style={{
+                width: `${cursorDiameter}px`,
+                height: `${cursorDiameter}px`,
+              }}
+            />
+          )}
         </>
       ) : (
         <div className="canvas-empty">

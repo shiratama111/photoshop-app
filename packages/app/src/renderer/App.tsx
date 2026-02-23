@@ -199,11 +199,37 @@ export function App(): React.JSX.Element {
         return;
       }
 
+      // Ctrl+A — Select all (APP-015)
+      if (e.ctrlKey && !e.shiftKey && e.key === 'a') {
+        e.preventDefault();
+        useAppStore.getState().selectAll();
+        return;
+      }
+
+      // Ctrl+D — Deselect (APP-015)
+      if (e.ctrlKey && !e.shiftKey && e.key === 'd') {
+        e.preventDefault();
+        useAppStore.getState().clearSelection();
+        return;
+      }
+
       if (!e.ctrlKey && !e.altKey && !e.metaKey) {
         const tool = TOOL_SHORTCUTS[e.key.toLowerCase()];
         if (tool) {
           e.preventDefault();
           setActiveTool(tool);
+        }
+
+        // [ / ] — Brush size adjustment (APP-014)
+        if (e.key === '[') {
+          e.preventDefault();
+          const s = useAppStore.getState();
+          s.setBrushSize(Math.max(1, s.brushSize - (s.brushSize > 20 ? 10 : 2)));
+        }
+        if (e.key === ']') {
+          e.preventDefault();
+          const s = useAppStore.getState();
+          s.setBrushSize(Math.min(500, s.brushSize + (s.brushSize >= 20 ? 10 : 2)));
         }
       }
     },

@@ -995,3 +995,14 @@ html, body, #root {
   0% { border-color: #000; }
   50% { border-color: #fff; }
 }
+
+/* Brush Cursor — APP-014 */
+.brush-cursor {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  z-index: 60;
+}
