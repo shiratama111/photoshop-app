@@ -6,8 +6,32 @@
  * @packageDocumentation
  */
 
+// UUID generation — CORE-001
+export { generateId } from './uuid';
+
+// Document creation — CORE-001
+export { createDocument } from './document';
+
+// Layer factories — CORE-001
+export { createRasterLayer, createTextLayer, createLayerGroup } from './layer-factory';
+export type { CreateTextLayerOptions } from './layer-factory';
+
+// Layer tree operations — CORE-001
+export {
+  addLayer,
+  removeLayer,
+  reorderLayer,
+  findLayerById,
+  findParentGroup,
+  traverseLayers,
+  flattenLayers,
+} from './layer-tree';
+
 // Command history (undo/redo) — CORE-002
 export { CommandHistoryImpl } from './command-history';
+
+// Event bus — CORE-004
+export { EventBusImpl } from './event-bus';
 
 // Concrete commands — CORE-002
 export {
