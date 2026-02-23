@@ -45,6 +45,9 @@ importers:
 
   packages/adapter-asl:
     dependencies:
+      '@photoshop-app/adapter-abr':
+        specifier: workspace:*
+        version: link:../adapter-abr
       '@photoshop-app/types':
         specifier: workspace:*
         version: link:../types
