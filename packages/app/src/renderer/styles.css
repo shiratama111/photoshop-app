@@ -1,0 +1,169 @@
+/**
+ * Main application styles.
+ * CSS Grid layout with 4 zones: toolbar, sidebar, canvas, statusbar.
+ */
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d2d;
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --accent: #0078d4;
+  --border: #3e3e3e;
+  --toolbar-height: 36px;
+  --sidebar-width: 220px;
+  --statusbar-height: 24px;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* CSS Grid layout */
+.app-layout {
+  display: grid;
+  height: 100vh;
+  grid-template-areas:
+    "toolbar  toolbar"
+    "sidebar  canvas"
+    "statusbar statusbar";
+  grid-template-rows: var(--toolbar-height) 1fr var(--statusbar-height);
+  grid-template-columns: var(--sidebar-width) 1fr;
+}
+
+/* Toolbar */
+.toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.toolbar-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Sidebar */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.layer-list {
+  padding: 4px 0;
+}
+
+.layer-item {
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layer-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.layer-empty {
+  padding: 16px 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-style: italic;
+}
+
+/* Canvas area */
+.canvas-area {
+  grid-area: canvas;
+  position: relative;
+  overflow: hidden;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-area canvas {
+  image-rendering: pixelated;
+  border: 1px solid var(--border);
+}
+
+.canvas-empty {
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.canvas-empty p {
+  margin: 8px 0;
+}
+
+/* Status bar */
+.statusbar {
+  grid-area: statusbar;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.status-right {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.status-sep {
+  margin: 0 4px;
+  opacity: 0.5;
+}
