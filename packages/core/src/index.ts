@@ -41,3 +41,9 @@ export {
   SetLayerPropertyCommand,
   ModifyPixelsCommand,
 } from './commands';
+
+// Project file save/load — CORE-003
+export { serialize, deserialize } from './project-file';
+export { documentToProjectFile, projectFileToDocument } from './project-serializer';
+export { encodePng, decodePng } from './png-codec';
+export type { RgbaImage } from './png-codec';

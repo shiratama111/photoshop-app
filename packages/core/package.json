@@ -16,7 +16,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@photoshop-app/types": "workspace:*"
+    "@photoshop-app/types": "workspace:*",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
