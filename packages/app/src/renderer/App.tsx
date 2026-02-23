@@ -3,20 +3,31 @@
  * Root React component with CSS Grid layout.
  *
  * Layout (4 zones):
- * ┌──────────────────────────┐
- * │        Toolbar           │
- * ├──────┬───────────────────┤
- * │ Side │                   │
- * │ bar  │   Canvas Area     │
- * │      │                   │
- * ├──────┴───────────────────┤
- * │       Status Bar         │
- * └──────────────────────────┘
+ * +----------------------------+
+ * |        Toolbar             |
+ * +------+---------------------+
+ * | Side |                     |
+ * | bar  |   Canvas Area       |
+ * |      |                     |
+ * +------+---------------------+
+ * |       Status Bar           |
+ * +----------------------------+
+ *
+ * Keyboard shortcuts:
+ * - Ctrl+Z: Undo
+ * - Ctrl+Y / Ctrl+Shift+Z: Redo
+ * - Delete/Backspace: Remove selected layer
+ * - V/M/B/E/T/C/W: Tool shortcuts
+ *
+ * @see APP-002: Canvas view + layer panel integration
  */
 
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useAppStore } from './store';
 import type { Tool } from './store';
+import { CanvasView } from './components/canvas/CanvasView';
+import { LayerPanel } from './components/panels/LayerPanel';
+import { LayerContextMenu } from './components/panels/LayerContextMenu';
 
 /** Available tools with display labels. */
 const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
@@ -28,6 +39,12 @@ const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
   { id: 'crop', label: 'Crop', shortcut: 'C' },
   { id: 'segment', label: 'AI Cutout', shortcut: 'W' },
 ];
+
+/** Tool shortcut key map. */
+const TOOL_SHORTCUTS: Record<string, Tool> = {};
+for (const tool of TOOLS) {
+  TOOL_SHORTCUTS[tool.shortcut.toLowerCase()] = tool.id;
+}
 
 /** Toolbar component — top horizontal bar. */
 function Toolbar(): React.JSX.Element {
@@ -49,64 +66,22 @@ function Toolbar(): React.JSX.Element {
   );
 }
 
-/** Sidebar component — layer panel placeholder. */
-function Sidebar(): React.JSX.Element {
-  const document = useAppStore((s) => s.document);
-
-  return (
-    <div className="sidebar">
-      <div className="sidebar-header">Layers</div>
-      {document ? (
-        <div className="layer-list">
-          {document.rootGroup.children.map((layer) => (
-            <div key={layer.id} className="layer-item">
-              {layer.visible ? '👁' : '  '} {layer.name}
-            </div>
-          ))}
-          {document.rootGroup.children.length === 0 && (
-            <div className="layer-empty">No layers</div>
-          )}
-        </div>
-      ) : (
-        <div className="layer-empty">No document open</div>
-      )}
-    </div>
-  );
-}
-
-/** Canvas area — the main editing viewport. */
-function CanvasArea(): React.JSX.Element {
-  const document = useAppStore((s) => s.document);
-
-  return (
-    <div className="canvas-area">
-      {document ? (
-        <canvas
-          id="editor-canvas"
-          width={document.canvas.size.width}
-          height={document.canvas.size.height}
-        />
-      ) : (
-        <div className="canvas-empty">
-          <p>No document open</p>
-          <p>File &gt; New to create a document</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Status bar — bottom information bar. */
 function StatusBar(): React.JSX.Element {
-  const { document, zoom, statusMessage } = useAppStore();
+  const { document, zoom, statusMessage, canUndo, canRedo } = useAppStore();
 
   return (
     <div className="statusbar">
       <span className="status-message">{statusMessage}</span>
       <span className="status-right">
+        {canUndo && <span className="status-hint">Ctrl+Z undo</span>}
+        {canRedo && <span className="status-hint">Ctrl+Y redo</span>}
         {document && (
           <>
-            <span>{document.canvas.size.width} x {document.canvas.size.height}</span>
+            <span className="status-sep">|</span>
+            <span>
+              {document.canvas.size.width} x {document.canvas.size.height}
+            </span>
             <span className="status-sep">|</span>
           </>
         )}
@@ -118,12 +93,71 @@ function StatusBar(): React.JSX.Element {
 
 /** Root App component with CSS Grid layout. */
 export function App(): React.JSX.Element {
+  const setActiveTool = useAppStore((s) => s.setActiveTool);
+  const undo = useAppStore((s) => s.undo);
+  const redo = useAppStore((s) => s.redo);
+  const removeLayer = useAppStore((s) => s.removeLayer);
+  const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const hideContextMenu = useAppStore((s) => s.hideContextMenu);
+
+  /** Global keyboard shortcut handler. */
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT'
+      ) {
+        return;
+      }
+
+      if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
+      if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'Z')) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLayerId) {
+        e.preventDefault();
+        removeLayer(selectedLayerId);
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        hideContextMenu();
+        return;
+      }
+
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        const tool = TOOL_SHORTCUTS[e.key.toLowerCase()];
+        if (tool) {
+          e.preventDefault();
+          setActiveTool(tool);
+        }
+      }
+    },
+    [undo, redo, removeLayer, selectedLayerId, setActiveTool, hideContextMenu],
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return (): void => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
   return (
     <div className="app-layout">
       <Toolbar />
-      <Sidebar />
-      <CanvasArea />
+      <LayerPanel />
+      <CanvasView />
       <StatusBar />
+      <LayerContextMenu />
     </div>
   );
 }
