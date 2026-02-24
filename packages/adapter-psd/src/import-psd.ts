@@ -27,6 +27,20 @@ const DEFAULT_OPTIONS: PsdImportOptions = {
   maxDimension: 0,
 };
 
+/**
+ * Normalize input to ArrayBuffer expected by ag-psd typings.
+ * Copies Uint8Array input to ensure a non-shared, exact-length buffer.
+ */
+function toArrayBuffer(buffer: ArrayBuffer | Uint8Array): ArrayBuffer {
+  if (buffer instanceof ArrayBuffer) {
+    return buffer;
+  }
+
+  const normalized = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(normalized).set(buffer);
+  return normalized;
+}
+
 /** Result of a PSD import operation. */
 export interface PsdImportResult {
   /** The imported document. */
@@ -51,7 +65,7 @@ export function importPsd(
   const issues: CompatibilityIssue[] = [];
 
   // Parse with ag-psd
-  const psd = readPsd(buffer instanceof Uint8Array ? buffer.buffer : buffer, {
+  const psd = readPsd(toArrayBuffer(buffer), {
     skipCompositeImageData: true,
     skipLinkedFilesData: true,
     skipThumbnail: true,
@@ -120,13 +134,14 @@ export function importPsd(
   }
 
   const now = new Date().toISOString();
+  const dpi = psd.imageResources?.resolutionInfo?.horizontalResolution ?? 72;
 
   const document: Document = {
     id: crypto.randomUUID(),
     name: fileName.replace(/\.psd$/i, ''),
     canvas: {
       size: { width, height },
-      dpi: psd.imageResources?.xResolution ?? 72,
+      dpi,
       colorMode: 'rgb',
       bitDepth: 8,
     },

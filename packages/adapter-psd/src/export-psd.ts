@@ -41,8 +41,14 @@ export function exportPsd(
     height: document.canvas.size.height,
     children,
     imageResources: {
-      xResolution: document.canvas.dpi,
-      yResolution: document.canvas.dpi,
+      resolutionInfo: {
+        horizontalResolution: document.canvas.dpi,
+        horizontalResolutionUnit: 'PPI',
+        widthUnit: 'Inches',
+        verticalResolution: document.canvas.dpi,
+        verticalResolutionUnit: 'PPI',
+        heightUnit: 'Inches',
+      },
     },
   };
 
