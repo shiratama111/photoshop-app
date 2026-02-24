@@ -36,7 +36,7 @@ export class EventBusImpl implements EventBus {
   /** @inheritdoc */
   on<K extends keyof EventMap>(event: K, callback: EventCallback<K>): () => void {
     const set = this.getOrCreateSet(event);
-    set.add(callback);
+    set.add(callback as Callback);
     return () => this.off(event, callback);
   }
 
@@ -47,9 +47,9 @@ export class EventBusImpl implements EventBus {
       (callback as Callback)(...args);
     }) as EventCallback<K>;
 
-    this.onceWrappers.set(callback, wrapper);
+    this.onceWrappers.set(callback as Callback, wrapper as Callback);
     const set = this.getOrCreateSet(event);
-    set.add(wrapper);
+    set.add(wrapper as Callback);
 
     return () => this.off(event, callback);
   }
@@ -60,16 +60,16 @@ export class EventBusImpl implements EventBus {
     if (!set) return;
 
     // Try removing the callback directly (registered via `on`).
-    if (set.delete(callback)) {
+    if (set.delete(callback as Callback)) {
       this.cleanupSet(event, set);
       return;
     }
 
     // If it was registered via `once`, remove the wrapper instead.
-    const wrapper = this.onceWrappers.get(callback);
+    const wrapper = this.onceWrappers.get(callback as Callback);
     if (wrapper) {
       set.delete(wrapper);
-      this.onceWrappers.delete(callback);
+      this.onceWrappers.delete(callback as Callback);
       this.cleanupSet(event, set);
     }
   }
