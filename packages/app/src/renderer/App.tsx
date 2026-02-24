@@ -24,7 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useAppStore } from './store';
+import { useAppStore, getViewport } from './store';
 import type { Tool } from './store';
 import { CanvasView } from './components/canvas/CanvasView';
 import { LayerPanel } from './components/panels/LayerPanel';
@@ -85,7 +85,45 @@ function Toolbar(): React.JSX.Element {
 
 /** Status bar \u2014 bottom information bar. */
 function StatusBar(): React.JSX.Element {
-  const { document, zoom, statusMessage, canUndo, canRedo } = useAppStore();
+  const { document, zoom, statusMessage, canUndo, canRedo, setZoom, setPanOffset, fitToWindow } = useAppStore();
+
+  const handleZoomIn = useCallback((): void => {
+    const viewport = getViewport();
+    const el = window.document.querySelector('.canvas-area');
+    const cx = el ? el.clientWidth / 2 : 0;
+    const cy = el ? el.clientHeight / 2 : 0;
+    viewport.setZoom(zoom * 1.2, { x: cx, y: cy });
+    setZoom(viewport.zoom);
+    setPanOffset(viewport.offset);
+  }, [zoom, setZoom, setPanOffset]);
+
+  const handleZoomOut = useCallback((): void => {
+    const viewport = getViewport();
+    const el = window.document.querySelector('.canvas-area');
+    const cx = el ? el.clientWidth / 2 : 0;
+    const cy = el ? el.clientHeight / 2 : 0;
+    viewport.setZoom(zoom / 1.2, { x: cx, y: cy });
+    setZoom(viewport.zoom);
+    setPanOffset(viewport.offset);
+  }, [zoom, setZoom, setPanOffset]);
+
+  const handleFitToWindow = useCallback((): void => {
+    const el = window.document.querySelector('.canvas-area');
+    if (!el) return;
+    fitToWindow(el.clientWidth, el.clientHeight);
+  }, [fitToWindow]);
+
+  const handleZoomToActual = useCallback((): void => {
+    const viewport = getViewport();
+    const el = window.document.querySelector('.canvas-area');
+    if (!el || !document) return;
+    viewport.zoomToActual(
+      { width: el.clientWidth, height: el.clientHeight },
+      document.canvas.size,
+    );
+    setZoom(viewport.zoom);
+    setPanOffset(viewport.offset);
+  }, [document, setZoom, setPanOffset]);
 
   return (
     <div className="statusbar">
@@ -99,10 +137,16 @@ function StatusBar(): React.JSX.Element {
             <span>
               {document.canvas.size.width} x {document.canvas.size.height}
             </span>
-            <span className="status-sep">|</span>
           </>
         )}
-        <span>{Math.round(zoom * 100)}%</span>
+        <span className="status-sep">|</span>
+        <span className="zoom-controls">
+          <button onClick={handleFitToWindow} disabled={!document} title="Fit to window">Fit</button>
+          <button onClick={handleZoomToActual} disabled={!document} title="Zoom to 100%">100%</button>
+          <button onClick={handleZoomOut} title="Zoom out">&minus;</button>
+          <span className="zoom-percentage">{Math.round(zoom * 100)}%</span>
+          <button onClick={handleZoomIn} title="Zoom in">+</button>
+        </span>
       </span>
     </div>
   );

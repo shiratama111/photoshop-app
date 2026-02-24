@@ -292,6 +292,8 @@ html, body, #root {
   position: relative;
   overflow: hidden;
   background: #1a1a1a;
+  border: 1px solid var(--border);
+  box-sizing: border-box;
 }
 
 .canvas-area canvas { display: block; position: absolute; top: 0; left: 0; }
@@ -324,6 +326,35 @@ html, body, #root {
 .status-right { display: flex; gap: 4px; align-items: center; }
 .status-sep { margin: 0 4px; opacity: 0.5; }
 .status-hint { font-size: 10px; opacity: 0.6; }
+
+/* Zoom Controls */
+.zoom-controls { display: flex; align-items: center; gap: 4px; }
+
+.zoom-controls button {
+  padding: 1px 6px;
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.zoom-controls button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.zoom-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom-percentage {
+  font-size: 11px;
+  min-width: 36px;
+  text-align: center;
+}
 
 
 /* Dialog (shared) \u2014 APP-004 */
