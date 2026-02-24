@@ -33,8 +33,34 @@ import { PsdDialog } from './components/dialogs/PsdDialog';
 import { LayerStyleDialog } from './components/dialogs/LayerStyleDialog';
 import { RecoveryDialog } from './components/dialogs/RecoveryDialog';
 import { CloseConfirmDialog } from './components/dialogs/CloseConfirmDialog';
+import { AboutDialog } from './components/dialogs/AboutDialog';
+import { NewDocumentDialog } from './components/dialogs/NewDocumentDialog';
 import { AssetBrowser } from './components/panels/AssetBrowser';
+import { BrushOptionsPanel } from './components/panels/BrushOptionsPanel';
+import { ColorPalette } from './components/panels/ColorPalette';
 import { TextPropertiesPanel, InlineTextEditor } from './components/text-editor';
+import { useCutoutStore } from './components/tools/cutout-store';
+
+type Unsubscribe = () => void;
+
+interface ElectronMenuAPI {
+  onMenuNew?: (callback: () => void) => Unsubscribe | void;
+  onMenuOpen?: (callback: () => void) => Unsubscribe | void;
+  onMenuSave?: (callback: () => void) => Unsubscribe | void;
+  onMenuSaveAs?: (callback: () => void) => Unsubscribe | void;
+  onMenuExport?: (callback: () => void) => Unsubscribe | void;
+  onMenuUndo?: (callback: () => void) => Unsubscribe | void;
+  onMenuRedo?: (callback: () => void) => Unsubscribe | void;
+  onMenuZoomIn?: (callback: () => void) => Unsubscribe | void;
+  onMenuZoomOut?: (callback: () => void) => Unsubscribe | void;
+  onMenuFitToWindow?: (callback: () => void) => Unsubscribe | void;
+  onMenuActualSize?: (callback: () => void) => Unsubscribe | void;
+  onMenuAbout?: (callback: () => void) => Unsubscribe | void;
+  onBeforeClose?: (callback: () => void) => Unsubscribe | void;
+  confirmClose?: (action: 'save' | 'discard' | 'cancel') => void;
+}
+
+let startupChecksInitialized = false;
 
 /** Available tools with display labels. */
 const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
@@ -143,9 +169,9 @@ function StatusBar(): React.JSX.Element {
         <span className="zoom-controls">
           <button onClick={handleFitToWindow} disabled={!document} title="Fit to window">Fit</button>
           <button onClick={handleZoomToActual} disabled={!document} title="Zoom to 100%">100%</button>
-          <button onClick={handleZoomOut} title="Zoom out">&minus;</button>
+          <button onClick={handleZoomOut} disabled={!document} title="Zoom out">&minus;</button>
           <span className="zoom-percentage">{Math.round(zoom * 100)}%</span>
-          <button onClick={handleZoomIn} title="Zoom in">+</button>
+          <button onClick={handleZoomIn} disabled={!document} title="Zoom in">+</button>
         </span>
       </span>
     </div>
@@ -184,6 +210,7 @@ function SidebarWrapper(): React.JSX.Element {
         ) : (
           <AssetBrowser />
         )}
+        <ColorPalette />
       </div>
     </div>
   );
@@ -191,18 +218,24 @@ function SidebarWrapper(): React.JSX.Element {
 
 /** Root App component with CSS Grid layout. */
 export function App(): React.JSX.Element {
+  const document = useAppStore((s) => s.document);
+  const activeTool = useAppStore((s) => s.activeTool);
   const setActiveTool = useAppStore((s) => s.setActiveTool);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const hideContextMenu = useAppStore((s) => s.hideContextMenu);
+  const showAbout = useAppStore((s) => s.showAbout);
+  const toggleAbout = useAppStore((s) => s.toggleAbout);
   const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const layerStyleDialog = useAppStore((s) => s.layerStyleDialog);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
   const dragOverActive = useAppStore((s) => s.dragOverActive);
   const setDragOverActive = useAppStore((s) => s.setDragOverActive);
   const openFileByPath = useAppStore((s) => s.openFileByPath);
+  const cutout = useCutoutStore((s) => s.cutout);
+  const startCutout = useCutoutStore((s) => s.startCutout);
 
   /** Global keyboard shortcut handler. */
   const handleKeyDown = useCallback(
@@ -213,6 +246,13 @@ export function App(): React.JSX.Element {
         target.tagName === 'TEXTAREA' ||
         target.tagName === 'SELECT'
       ) {
+        return;
+      }
+
+      // Ctrl+N — New Document dialog
+      if (e.ctrlKey && !e.shiftKey && e.key === 'n') {
+        e.preventDefault();
+        useAppStore.getState().openNewDocumentDialog();
         return;
       }
 
@@ -235,6 +275,14 @@ export function App(): React.JSX.Element {
       }
 
       if (e.key === 'Escape') {
+        if (useCutoutStore.getState().cutout) {
+          useCutoutStore.getState().cancelCutout();
+          return;
+        }
+        if (showAbout) {
+          toggleAbout();
+          return;
+        }
         if (useAppStore.getState().editingTextLayerId) {
           stopEditingText();
         } else {
@@ -275,9 +323,31 @@ export function App(): React.JSX.Element {
           const s = useAppStore.getState();
           s.setBrushSize(Math.min(500, s.brushSize + (s.brushSize >= 20 ? 10 : 2)));
         }
+
+        // X — Swap foreground/background colors (APP-016)
+        if (e.key === 'x' || e.key === 'X') {
+          e.preventDefault();
+          useAppStore.getState().swapColors();
+        }
+
+        // D — Reset foreground/background to default (APP-016)
+        if (e.key === 'd') {
+          e.preventDefault();
+          useAppStore.getState().resetColors();
+        }
       }
     },
-    [undo, redo, removeLayer, selectedLayerId, setActiveTool, hideContextMenu, stopEditingText],
+    [
+      undo,
+      redo,
+      removeLayer,
+      selectedLayerId,
+      setActiveTool,
+      hideContextMenu,
+      showAbout,
+      toggleAbout,
+      stopEditingText,
+    ],
   );
 
   useEffect(() => {
@@ -285,39 +355,120 @@ export function App(): React.JSX.Element {
     return (): void => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Auto-start cutout session when the segment tool is selected.
+  useEffect(() => {
+    if (activeTool !== 'segment' || cutout) return;
+    startCutout();
+  }, [activeTool, cutout, selectedLayerId, document?.id, startCutout]);
+
   // Wire Electron menu events to store actions \u2014 APP-004
   useEffect(() => {
-    const api = (window as unknown as { electronAPI: Record<string, (cb: () => void) => void> }).electronAPI;
+    const api = (window as unknown as { electronAPI?: ElectronMenuAPI }).electronAPI;
     if (!api) return;
-    api.onMenuNew?.(() => useAppStore.getState().newDocument('Untitled', 1920, 1080));
-    api.onMenuOpen?.(() => void useAppStore.getState().openFile());
-    api.onMenuSave?.(() => void useAppStore.getState().saveFile());
-    api.onMenuSaveAs?.(() => void useAppStore.getState().saveAsFile());
-    api.onMenuExport?.(() => void useAppStore.getState().exportAsImage());
-    api.onMenuUndo?.(() => useAppStore.getState().undo());
-    api.onMenuRedo?.(() => useAppStore.getState().redo());
+
+    const getCanvasArea = (): HTMLElement | null => {
+      const el = window.document.querySelector('.canvas-area');
+      return el instanceof HTMLElement ? el : null;
+    };
+
+    const unsubs: Unsubscribe[] = [];
+    const register = (
+      subscribe: ((callback: () => void) => Unsubscribe | void) | undefined,
+      callback: () => void,
+    ): void => {
+      const unsub = subscribe?.(callback);
+      if (typeof unsub === 'function') {
+        unsubs.push(unsub);
+      }
+    };
+
+    register(api.onMenuNew, () => useAppStore.getState().openNewDocumentDialog());
+    register(api.onMenuOpen, () => void useAppStore.getState().openFile());
+    register(api.onMenuSave, () => void useAppStore.getState().saveFile());
+    register(api.onMenuSaveAs, () => void useAppStore.getState().saveAsFile());
+    register(api.onMenuExport, () => void useAppStore.getState().exportAsImage());
+    register(api.onMenuUndo, () => useAppStore.getState().undo());
+    register(api.onMenuRedo, () => useAppStore.getState().redo());
+    register(api.onMenuZoomIn, () => {
+      const state = useAppStore.getState();
+      if (!state.document) return;
+      const area = getCanvasArea();
+      const anchor = {
+        x: area ? area.clientWidth / 2 : 0,
+        y: area ? area.clientHeight / 2 : 0,
+      };
+      const vp = getViewport();
+      vp.setZoom(vp.zoom * 1.2, anchor);
+      state.setZoom(vp.zoom);
+      state.setPanOffset(vp.offset);
+    });
+    register(api.onMenuZoomOut, () => {
+      const state = useAppStore.getState();
+      if (!state.document) return;
+      const area = getCanvasArea();
+      const anchor = {
+        x: area ? area.clientWidth / 2 : 0,
+        y: area ? area.clientHeight / 2 : 0,
+      };
+      const vp = getViewport();
+      vp.setZoom(vp.zoom / 1.2, anchor);
+      state.setZoom(vp.zoom);
+      state.setPanOffset(vp.offset);
+    });
+    register(api.onMenuFitToWindow, () => {
+      const state = useAppStore.getState();
+      const area = getCanvasArea();
+      if (!state.document || !area) return;
+      state.fitToWindow(area.clientWidth, area.clientHeight);
+    });
+    register(api.onMenuActualSize, () => {
+      const state = useAppStore.getState();
+      const area = getCanvasArea();
+      if (!state.document || !area) return;
+      const vp = getViewport();
+      vp.zoomToActual(
+        { width: area.clientWidth, height: area.clientHeight },
+        state.document.canvas.size,
+      );
+      state.setZoom(vp.zoom);
+      state.setPanOffset(vp.offset);
+    });
+    register(api.onMenuAbout, () => useAppStore.getState().toggleAbout());
+
+    return (): void => {
+      for (const unsub of unsubs) {
+        unsub();
+      }
+    };
   }, []);
 
   // Check for recovery files on startup \u2014 APP-008
   useEffect(() => {
+    if (startupChecksInitialized) return;
+    startupChecksInitialized = true;
     void useAppStore.getState().checkRecovery();
     void useAppStore.getState().loadRecentFiles();
   }, []);
 
   // Listen for close confirmation from main process \u2014 APP-008
   useEffect(() => {
-    const api = (window as unknown as { electronAPI: { onBeforeClose: (cb: () => void) => void } }).electronAPI;
+    const api = (window as unknown as { electronAPI?: ElectronMenuAPI }).electronAPI;
     if (!api) return;
-    api.onBeforeClose?.(() => {
+    const unsubscribe = api.onBeforeClose?.(() => {
       const state = useAppStore.getState();
       if (state.document?.dirty) {
         state.setPendingClose(true);
       } else {
         // No unsaved changes, close immediately
-        (window as unknown as { electronAPI: { confirmClose: (a: string) => void } })
-          .electronAPI.confirmClose('discard');
+        api.confirmClose?.('discard');
       }
     });
+
+    return (): void => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, []);
 
   // Drag-drop file open \u2014 APP-008
@@ -385,6 +536,7 @@ export function App(): React.JSX.Element {
       onDrop={handleDrop}
     >
       <Toolbar />
+      <BrushOptionsPanel />
       <SidebarWrapper />
       <CanvasView />
       <StatusBar />
@@ -392,6 +544,8 @@ export function App(): React.JSX.Element {
       <PsdDialog />
       <RecoveryDialog />
       <CloseConfirmDialog />
+      <AboutDialog />
+      <NewDocumentDialog />
       {editingTextLayerId && <InlineTextEditor />}
       {layerStyleDialog && <LayerStyleDialog />}
       {dragOverActive && (

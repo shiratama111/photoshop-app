@@ -30,7 +30,7 @@ import type {
   TextLayer,
 } from '@photoshop-app/types';
 import type { CanvasContext2DLike, CanvasLike } from './canvas-pool';
-import { CanvasPool, type CanvasFactory } from './canvas-pool';
+import { CanvasPool, createBrowserCanvas, type CanvasFactory } from './canvas-pool';
 
 /**
  * Canvas 2D renderer implementation.
@@ -43,9 +43,12 @@ import { CanvasPool, type CanvasFactory } from './canvas-pool';
  */
 export class Canvas2DRenderer implements Renderer {
   private pool: CanvasPool;
+  private canvasFactory: CanvasFactory;
+  private checkerboardTile: CanvasLike | null = null;
 
   constructor(canvasFactory?: CanvasFactory) {
-    this.pool = new CanvasPool(canvasFactory);
+    this.canvasFactory = canvasFactory ?? createBrowserCanvas;
+    this.pool = new CanvasPool(this.canvasFactory);
   }
 
   /**
@@ -60,22 +63,58 @@ export class Canvas2DRenderer implements Renderer {
     if (!ctx) return;
 
     const { width, height } = canvas;
+    const docSize = options.documentSize;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+    if (docSize) {
+      // Pasteboard/artboard mode: dark pasteboard, then white artboard inside viewport
+      ctx.clearRect(0, 0, width, height);
 
-    // Draw background
-    this.drawBackground(ctx, width, height, options.background);
+      // 1. Fill entire canvas with pasteboard color
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(0, 0, width, height);
 
-    // Apply viewport transform
-    ctx.save();
-    const vp = options.viewport;
-    ctx.setTransform(vp.zoom, 0, 0, vp.zoom, vp.offset.x, vp.offset.y);
+      // 2. Apply viewport transform
+      ctx.save();
+      const vp = options.viewport;
+      const pixelRatio = this.getCanvasPixelRatio(canvas);
+      ctx.setTransform(
+        vp.zoom * pixelRatio,
+        0,
+        0,
+        vp.zoom * pixelRatio,
+        vp.offset.x * pixelRatio,
+        vp.offset.y * pixelRatio,
+      );
 
-    // Render layer tree bottom-to-top
-    this.renderGroup(ctx, document.rootGroup, options);
+      // 3. Draw document area (artboard) in white
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, docSize.width, docSize.height);
 
-    ctx.restore();
+      // 4. Render layer tree bottom-to-top
+      this.renderGroup(ctx, document.rootGroup, options);
+
+      ctx.restore();
+    } else {
+      // Legacy mode: no document size, use the original background approach
+      ctx.clearRect(0, 0, width, height);
+      this.drawBackground(ctx, width, height, options.background);
+
+      ctx.save();
+      const vp = options.viewport;
+      const pixelRatio = this.getCanvasPixelRatio(canvas);
+      ctx.setTransform(
+        vp.zoom * pixelRatio,
+        0,
+        0,
+        vp.zoom * pixelRatio,
+        vp.offset.x * pixelRatio,
+        vp.offset.y * pixelRatio,
+      );
+
+      this.renderGroup(ctx, document.rootGroup, options);
+
+      ctx.restore();
+    }
   }
 
   /**
@@ -110,6 +149,7 @@ export class Canvas2DRenderer implements Renderer {
   /** Release pooled resources. */
   dispose(): void {
     this.pool.dispose();
+    this.checkerboardTile = null;
   }
 
   private drawBackground(
@@ -130,7 +170,35 @@ export class Canvas2DRenderer implements Renderer {
     }
   }
 
+  /**
+   * Detect canvas pixel ratio from backing store size / CSS size.
+   * Returns 1 for offscreen/test canvases that do not expose client dimensions.
+   */
+  private getCanvasPixelRatio(canvas: HTMLCanvasElement | CanvasLike): number {
+    const domCanvas = canvas as Partial<HTMLCanvasElement>;
+    const clientWidth = typeof domCanvas.clientWidth === 'number' ? domCanvas.clientWidth : 0;
+    const clientHeight = typeof domCanvas.clientHeight === 'number' ? domCanvas.clientHeight : 0;
+    if (clientWidth <= 0 || clientHeight <= 0) return 1;
+
+    const scaleX = canvas.width / clientWidth;
+    const scaleY = canvas.height / clientHeight;
+    const ratio = Math.min(scaleX, scaleY);
+    if (!Number.isFinite(ratio) || ratio <= 0) return 1;
+    return ratio;
+  }
+
   private drawCheckerboard(ctx: CanvasContext2DLike, width: number, height: number): void {
+    const tile = this.getCheckerboardTile();
+    if (tile) {
+      const pattern = ctx.createPattern(tile, 'repeat');
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, width, height);
+        return;
+      }
+    }
+
+    // Fallback path for test/mocked contexts that do not support patterns.
     const tileSize = 8;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
@@ -142,6 +210,28 @@ export class Canvas2DRenderer implements Renderer {
         }
       }
     }
+  }
+
+  /**
+   * Lazily build a tiny 2x2 checkerboard tile and reuse it across renders.
+   */
+  private getCheckerboardTile(): CanvasLike | null {
+    if (this.checkerboardTile) return this.checkerboardTile;
+
+    const tileSize = 8;
+    const side = tileSize * 2;
+    const tile = this.canvasFactory(side, side);
+    const ctx = tile.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, side, side);
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(0, 0, tileSize, tileSize);
+    ctx.fillRect(tileSize, tileSize, tileSize, tileSize);
+
+    this.checkerboardTile = tile;
+    return tile;
   }
 
   /**

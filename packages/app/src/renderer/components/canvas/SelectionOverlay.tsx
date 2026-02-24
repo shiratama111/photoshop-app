@@ -8,17 +8,38 @@
  * @see APP-015: Selection tools
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useAppStore, getViewport } from '../../store';
 
 /** SelectionOverlay renders marching ants around the current selection. */
 export function SelectionOverlay(): React.JSX.Element | null {
   const selection = useAppStore((s) => s.selection);
   const document = useAppStore((s) => s.document);
+  const activeTool = useAppStore((s) => s.activeTool);
   const setSelection = useAppStore((s) => s.setSelection);
 
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const moveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
+  const upHandlerRef = useRef<(() => void) | null>(null);
+
+  const cleanupWindowListeners = useCallback((): void => {
+    if (moveHandlerRef.current) {
+      window.removeEventListener('mousemove', moveHandlerRef.current);
+      moveHandlerRef.current = null;
+    }
+    if (upHandlerRef.current) {
+      window.removeEventListener('mouseup', upHandlerRef.current);
+      upHandlerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return (): void => {
+      isDragging.current = false;
+      cleanupWindowListeners();
+    };
+  }, [cleanupWindowListeners]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent): void => {
@@ -28,8 +49,10 @@ export function SelectionOverlay(): React.JSX.Element | null {
 
       e.preventDefault();
       e.stopPropagation();
+      cleanupWindowListeners();
 
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const target = e.currentTarget as HTMLElement;
+      const rect = target.getBoundingClientRect();
       const vp = getViewport();
       const docPoint = vp.screenToDocument({
         x: e.clientX - rect.left,
@@ -43,7 +66,7 @@ export function SelectionOverlay(): React.JSX.Element | null {
       const handleMove = (moveEvent: MouseEvent): void => {
         if (!isDragging.current) return;
 
-        const moveRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const moveRect = target.getBoundingClientRect();
         const moveDocPoint = vp.screenToDocument({
           x: moveEvent.clientX - moveRect.left,
           y: moveEvent.clientY - moveRect.top,
@@ -61,37 +84,35 @@ export function SelectionOverlay(): React.JSX.Element | null {
 
       const handleUp = (): void => {
         isDragging.current = false;
-        window.removeEventListener('mousemove', handleMove);
-        window.removeEventListener('mouseup', handleUp);
+        cleanupWindowListeners();
       };
 
+      moveHandlerRef.current = handleMove;
+      upHandlerRef.current = handleUp;
       window.addEventListener('mousemove', handleMove);
       window.addEventListener('mouseup', handleUp);
     },
-    [setSelection],
+    [cleanupWindowListeners, setSelection],
   );
 
-  if (!document || !selection) return null;
+  if (!document) return null;
 
-  // Convert selection to screen coordinates
-  const vp = getViewport();
-  const topLeft = vp.documentToScreen({ x: selection.x, y: selection.y });
-  const bottomRight = vp.documentToScreen({
-    x: selection.x + selection.width,
-    y: selection.y + selection.height,
-  });
+  let selectionRect: React.JSX.Element | null = null;
+  if (selection) {
+    // Convert selection to screen coordinates
+    const vp = getViewport();
+    const topLeft = vp.documentToScreen({ x: selection.x, y: selection.y });
+    const bottomRight = vp.documentToScreen({
+      x: selection.x + selection.width,
+      y: selection.y + selection.height,
+    });
 
-  const sx = topLeft.x;
-  const sy = topLeft.y;
-  const sw = bottomRight.x - topLeft.x;
-  const sh = bottomRight.y - topLeft.y;
+    const sx = topLeft.x;
+    const sy = topLeft.y;
+    const sw = bottomRight.x - topLeft.x;
+    const sh = bottomRight.y - topLeft.y;
 
-  return (
-    <div
-      className="selection-overlay"
-      onMouseDown={handleMouseDown}
-      data-testid="selection-overlay"
-    >
+    selectionRect = (
       <div
         className="selection-marching-ants"
         data-testid="selection-rect"
@@ -102,6 +123,16 @@ export function SelectionOverlay(): React.JSX.Element | null {
           height: `${sh}px`,
         }}
       />
+    );
+  }
+
+  return (
+    <div
+      className={`selection-overlay ${activeTool === 'select' ? 'selection-overlay--interactive' : ''}`}
+      onMouseDown={handleMouseDown}
+      data-testid="selection-overlay"
+    >
+      {selectionRect}
     </div>
   );
 }

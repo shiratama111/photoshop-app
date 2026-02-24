@@ -74,49 +74,75 @@ const electronAPI = {
     ipcRenderer.invoke('file:readByPath', filePath),
 
   // Close confirmation \u2014 APP-008
-  onBeforeClose: (callback: () => void): void => {
-    ipcRenderer.on('app:beforeClose', callback);
+  onBeforeClose: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('app:beforeClose', listener);
+    return (): void => ipcRenderer.removeListener('app:beforeClose', listener);
   },
   confirmClose: (action: 'save' | 'discard' | 'cancel'): void => {
     ipcRenderer.send('app:confirmClose', action);
   },
 
   // Menu event listeners
-  onMenuNew: (callback: () => void): void => {
-    ipcRenderer.on('menu:new', callback);
+  onMenuNew: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:new', listener);
+    return (): void => ipcRenderer.removeListener('menu:new', listener);
   },
-  onMenuOpen: (callback: () => void): void => {
-    ipcRenderer.on('menu:open', callback);
+  onMenuOpen: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:open', listener);
+    return (): void => ipcRenderer.removeListener('menu:open', listener);
   },
-  onMenuSave: (callback: () => void): void => {
-    ipcRenderer.on('menu:save', callback);
+  onMenuSave: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:save', listener);
+    return (): void => ipcRenderer.removeListener('menu:save', listener);
   },
-  onMenuSaveAs: (callback: () => void): void => {
-    ipcRenderer.on('menu:saveAs', callback);
+  onMenuSaveAs: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:saveAs', listener);
+    return (): void => ipcRenderer.removeListener('menu:saveAs', listener);
   },
-  onMenuExport: (callback: () => void): void => {
-    ipcRenderer.on('menu:export', callback);
+  onMenuExport: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:export', listener);
+    return (): void => ipcRenderer.removeListener('menu:export', listener);
   },
-  onMenuUndo: (callback: () => void): void => {
-    ipcRenderer.on('menu:undo', callback);
+  onMenuUndo: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:undo', listener);
+    return (): void => ipcRenderer.removeListener('menu:undo', listener);
   },
-  onMenuRedo: (callback: () => void): void => {
-    ipcRenderer.on('menu:redo', callback);
+  onMenuRedo: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:redo', listener);
+    return (): void => ipcRenderer.removeListener('menu:redo', listener);
   },
-  onMenuZoomIn: (callback: () => void): void => {
-    ipcRenderer.on('menu:zoomIn', callback);
+  onMenuZoomIn: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:zoomIn', listener);
+    return (): void => ipcRenderer.removeListener('menu:zoomIn', listener);
   },
-  onMenuZoomOut: (callback: () => void): void => {
-    ipcRenderer.on('menu:zoomOut', callback);
+  onMenuZoomOut: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:zoomOut', listener);
+    return (): void => ipcRenderer.removeListener('menu:zoomOut', listener);
   },
-  onMenuFitToWindow: (callback: () => void): void => {
-    ipcRenderer.on('menu:fitToWindow', callback);
+  onMenuFitToWindow: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:fitToWindow', listener);
+    return (): void => ipcRenderer.removeListener('menu:fitToWindow', listener);
   },
-  onMenuActualSize: (callback: () => void): void => {
-    ipcRenderer.on('menu:actualSize', callback);
+  onMenuActualSize: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:actualSize', listener);
+    return (): void => ipcRenderer.removeListener('menu:actualSize', listener);
   },
-  onMenuAbout: (callback: () => void): void => {
-    ipcRenderer.on('menu:about', callback);
+  onMenuAbout: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:about', listener);
+    return (): void => ipcRenderer.removeListener('menu:about', listener);
   },
 };
 

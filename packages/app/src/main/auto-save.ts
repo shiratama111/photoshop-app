@@ -16,6 +16,7 @@
 import { app, ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import { bufferToArrayBuffer } from './buffer-utils';
 
 /** Metadata stored alongside the auto-save file. */
 export interface AutoSaveEntry {
@@ -183,6 +184,6 @@ export function registerAutoSaveHandlers(): void {
   ipcMain.handle('autosave:readRecovery', (_event, documentId: string) => {
     const data = readAutoSave(documentId);
     if (!data) return null;
-    return { data: data.buffer };
+    return { data: bufferToArrayBuffer(data) };
   });
 }

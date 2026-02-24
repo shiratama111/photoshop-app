@@ -31,6 +31,7 @@ import type {
   LayerGroup,
   RasterLayer,
 } from '@photoshop-app/types';
+import type { BrushVariantId } from './brush-engine';
 import {
   CommandHistoryImpl,
   EventBusImpl,
@@ -77,6 +78,17 @@ const AUTO_SAVE_INTERVAL_MS = 2 * 60 * 1000;
 
 /** Auto-save interval handle. */
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Floating-point comparison epsilon for viewport values. */
+const VIEWPORT_EPSILON = 1e-4;
+
+function nearlyEqual(a: number, b: number): boolean {
+  return Math.abs(a - b) <= VIEWPORT_EPSILON;
+}
+
+function offsetsEqual(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+  return nearlyEqual(a.x, b.x) && nearlyEqual(a.y, b.y);
+}
 
 /** Application state. */
 export interface AppState {
@@ -126,8 +138,14 @@ export interface AppState {
   brushOpacity: number;
   /** Brush color RGBA (APP-014). */
   brushColor: { r: number; g: number; b: number; a: number };
+  /** Active brush variant (APP-016). */
+  brushVariant: BrushVariantId;
+  /** Background color RGBA (APP-016). */
+  backgroundColor: { r: number; g: number; b: number; a: number };
   /** Current selection rectangle, or null (APP-015). */
   selection: { x: number; y: number; width: number; height: number } | null;
+  /** Whether the new document dialog is visible. */
+  showNewDocumentDialog: boolean;
 }
 
 /** Actions on the state. */
@@ -166,6 +184,8 @@ export interface AppActions {
   setLayerBlendMode: (layerId: string, blendMode: BlendMode) => void;
   /** Rename a layer. */
   renameLayer: (layerId: string, name: string) => void;
+  /** Set layer position in document coordinates. */
+  setLayerPosition: (layerId: string, x: number, y: number) => void;
   /** Move a layer to a new index within its parent. */
   reorderLayer: (layerId: string, newIndex: number) => void;
 
@@ -272,6 +292,14 @@ export interface AppActions {
   setBrushHardness: (hardness: number) => void;
   /** Commit a completed brush stroke (for undo). */
   commitBrushStroke: (layerId: string, region: { x: number; y: number; width: number; height: number }, oldPixels: Uint8ClampedArray, newPixels: Uint8ClampedArray) => void;
+  /** Set the active brush variant (APP-016). */
+  setBrushVariant: (variant: BrushVariantId) => void;
+  /** Set the background color (APP-016). */
+  setBackgroundColor: (color: { r: number; g: number; b: number; a: number }) => void;
+  /** Swap foreground and background colors (APP-016). */
+  swapColors: () => void;
+  /** Reset foreground to black, background to white (APP-016). */
+  resetColors: () => void;
 
   // Selection -- APP-015
   /** Set the current selection. */
@@ -280,6 +308,12 @@ export interface AppActions {
   clearSelection: () => void;
   /** Select all (entire document). */
   selectAll: () => void;
+
+  // New Document Dialog
+  /** Open the new document dialog. */
+  openNewDocumentDialog: () => void;
+  /** Close the new document dialog. */
+  closeNewDocumentDialog: () => void;
 }
 
 /**
@@ -530,24 +564,40 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   brushHardness: 0.8,
   brushOpacity: 1,
   brushColor: { r: 0, g: 0, b: 0, a: 1 },
+  brushVariant: 'soft' as BrushVariantId,
+  backgroundColor: { r: 255, g: 255, b: 255, a: 1 },
   selection: null,
+  showNewDocumentDialog: false,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
   setActiveTool: (tool): void => set({ activeTool: tool }),
   setZoom: (zoom): void => {
     viewport.setZoom(zoom);
-    set({ zoom: viewport.zoom, panOffset: viewport.offset });
+    const nextZoom = viewport.zoom;
+    const nextOffset = viewport.offset;
+    const state = get();
+    if (nearlyEqual(state.zoom, nextZoom) && offsetsEqual(state.panOffset, nextOffset)) return;
+    set({ zoom: nextZoom, panOffset: nextOffset });
   },
   setPanOffset: (offset): void => {
     viewport.setOffset(offset);
-    set({ panOffset: viewport.offset });
+    const nextOffset = viewport.offset;
+    const state = get();
+    if (offsetsEqual(state.panOffset, nextOffset)) return;
+    set({ panOffset: nextOffset });
   },
   setStatusMessage: (msg): void => set({ statusMessage: msg }),
   toggleAbout: (): void => set((s) => ({ showAbout: !s.showAbout })),
 
   newDocument: (name, width, height): void => {
     commandHistory.clear();
+    const bgLayer = createRasterLayer('背景', width, height);
+    if (typeof ImageData !== 'undefined') {
+      bgLayer.imageData = new ImageData(width, height);
+      new Uint32Array(bgLayer.imageData.data.buffer).fill(0xFFFFFFFF);
+    }
+    bgLayer.bounds = { x: 0, y: 0, width, height };
     const doc: Document = {
       id: crypto.randomUUID(),
       name,
@@ -568,10 +618,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         locked: false,
         effects: [],
         parentId: null,
-        children: [],
+        children: [bgLayer],
         expanded: true,
       },
-      selectedLayerId: null,
+      selectedLayerId: bgLayer.id,
       filePath: null,
       dirty: false,
       createdAt: new Date().toISOString(),
@@ -579,7 +629,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     };
     set({
       document: doc,
-      selectedLayerId: null,
+      selectedLayerId: bgLayer.id,
       canUndo: false,
       canRedo: false,
       revision: 0,
@@ -604,7 +654,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { document: doc } = get();
     if (!doc) return;
     const layerName = name ?? `Layer ${doc.rootGroup.children.length + 1}`;
-    const layer = createRasterLayer(layerName, doc.canvas.size.width, doc.canvas.size.height);
+    const { width, height } = doc.canvas.size;
+    const layer = createRasterLayer(layerName, width, height);
+    // Initialize pixel buffer so the brush engine can paint on it.
+    // ImageData may not exist in Node.js test environments.
+    if (typeof ImageData !== 'undefined') {
+      layer.imageData = new ImageData(width, height);
+    }
     const cmd = new AddLayerCommand(doc.rootGroup, layer);
     executeCommand(cmd, set);
     set({ selectedLayerId: layer.id, statusMessage: `Added: ${layerName}` });
@@ -711,6 +767,22 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     executeCommand(cmd, set);
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: 'name' });
+    get().updateTitleBar();
+  },
+
+  setLayerPosition: (layerId, x, y): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer) return;
+
+    const next = { x, y };
+    if (layer.position.x === next.x && layer.position.y === next.y) return;
+
+    const cmd = new SetLayerPropertyCommand(layer, 'position', next);
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: 'position' });
     get().updateTitleBar();
   },
 
@@ -862,13 +934,20 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   renderToCanvas: (canvas): void => {
     const { document: doc } = get();
     if (!doc) return;
-    renderer.render(doc, canvas, {
-      viewport,
-      renderEffects: true,
-      showSelection: false,
-      showGuides: false,
-      background: 'checkerboard',
-    });
+    try {
+      renderer.render(doc, canvas, {
+        viewport,
+        renderEffects: true,
+        showSelection: false,
+        showGuides: false,
+        background: 'checkerboard',
+        documentSize: { width: doc.canvas.size.width, height: doc.canvas.size.height },
+      });
+    } catch {
+      if (get().statusMessage !== 'Render failed') {
+        set({ statusMessage: 'Render failed' });
+      }
+    }
   },
 
   renderLayerThumbnail: (layerId, size): HTMLCanvasElement | null => {
@@ -880,11 +959,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   fitToWindow: (containerWidth, containerHeight): void => {
     const { document: doc } = get();
     if (!doc) return;
+    const prevZoom = viewport.zoom;
+    const prevOffset = viewport.offset;
     viewport.fitToWindow(
       { width: containerWidth, height: containerHeight },
       doc.canvas.size,
     );
-    set({ zoom: viewport.zoom, panOffset: viewport.offset });
+    const nextZoom = viewport.zoom;
+    const nextOffset = viewport.offset;
+    if (nearlyEqual(prevZoom, nextZoom) && offsetsEqual(prevOffset, nextOffset)) return;
+    const state = get();
+    if (nearlyEqual(state.zoom, nextZoom) && offsetsEqual(state.panOffset, nextOffset)) return;
+    set({ zoom: nextZoom, panOffset: nextOffset });
   },
 
   // \u2500\u2500 File operations \u2014 APP-004 \u2500\u2500
@@ -1011,9 +1097,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   loadRecentFiles: async (): Promise<void> => {
-    const api = getElectronAPI();
-    const files = await api.getRecentFiles();
-    set({ recentFiles: files });
+    try {
+      const api = getElectronAPI();
+      if (!api?.getRecentFiles) {
+        set({ recentFiles: [] });
+        return;
+      }
+      const files = await api.getRecentFiles();
+      set({ recentFiles: files });
+    } catch {
+      // Allow running renderer outside Electron (web dev/testing).
+      set({ recentFiles: [] });
+    }
   },
 
   // \u2500\u2500 Auto-save and recovery \u2014 APP-008 \u2500\u2500
@@ -1272,6 +1367,22 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.dirty = true;
     get().updateTitleBar();
   },
+  setBrushVariant: (variant): void => {
+    set({ brushVariant: variant });
+  },
+  setBackgroundColor: (color): void => {
+    set({ backgroundColor: color });
+  },
+  swapColors: (): void => {
+    const { brushColor, backgroundColor } = get();
+    set({ brushColor: { ...backgroundColor }, backgroundColor: { ...brushColor } });
+  },
+  resetColors: (): void => {
+    set({
+      brushColor: { r: 0, g: 0, b: 0, a: 1 },
+      backgroundColor: { r: 255, g: 255, b: 255, a: 1 },
+    });
+  },
 
   // Selection -- APP-015
   setSelection: (rect): void => {
@@ -1293,6 +1404,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       selection: { x: 0, y: 0, width, height },
       statusMessage: `Selected all: ${width}×${height}`,
     });
+  },
+
+  // New Document Dialog
+  openNewDocumentDialog: (): void => {
+    set({ showNewDocumentDialog: true });
+  },
+
+  closeNewDocumentDialog: (): void => {
+    set({ showNewDocumentDialog: false });
   },
 
 }));

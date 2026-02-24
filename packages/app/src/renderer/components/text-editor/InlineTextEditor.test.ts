@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
 
 function resetStore(): void {
@@ -38,8 +39,7 @@ describe('InlineTextEditor store actions', () => {
     it('should set editingTextLayerId for a text layer', () => {
       createTestDocument();
       useAppStore.getState().addTextLayer('T1', 'Hello');
-      const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().startEditingText(layerId);
       expect(useAppStore.getState().editingTextLayerId).toBe(layerId);
     });
@@ -47,8 +47,7 @@ describe('InlineTextEditor store actions', () => {
     it('should also select the layer', () => {
       createTestDocument();
       useAppStore.getState().addTextLayer('T1', 'Hello');
-      const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       // Deselect first
       useAppStore.getState().selectLayer(null);
       useAppStore.getState().startEditingText(layerId);
@@ -58,8 +57,7 @@ describe('InlineTextEditor store actions', () => {
     it('should not set editing for a non-text layer', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('Raster');
-      const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().startEditingText(layerId);
       expect(useAppStore.getState().editingTextLayerId).toBeNull();
     });
@@ -74,8 +72,7 @@ describe('InlineTextEditor store actions', () => {
     it('should clear editingTextLayerId', () => {
       createTestDocument();
       useAppStore.getState().addTextLayer('T1', 'Hello');
-      const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().startEditingText(layerId);
       expect(useAppStore.getState().editingTextLayerId).toBe(layerId);
       useAppStore.getState().stopEditingText();
@@ -92,8 +89,7 @@ describe('InlineTextEditor store actions', () => {
     it('should open the dialog for a layer', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().openLayerStyleDialog(layerId);
       expect(useAppStore.getState().layerStyleDialog).toEqual({ layerId });
     });
@@ -101,8 +97,7 @@ describe('InlineTextEditor store actions', () => {
     it('should close the dialog', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().openLayerStyleDialog(layerId);
       useAppStore.getState().closeLayerStyleDialog();
       expect(useAppStore.getState().layerStyleDialog).toBeNull();
@@ -114,7 +109,7 @@ describe('InlineTextEditor store actions', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
       const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'stroke',
         color: { r: 1, g: 0, b: 0, a: 1 },
@@ -122,15 +117,16 @@ describe('InlineTextEditor store actions', () => {
         position: 'outside',
         opacity: 1,
       });
-      expect(doc.rootGroup.children[0].effects).toHaveLength(1);
-      expect(doc.rootGroup.children[0].effects[0].type).toBe('stroke');
+      const layer = findLayerById(doc.rootGroup, layerId)!;
+      expect(layer.effects).toHaveLength(1);
+      expect(layer.effects[0].type).toBe('stroke');
     });
 
     it('should remove an effect by index', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
       const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'stroke',
         color: { r: 1, g: 0, b: 0, a: 1 },
@@ -139,14 +135,15 @@ describe('InlineTextEditor store actions', () => {
         opacity: 1,
       });
       useAppStore.getState().removeLayerEffect(layerId, 0);
-      expect(doc.rootGroup.children[0].effects).toHaveLength(0);
+      const layer = findLayerById(doc.rootGroup, layerId)!;
+      expect(layer.effects).toHaveLength(0);
     });
 
     it('should update an effect by index', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
       const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'stroke',
         color: { r: 1, g: 0, b: 0, a: 1 },
@@ -161,7 +158,7 @@ describe('InlineTextEditor store actions', () => {
         position: 'inside',
         opacity: 0.8,
       });
-      const updated = doc.rootGroup.children[0].effects[0];
+      const updated = findLayerById(doc.rootGroup, layerId)!.effects[0];
       expect(updated.type).toBe('stroke');
       expect((updated as { size: number }).size).toBe(5);
     });
@@ -170,7 +167,7 @@ describe('InlineTextEditor store actions', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
       const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
+      const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'drop-shadow',
         color: { r: 0, g: 0, b: 0, a: 1 },
@@ -180,9 +177,9 @@ describe('InlineTextEditor store actions', () => {
         blur: 10,
         spread: 0,
       });
-      expect(doc.rootGroup.children[0].effects).toHaveLength(1);
+      expect(findLayerById(doc.rootGroup, layerId)!.effects).toHaveLength(1);
       useAppStore.getState().undo();
-      expect(doc.rootGroup.children[0].effects).toHaveLength(0);
+      expect(findLayerById(doc.rootGroup, layerId)!.effects).toHaveLength(0);
     });
   });
 });

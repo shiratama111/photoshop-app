@@ -15,6 +15,73 @@
 
 import type { Rect } from '@photoshop-app/types';
 
+/** Brush variant identifier (APP-016). */
+export type BrushVariantId = 'soft' | 'pencil' | 'airbrush' | 'marker';
+
+/** Configuration for a brush variant (APP-016). */
+export interface BrushVariantConfig {
+  id: BrushVariantId;
+  label: string;
+  /** false = pixel-boundary only (no anti-alias falloff). */
+  antiAlias: boolean;
+  pressureAffectsSize: boolean;
+  pressureAffectsOpacity: boolean;
+  /** true = keeps painting while the cursor is stationary. */
+  accumulates: boolean;
+  accumulationIntervalMs: number;
+  /** null = use user setting; number = override. */
+  hardnessOverride: number | null;
+  minSize: number;
+}
+
+/** Predefined brush variant configs (APP-016). */
+export const BRUSH_VARIANTS: Record<BrushVariantId, BrushVariantConfig> = {
+  soft: {
+    id: 'soft',
+    label: 'Soft',
+    antiAlias: true,
+    pressureAffectsSize: true,
+    pressureAffectsOpacity: false,
+    accumulates: false,
+    accumulationIntervalMs: 0,
+    hardnessOverride: null,
+    minSize: 1,
+  },
+  pencil: {
+    id: 'pencil',
+    label: 'Pencil',
+    antiAlias: false,
+    pressureAffectsSize: false,
+    pressureAffectsOpacity: false,
+    accumulates: false,
+    accumulationIntervalMs: 0,
+    hardnessOverride: 1.0,
+    minSize: 1,
+  },
+  airbrush: {
+    id: 'airbrush',
+    label: 'Airbrush',
+    antiAlias: true,
+    pressureAffectsSize: true,
+    pressureAffectsOpacity: true,
+    accumulates: true,
+    accumulationIntervalMs: 50,
+    hardnessOverride: null,
+    minSize: 1,
+  },
+  marker: {
+    id: 'marker',
+    label: 'Marker',
+    antiAlias: true,
+    pressureAffectsSize: false,
+    pressureAffectsOpacity: false,
+    accumulates: false,
+    accumulationIntervalMs: 0,
+    hardnessOverride: 0.85,
+    minSize: 1,
+  },
+};
+
 /** 2D point for brush input. */
 export interface BrushPoint {
   x: number;
@@ -37,6 +104,8 @@ export interface BrushStrokeOptions {
   spacing?: number;
   /** Whether this is an eraser stroke. */
   eraser?: boolean;
+  /** Brush variant config (APP-016). */
+  variant?: BrushVariantConfig;
 }
 
 /** Result of completing a brush stroke. */
@@ -69,6 +138,10 @@ export class BrushEngine {
   private dirtyBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
   private originalSnapshot: Uint8ClampedArray | null = null;
   private active = false;
+  /** Last dab point for accumulation repeats (APP-016). */
+  private lastDabPoint: BrushPoint | null = null;
+  /** Accumulation interval timer (APP-016). */
+  private accumulationTimer: ReturnType<typeof setInterval> | null = null;
 
   /** Whether a stroke is currently active. */
   get isActive(): boolean {
@@ -87,6 +160,7 @@ export class BrushEngine {
     this.lastPoint = point;
     this.distanceSinceLastDab = 0;
     this.active = true;
+    this.lastDabPoint = point;
 
     // Snapshot the full image for undo
     this.originalSnapshot = new Uint8ClampedArray(imageData.data);
@@ -96,6 +170,17 @@ export class BrushEngine {
 
     // Place the first dab
     this.placeDab(point);
+
+    // Start accumulation timer for airbrush-style variants (APP-016)
+    this.stopAccumulation();
+    const variant = options.variant;
+    if (variant?.accumulates && variant.accumulationIntervalMs > 0) {
+      this.accumulationTimer = setInterval(() => {
+        if (this.active && this.lastDabPoint) {
+          this.placeDab(this.lastDabPoint);
+        }
+      }, variant.accumulationIntervalMs);
+    }
   }
 
   /**
@@ -129,7 +214,9 @@ export class BrushEngine {
       const interpPressure =
         (this.lastPoint.pressure ?? 1) * (1 - t) + (point.pressure ?? 1) * t;
 
-      this.placeDab({ x: interpX, y: interpY, pressure: interpPressure });
+      const dabPt = { x: interpX, y: interpY, pressure: interpPressure };
+      this.placeDab(dabPt);
+      this.lastDabPoint = dabPt;
       t += minSpacing / dist;
     }
 
@@ -187,8 +274,17 @@ export class BrushEngine {
     return result;
   }
 
+  /** Stop the accumulation timer (APP-016). */
+  private stopAccumulation(): void {
+    if (this.accumulationTimer !== null) {
+      clearInterval(this.accumulationTimer);
+      this.accumulationTimer = null;
+    }
+  }
+
   /** Reset internal state. */
   private reset(): void {
+    this.stopAccumulation();
     this.imageData = null;
     this.options = null;
     this.lastPoint = null;
@@ -196,18 +292,29 @@ export class BrushEngine {
     this.dirtyBounds = null;
     this.originalSnapshot = null;
     this.active = false;
+    this.lastDabPoint = null;
   }
 
   /**
    * Place a single circular brush dab at the given point.
+   * Variant-aware: respects antiAlias, pressure mapping, and hardness overrides (APP-016).
    */
   private placeDab(point: BrushPoint): void {
     if (!this.imageData || !this.options) return;
 
-    const { size, hardness, opacity, color, eraser } = this.options;
+    const { size, hardness, opacity, color, eraser, variant } = this.options;
     const pressure = point.pressure ?? 1;
-    const radius = (size * pressure) / 2;
+
+    // Determine effective hardness (variant may override)
+    const effectiveHardness = variant?.hardnessOverride ?? hardness;
+
+    // Determine effective size — variant controls whether pressure affects size
+    const pressureSize = variant ? (variant.pressureAffectsSize ? pressure : 1) : pressure;
+    const radius = (size * pressureSize) / 2;
     if (radius < 0.5) return;
+
+    // Determine effective opacity — variant controls whether pressure affects opacity
+    const pressureOpacity = variant?.pressureAffectsOpacity ? pressure : 1;
 
     const w = this.imageData.width;
     const h = this.imageData.height;
@@ -225,6 +332,9 @@ export class BrushEngine {
     // Update dirty bounds
     this.expandDirtyBounds(startX, startY, endX, endY);
 
+    // antiAlias=false (pencil): skip falloff, use binary in/out
+    const useAntiAlias = variant ? variant.antiAlias : true;
+
     for (let py = startY; py <= endY; py++) {
       for (let px = startX; px <= endX; px++) {
         const dx = px - point.x;
@@ -233,13 +343,19 @@ export class BrushEngine {
 
         if (dist > radius) continue;
 
-        // Calculate falloff based on hardness
-        let alpha = opacity * pressure;
-        if (hardness < 1 && radius > 0) {
-          const normalizedDist = dist / radius;
-          const softStart = hardness;
-          if (normalizedDist > softStart) {
-            alpha *= 1 - (normalizedDist - softStart) / (1 - softStart);
+        let alpha: number;
+        if (!useAntiAlias) {
+          // Hard binary brush (pencil): full opacity inside radius
+          alpha = opacity * pressureOpacity;
+        } else {
+          // Calculate falloff based on hardness
+          alpha = opacity * pressureOpacity;
+          if (effectiveHardness < 1 && radius > 0) {
+            const normalizedDist = dist / radius;
+            const softStart = effectiveHardness;
+            if (normalizedDist > softStart) {
+              alpha *= 1 - (normalizedDist - softStart) / (1 - softStart);
+            }
           }
         }
 

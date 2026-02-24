@@ -115,7 +115,9 @@ describe('APP-012: Layer Resize', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('Resize Me');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const doc = useAppStore.getState().document!;
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId)!;
     expect(layer.type).toBe('raster');
     giveLayerPixels(layer.id, 100, 100);
     store.resizeLayer(layer.id, 200, 150);
@@ -133,9 +135,12 @@ describe('APP-012: Layer Resize', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('No Pixels');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const doc = useAppStore.getState().document!;
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId)!;
     expect(layer.type).toBe('raster');
-    expect((layer as RasterLayer).imageData).toBeNull();
+    // Force imageData to null for this test (store may initialize it in browser)
+    (layer as RasterLayer).imageData = null;
     const msgBefore = useAppStore.getState().statusMessage;
     store.resizeLayer(layer.id, 200, 100);
     expect(useAppStore.getState().statusMessage).toBe(msgBefore);
@@ -145,7 +150,9 @@ describe('APP-012: Layer Resize', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addTextLayer('Text Layer', 'Hello');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const doc = useAppStore.getState().document!;
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId)!;
     expect(layer.type).toBe('text');
     store.resizeLayer(layer.id, 200, 100);
     expect(useAppStore.getState().document).not.toBeNull();
@@ -155,7 +162,9 @@ describe('APP-012: Layer Resize', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('Same Size');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const doc = useAppStore.getState().document!;
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId)!;
     giveLayerPixels(layer.id, 100, 100);
     const revBefore = useAppStore.getState().revision;
     store.resizeLayer(layer.id, 100, 100);
@@ -166,7 +175,9 @@ describe('APP-012: Layer Resize', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('Undo Resize');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const doc = useAppStore.getState().document!;
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId)!;
     giveLayerPixels(layer.id, 100, 100);
     store.resizeLayer(layer.id, 200, 150);
     expect(useAppStore.getState().canUndo).toBe(true);
@@ -178,7 +189,9 @@ describe('APP-012: Layer Resize', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('Status Test');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const doc = useAppStore.getState().document!;
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId)!;
     giveLayerPixels(layer.id, 100, 100);
     store.resizeLayer(layer.id, 200, 150);
     const msg = useAppStore.getState().statusMessage;

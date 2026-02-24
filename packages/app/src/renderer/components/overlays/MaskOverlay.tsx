@@ -11,7 +11,7 @@
  * @see APP-006: AI cutout UI
  */
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import type { Mask, PointPrompt, Size } from '@photoshop-app/types';
 import { extractContour } from '../tools/mask-refinement';
 
@@ -31,6 +31,12 @@ interface MaskOverlayProps {
   brushActive: boolean;
   /** Current brush size (radius). */
   brushSize: number;
+  /** Mouse down handler for cutout interactions. */
+  onCanvasMouseDown?: (e: React.MouseEvent<HTMLCanvasElement>) => void;
+  /** Mouse move handler for cutout interactions. */
+  onCanvasMouseMove?: (e: React.MouseEvent<HTMLCanvasElement>) => void;
+  /** Mouse up handler for cutout interactions. */
+  onCanvasMouseUp?: () => void;
 }
 
 /** Marching ants animation offset. */
@@ -171,10 +177,17 @@ export function MaskOverlay({
   panOffset,
   brushActive,
   brushSize,
+  onCanvasMouseDown,
+  onCanvasMouseMove,
+  onCanvasMouseUp,
 }: MaskOverlayProps): React.JSX.Element | null {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
+  const [overlaySize, setOverlaySize] = useState<{ width: number; height: number }>({
+    width: 1,
+    height: 1,
+  });
 
   /** Main render loop. */
   const render = useCallback((): void => {
@@ -223,29 +236,76 @@ export function MaskOverlay({
     return (): void => cancelAnimationFrame(animRef.current);
   }, [render]);
 
+  // Keep the overlay bitmap size in sync with the visible canvas area.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const parent = canvas?.parentElement as HTMLElement | null;
+    if (!canvas || !parent) return;
+
+    const updateSize = (): void => {
+      const fallbackWidth = Math.max(1, Math.ceil(canvasSize.width * zoom));
+      const fallbackHeight = Math.max(1, Math.ceil(canvasSize.height * zoom));
+      const width = Math.max(1, Math.floor(parent.clientWidth || fallbackWidth));
+      const height = Math.max(1, Math.floor(parent.clientHeight || fallbackHeight));
+
+      setOverlaySize((prev) => {
+        if (prev.width === width && prev.height === height) return prev;
+        return { width, height };
+      });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(parent);
+    window.addEventListener('resize', updateSize);
+    return (): void => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [canvasSize.width, canvasSize.height, zoom]);
+
   /** Track mouse for brush cursor. */
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>): void => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  }, []);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>): void => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      onCanvasMouseMove?.(e);
+    },
+    [onCanvasMouseMove],
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>): void => {
+      onCanvasMouseDown?.(e);
+    },
+    [onCanvasMouseDown],
+  );
+
+  const handleMouseUp = useCallback((): void => {
+    onCanvasMouseUp?.();
+  }, [onCanvasMouseUp]);
 
   const handleMouseLeave = useCallback((): void => {
     mouseRef.current = null;
-  }, []);
+    onCanvasMouseUp?.();
+  }, [onCanvasMouseUp]);
 
-  // Size the overlay to match the canvas container
-  const containerWidth = canvasSize.width * zoom + panOffset.x * 2;
-  const containerHeight = canvasSize.height * zoom + panOffset.y * 2;
+  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>): void => {
+    e.preventDefault();
+  }, []);
 
   return (
     <canvas
       ref={canvasRef}
       className={`mask-overlay ${brushActive ? 'mask-overlay--brush mask-overlay--interactive' : 'mask-overlay--interactive'}`}
-      width={Math.max(1, Math.ceil(containerWidth))}
-      height={Math.max(1, Math.ceil(containerHeight))}
+      width={overlaySize.width}
+      height={overlaySize.height}
+      onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onContextMenu={handleContextMenu}
       style={{ width: '100%', height: '100%' }}
     />
   );

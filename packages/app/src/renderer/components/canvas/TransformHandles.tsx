@@ -9,8 +9,7 @@
  * @see APP-012: Layer resize
  */
 
-import React, { useCallback, useRef } from 'react';
-import type { RasterLayer } from '@photoshop-app/types';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore, getViewport } from '../../store';
 
@@ -38,6 +37,13 @@ interface HandleInfo {
   y: number;
 }
 
+interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** TransformHandles renders bounding box + handles for the selected layer. */
 export function TransformHandles(): React.JSX.Element | null {
   const document = useAppStore((s) => s.document);
@@ -45,11 +51,41 @@ export function TransformHandles(): React.JSX.Element | null {
   const zoom = useAppStore((s) => s.zoom);
   const revision = useAppStore((s) => s.revision);
   const resizeLayer = useAppStore((s) => s.resizeLayer);
+  const setLayerPosition = useAppStore((s) => s.setLayerPosition);
 
   const isDragging = useRef(false);
   const dragHandle = useRef<HandlePosition | null>(null);
   const dragStart = useRef({ x: 0, y: 0 });
-  const originalBounds = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const originalBounds = useRef<Bounds>({ x: 0, y: 0, width: 0, height: 0 });
+  const previewBoundsRef = useRef<Bounds | null>(null);
+  const moveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
+  const upHandlerRef = useRef<(() => void) | null>(null);
+  const [previewBounds, setPreviewBounds] = useState<Bounds | null>(null);
+
+  const updatePreviewBounds = (next: Bounds | null): void => {
+    previewBoundsRef.current = next;
+    setPreviewBounds(next);
+  };
+
+  const cleanupWindowListeners = useCallback((): void => {
+    if (moveHandlerRef.current) {
+      window.removeEventListener('mousemove', moveHandlerRef.current);
+      moveHandlerRef.current = null;
+    }
+    if (upHandlerRef.current) {
+      window.removeEventListener('mouseup', upHandlerRef.current);
+      upHandlerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return (): void => {
+      isDragging.current = false;
+      dragHandle.current = null;
+      previewBoundsRef.current = null;
+      cleanupWindowListeners();
+    };
+  }, [cleanupWindowListeners]);
 
   // Force re-read on revision change
   void revision;
@@ -57,35 +93,23 @@ export function TransformHandles(): React.JSX.Element | null {
   if (!document || !selectedLayerId) return null;
 
   const layer = findLayerById(document.rootGroup, selectedLayerId);
-  if (!layer || layer.type === 'group') return null;
+  if (!layer || layer.type !== 'raster') return null;
 
-  // Get layer bounds in document coordinates
-  let layerBounds: { x: number; y: number; width: number; height: number };
-  if (layer.type === 'raster') {
-    layerBounds = {
-      x: layer.position.x,
-      y: layer.position.y,
-      width: layer.bounds.width,
-      height: layer.bounds.height,
-    };
-  } else {
-    const tl = layer;
-    const w = tl.textBounds?.width ?? Math.max(100, tl.fontSize * 10);
-    const h = tl.textBounds?.height ?? tl.fontSize * tl.lineHeight * 3;
-    layerBounds = {
-      x: tl.position.x,
-      y: tl.position.y,
-      width: w,
-      height: h,
-    };
-  }
+  // Get layer bounds in document coordinates.
+  const layerBounds: Bounds = {
+    x: layer.position.x,
+    y: layer.position.y,
+    width: layer.bounds.width,
+    height: layer.bounds.height,
+  };
+  const displayBounds = previewBounds ?? layerBounds;
 
   // Convert to screen coordinates
   const vp = getViewport();
-  const screenTopLeft = vp.documentToScreen({ x: layerBounds.x, y: layerBounds.y });
+  const screenTopLeft = vp.documentToScreen({ x: displayBounds.x, y: displayBounds.y });
   const screenBottomRight = vp.documentToScreen({
-    x: layerBounds.x + layerBounds.width,
-    y: layerBounds.y + layerBounds.height,
+    x: displayBounds.x + displayBounds.width,
+    y: displayBounds.y + displayBounds.height,
   });
 
   const sx = screenTopLeft.x;
@@ -106,85 +130,90 @@ export function TransformHandles(): React.JSX.Element | null {
     { position: 'w', x: sx - half, y: sy + sh / 2 - half },
   ];
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent, position: HandlePosition): void => {
-      e.preventDefault();
-      e.stopPropagation();
-      isDragging.current = true;
-      dragHandle.current = position;
-      dragStart.current = { x: e.clientX, y: e.clientY };
-      originalBounds.current = { ...layerBounds };
+  const handleMouseDown = (e: React.MouseEvent, position: HandlePosition): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDragging.current) return;
+    cleanupWindowListeners();
 
-      const handleMouseMove = (moveEvent: MouseEvent): void => {
-        if (!isDragging.current || !dragHandle.current) return;
+    isDragging.current = true;
+    dragHandle.current = position;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    originalBounds.current = { ...layerBounds };
+    updatePreviewBounds({ ...layerBounds });
 
-        const dx = (moveEvent.clientX - dragStart.current.x) / zoom;
-        const dy = (moveEvent.clientY - dragStart.current.y) / zoom;
+    const handleMouseMove = (moveEvent: MouseEvent): void => {
+      if (!isDragging.current || !dragHandle.current) return;
+
+      const dx = (moveEvent.clientX - dragStart.current.x) / zoom;
+      const dy = (moveEvent.clientY - dragStart.current.y) / zoom;
+      const ob = originalBounds.current;
+      let newX = ob.x;
+      let newY = ob.y;
+      let newW = ob.width;
+      let newH = ob.height;
+
+      const pos = dragHandle.current;
+      if (pos.includes('w')) {
+        newX = ob.x + dx;
+        newW = ob.width - dx;
+      }
+      if (pos.includes('e')) {
+        newW = ob.width + dx;
+      }
+      if (pos.includes('n')) {
+        newY = ob.y + dy;
+        newH = ob.height - dy;
+      }
+      if (pos.includes('s')) {
+        newH = ob.height + dy;
+      }
+
+      // Enforce minimum size
+      if (newW < 1) { newW = 1; newX = ob.x + ob.width - 1; }
+      if (newH < 1) { newH = 1; newY = ob.y + ob.height - 1; }
+
+      updatePreviewBounds({
+        x: newX,
+        y: newY,
+        width: Math.round(newW),
+        height: Math.round(newH),
+      });
+    };
+
+    const handleMouseUp = (): void => {
+      if (isDragging.current && dragHandle.current && selectedLayerId) {
         const ob = originalBounds.current;
-        let newX = ob.x;
-        let newY = ob.y;
-        let newW = ob.width;
-        let newH = ob.height;
+        const finalBounds = previewBoundsRef.current ?? ob;
 
-        const pos = dragHandle.current;
-        if (pos.includes('w')) {
-          newX = ob.x + dx;
-          newW = ob.width - dx;
+        // Only commit if size actually changed
+        if (finalBounds.width !== ob.width || finalBounds.height !== ob.height) {
+          resizeLayer(
+            selectedLayerId,
+            Math.round(finalBounds.width),
+            Math.round(finalBounds.height),
+          );
         }
-        if (pos.includes('e')) {
-          newW = ob.width + dx;
+        if (finalBounds.x !== ob.x || finalBounds.y !== ob.y) {
+          setLayerPosition(
+            selectedLayerId,
+            Math.round(finalBounds.x),
+            Math.round(finalBounds.y),
+          );
         }
-        if (pos.includes('n')) {
-          newY = ob.y + dy;
-          newH = ob.height - dy;
-        }
-        if (pos.includes('s')) {
-          newH = ob.height + dy;
-        }
+      }
 
-        // Enforce minimum size
-        if (newW < 1) { newW = 1; newX = ob.x + ob.width - 1; }
-        if (newH < 1) { newH = 1; newY = ob.y + ob.height - 1; }
+      updatePreviewBounds(null);
+      isDragging.current = false;
+      dragHandle.current = null;
+      cleanupWindowListeners();
+    };
 
-        // Live preview: update layer position and bounds directly
-        if (layer.type === 'raster') {
-          layer.position.x = newX;
-          layer.position.y = newY;
-          (layer as RasterLayer).bounds = { x: 0, y: 0, width: Math.round(newW), height: Math.round(newH) };
-        }
-
-        // Trigger re-render
-        useAppStore.setState({ revision: useAppStore.getState().revision + 1 });
-      };
-
-      const handleMouseUp = (): void => {
-        if (isDragging.current && dragHandle.current && selectedLayerId) {
-          const ob = originalBounds.current;
-          const newBounds = layer.type === 'raster'
-            ? (layer as RasterLayer).bounds
-            : { x: 0, y: 0, width: ob.width, height: ob.height };
-
-          // Only commit if size actually changed
-          if (newBounds.width !== ob.width || newBounds.height !== ob.height) {
-            resizeLayer(
-              selectedLayerId,
-              Math.round(newBounds.width),
-              Math.round(newBounds.height),
-            );
-          }
-        }
-
-        isDragging.current = false;
-        dragHandle.current = null;
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    },
-    [layer, layerBounds, zoom, selectedLayerId, resizeLayer],
-  );
+    moveHandlerRef.current = handleMouseMove;
+    upHandlerRef.current = handleMouseUp;
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   return (
     <div className="transform-handles-container" data-testid="transform-handles">

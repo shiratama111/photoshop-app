@@ -208,6 +208,27 @@ describe('Canvas2DRenderer', () => {
       expect(ctx.setTransform).toHaveBeenCalledWith(2, 0, 0, 2, 10, 20);
     });
 
+    it('should scale viewport transform by canvas pixel ratio when CSS size is smaller', () => {
+      const ctx = createMockContext(200, 200);
+      const canvas = {
+        width: 200,
+        height: 200,
+        clientWidth: 100,
+        clientHeight: 100,
+        getContext: vi.fn().mockReturnValue(ctx),
+      } as unknown as HTMLCanvasElement;
+      ctx.canvas = canvas as unknown as CanvasLike;
+      const doc = createTestDocument();
+      const vp = new ViewportImpl({ width: 100, height: 100 });
+      vp.setZoom(2);
+      vp.setOffset({ x: 10, y: 20 });
+      const options = createRenderOptions({ viewport: vp });
+
+      renderer.render(doc, canvas, options);
+
+      expect(ctx.setTransform).toHaveBeenCalledWith(4, 0, 0, 4, 20, 40);
+    });
+
     it('should render visible layers', () => {
       const canvas = createMockCanvas(100, 100);
       const ctx = canvas.getContext('2d')!;
@@ -322,6 +343,25 @@ describe('Canvas2DRenderer', () => {
 
       // Checkerboard uses many fillRect calls
       expect(ctx.fillRect).toHaveBeenCalled();
+    });
+
+    it('should prefer pattern fill for checkerboard when supported', () => {
+      const ctx = createMockContext(100, 100);
+      const pattern = {} as CanvasPattern;
+      ctx.createPattern = vi.fn().mockReturnValue(pattern);
+      const canvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn().mockReturnValue(ctx),
+      } as unknown as HTMLCanvasElement;
+      ctx.canvas = canvas as unknown as CanvasLike;
+      const doc = createTestDocument();
+      const options = createRenderOptions({ background: 'checkerboard' });
+
+      renderer.render(doc, canvas, options);
+
+      expect(ctx.createPattern).toHaveBeenCalled();
+      expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 100, 100);
     });
   });
 

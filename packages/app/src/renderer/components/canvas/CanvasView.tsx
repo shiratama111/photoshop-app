@@ -15,10 +15,11 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { RasterLayer, TextLayer } from '@photoshop-app/types';
 import { flattenLayers } from '@photoshop-app/core';
-import { BrushEngine } from '../../brush-engine';
+import { BrushEngine, BRUSH_VARIANTS } from '../../brush-engine';
 import { useAppStore, getViewport } from '../../store';
 import { TransformHandles } from './TransformHandles';
 import { SelectionOverlay } from './SelectionOverlay';
+import { CutoutTool } from '../tools/CutoutTool';
 
 /** Module-level brush engine instance (APP-014). */
 const brushEngine = new BrushEngine();
@@ -28,6 +29,7 @@ export function CanvasView(): React.JSX.Element {
   const document = useAppStore((s) => s.document);
   const revision = useAppStore((s) => s.revision);
   const zoom = useAppStore((s) => s.zoom);
+  const panOffset = useAppStore((s) => s.panOffset);
   const activeTool = useAppStore((s) => s.activeTool);
   const brushSize = useAppStore((s) => s.brushSize);
   const renderToCanvas = useAppStore((s) => s.renderToCanvas);
@@ -40,6 +42,9 @@ export function CanvasView(): React.JSX.Element {
   const isPanning = useRef(false);
   const lastPanPoint = useRef({ x: 0, y: 0 });
   const cursorRef = useRef<HTMLDivElement>(null);
+  const fittedDocumentIdRef = useRef<string | null>(null);
+  const renderRequestRef = useRef<number | null>(null);
+  const observedSizeRef = useRef<{ width: number; height: number } | null>(null);
 
   /** Render the document to the canvas. */
   const doRender = useCallback((): void => {
@@ -50,32 +55,65 @@ export function CanvasView(): React.JSX.Element {
     if (!container) return;
 
     // Match canvas size to container
-    const rect = container.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(container.clientWidth));
+    const height = Math.max(1, Math.floor(container.clientHeight));
+    getViewport().setViewportSize({ width, height });
+
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.floor(rect.width * dpr);
-    const h = Math.floor(rect.height * dpr);
+    const w = Math.max(1, Math.floor(width * dpr));
+    const h = Math.max(1, Math.floor(height * dpr));
 
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
+    }
+
+    const cssWidth = `${width}px`;
+    const cssHeight = `${height}px`;
+    if (canvas.style.width !== cssWidth) {
+      canvas.style.width = cssWidth;
+    }
+    if (canvas.style.height !== cssHeight) {
+      canvas.style.height = cssHeight;
     }
 
     renderToCanvas(canvas);
   }, [document, renderToCanvas]);
 
+  /** Queue rendering to one paint per animation frame. */
+  const scheduleRender = useCallback((): void => {
+    if (renderRequestRef.current !== null) return;
+    renderRequestRef.current = window.requestAnimationFrame(() => {
+      renderRequestRef.current = null;
+      doRender();
+    });
+  }, [doRender]);
+
+  useEffect(() => {
+    return (): void => {
+      if (renderRequestRef.current !== null) {
+        window.cancelAnimationFrame(renderRequestRef.current);
+        renderRequestRef.current = null;
+      }
+    };
+  }, []);
+
   // Re-render when document or revision changes
   useEffect(() => {
-    doRender();
-  }, [doRender, revision, zoom]);
+    scheduleRender();
+  }, [scheduleRender, revision, zoom, panOffset.x, panOffset.y]);
 
   // Fit to window on first mount and when document changes
   useEffect(() => {
     if (!document || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    fitToWindow(rect.width, rect.height);
-  }, [document, fitToWindow]);
+    const width = Math.floor(containerRef.current.clientWidth);
+    const height = Math.floor(containerRef.current.clientHeight);
+    if (width <= 1 || height <= 1) return;
+    fitToWindow(width, height);
+    fittedDocumentIdRef.current = document.id;
+    observedSizeRef.current = { width, height };
+    scheduleRender();
+  }, [document, fitToWindow, scheduleRender]);
 
   // ResizeObserver for responsive canvas
   useEffect(() => {
@@ -83,15 +121,32 @@ export function CanvasView(): React.JSX.Element {
     if (!container) return;
 
     const observer = new ResizeObserver((): void => {
-      if (!useAppStore.getState().document) return;
-      const rect = container.getBoundingClientRect();
-      fitToWindow(rect.width, rect.height);
-      doRender();
+      const doc = useAppStore.getState().document;
+      if (!doc) return;
+      const width = Math.floor(container.clientWidth);
+      const height = Math.floor(container.clientHeight);
+      if (width <= 1 || height <= 1) return;
+      const prev = observedSizeRef.current;
+      if (prev && prev.width === width && prev.height === height && fittedDocumentIdRef.current === doc.id) {
+        return;
+      }
+      observedSizeRef.current = { width, height };
+
+      // If initial fit was skipped due a transient zero-sized mount,
+      // perform it once when real dimensions become available.
+      if (fittedDocumentIdRef.current !== doc.id) {
+        fitToWindow(width, height);
+        fittedDocumentIdRef.current = doc.id;
+        scheduleRender();
+        return;
+      }
+
+      scheduleRender();
     });
 
     observer.observe(container);
     return (): void => observer.disconnect();
-  }, [doRender, fitToWindow]);
+  }, [fitToWindow, scheduleRender]);
 
   /** Handle mouse wheel for zoom. */
   const handleWheel = useCallback(
@@ -135,7 +190,7 @@ export function CanvasView(): React.JSX.Element {
         document
       ) {
         const state = useAppStore.getState();
-        const activeId = state.activeLayerId;
+        const activeId = state.selectedLayerId;
         if (!activeId) return;
         const allLayers = flattenLayers(document.rootGroup);
         const layer = allLayers.find((l) => l.id === activeId);
@@ -161,11 +216,13 @@ export function CanvasView(): React.JSX.Element {
             opacity: state.brushOpacity,
             color: state.brushColor,
             eraser: tool === 'eraser',
+            variant: BRUSH_VARIANTS[state.brushVariant],
           },
         );
+        scheduleRender();
       }
     },
-    [document],
+    [document, scheduleRender],
   );
 
   /** Handle mouse move for pan or brush continuation (APP-014). */
@@ -194,7 +251,7 @@ export function CanvasView(): React.JSX.Element {
       // Brush continuation (APP-014)
       if (brushEngine.isActive && document) {
         const state = useAppStore.getState();
-        const activeId = state.activeLayerId;
+        const activeId = state.selectedLayerId;
         if (!activeId) return;
         const allLayers = flattenLayers(document.rootGroup);
         const layer = allLayers.find((l) => l.id === activeId);
@@ -211,9 +268,10 @@ export function CanvasView(): React.JSX.Element {
           x: docPt.x - raster.position.x,
           y: docPt.y - raster.position.y,
         });
+        scheduleRender();
       }
     },
-    [document, setPanOffset],
+    [document, setPanOffset, scheduleRender],
   );
 
   /** Handle mouse up for pan end or brush commit (APP-014). */
@@ -224,9 +282,9 @@ export function CanvasView(): React.JSX.Element {
     if (brushEngine.isActive) {
       const result = brushEngine.endStroke();
       if (result) {
-        const { activeLayerId, commitBrushStroke } = useAppStore.getState();
-        if (activeLayerId) {
-          commitBrushStroke(activeLayerId, result.region, result.oldPixels, result.newPixels);
+        const { selectedLayerId, commitBrushStroke } = useAppStore.getState();
+        if (selectedLayerId) {
+          commitBrushStroke(selectedLayerId, result.region, result.oldPixels, result.newPixels);
         }
       }
     }
@@ -286,6 +344,7 @@ export function CanvasView(): React.JSX.Element {
           />
           <TransformHandles />
           <SelectionOverlay />
+          <CutoutTool />
           {isBrushTool && (
             <div
               ref={cursorRef}
@@ -300,7 +359,12 @@ export function CanvasView(): React.JSX.Element {
       ) : (
         <div className="canvas-empty">
           <p>No document open</p>
-          <p>File &gt; New to create a document</p>
+          <button
+            className="canvas-empty__new-btn"
+            onClick={(): void => useAppStore.getState().openNewDocumentDialog()}
+          >
+            New Document
+          </button>
         </div>
       )}
     </div>

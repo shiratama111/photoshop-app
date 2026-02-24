@@ -31,6 +31,7 @@ const mockExportCtx = {
   translate: vi.fn(),
   fillText: vi.fn(),
   measureText: vi.fn(() => ({ width: 0 })),
+  createPattern: vi.fn(() => null),
 };
 
 vi.stubGlobal('OffscreenCanvas', vi.fn(() => ({

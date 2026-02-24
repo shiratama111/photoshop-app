@@ -79,7 +79,8 @@ describe('APP-014: Brush/Eraser Integration', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('Paint Layer');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const children = useAppStore.getState().document!.rootGroup.children;
+    const layer = children[children.length - 1];
     expect(layer.type).toBe('raster');
     const region = { x: 10, y: 10, width: 20, height: 20 };
     const oldPixels = new Uint8ClampedArray(20 * 20 * 4);
@@ -94,7 +95,8 @@ describe('APP-014: Brush/Eraser Integration', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addRasterLayer('Undo Paint');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const children = useAppStore.getState().document!.rootGroup.children;
+    const layer = children[children.length - 1];
     const region = { x: 0, y: 0, width: 10, height: 10 };
     const oldPixels = new Uint8ClampedArray(10 * 10 * 4);
     const newPixels = new Uint8ClampedArray(10 * 10 * 4);
@@ -109,7 +111,8 @@ describe('APP-014: Brush/Eraser Integration', () => {
     createTestDocument();
     const store = useAppStore.getState();
     store.addTextLayer('Text', 'Hello');
-    const layer = useAppStore.getState().document!.rootGroup.children[0];
+    const children = useAppStore.getState().document!.rootGroup.children;
+    const layer = children[children.length - 1];
     const region = { x: 0, y: 0, width: 10, height: 10 };
     const oldPixels = new Uint8ClampedArray(10 * 10 * 4);
     const newPixels = new Uint8ClampedArray(10 * 10 * 4);

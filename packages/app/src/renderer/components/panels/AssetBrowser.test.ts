@@ -256,15 +256,14 @@ describe('useAssetStore', () => {
     it('should apply style effects to the selected layer', () => {
       setupAppStore();
       const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
-      useAppStore.getState().selectLayer(layerId);
+      const layerId = useAppStore.getState().selectedLayerId!;
 
       const style = createTestStyle('s1', 'Test Style');
       useAssetStore.setState({ stylePresets: [style] });
 
       useAssetStore.getState().applyStyle('s1');
 
-      const layer = doc.rootGroup.children[0];
+      const layer = doc.rootGroup.children.find(c => c.id === layerId)!;
       expect(layer.effects).toHaveLength(1);
       expect(layer.effects[0].type).toBe('stroke');
     });
@@ -283,12 +282,11 @@ describe('useAssetStore', () => {
     it('should not apply if style ID is not found', () => {
       setupAppStore();
       const doc = useAppStore.getState().document!;
-      const layerId = doc.rootGroup.children[0].id;
-      useAppStore.getState().selectLayer(layerId);
+      const layerId = useAppStore.getState().selectedLayerId!;
 
       useAssetStore.getState().applyStyle('non-existent');
 
-      const layer = doc.rootGroup.children[0];
+      const layer = doc.rootGroup.children.find(c => c.id === layerId)!;
       expect(layer.effects).toHaveLength(0);
     });
   });

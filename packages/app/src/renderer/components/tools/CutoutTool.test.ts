@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Mask, PointPrompt } from '@photoshop-app/types';
+import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
 import { useCutoutStore } from './cutout-store';
 
@@ -28,6 +29,12 @@ function resetStores(): void {
 
 function createTestDocument(): void {
   useAppStore.getState().newDocument('Test', 100, 100);
+}
+
+function getSelectedLayerId(): string {
+  const id = useAppStore.getState().selectedLayerId;
+  if (!id) throw new Error('No selected layer');
+  return id;
 }
 
 function createTestMask(): Mask {
@@ -53,7 +60,7 @@ describe('cutout store actions', () => {
     it('should initialize cutout state when a layer is selected', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
 
       useCutoutStore.getState().startCutout();
@@ -73,17 +80,22 @@ describe('cutout store actions', () => {
 
     it('should not start if no layer is selected', () => {
       createTestDocument();
+      useAppStore.getState().selectLayer(null);
+      useAppStore.getState().setActiveTool('segment');
 
       useCutoutStore.getState().startCutout();
 
       expect(useCutoutStore.getState().cutout).toBeNull();
+      expect(useAppStore.getState().activeTool).toBe('select');
       expect(useAppStore.getState().statusMessage).toBe('Select a layer first');
     });
 
     it('should not start if no document is open', () => {
+      useAppStore.getState().setActiveTool('segment');
       useCutoutStore.getState().startCutout();
 
       expect(useCutoutStore.getState().cutout).toBeNull();
+      expect(useAppStore.getState().activeTool).toBe('select');
     });
   });
 
@@ -91,13 +103,14 @@ describe('cutout store actions', () => {
     it('should clear cutout state', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
       useCutoutStore.getState().cancelCutout();
 
       expect(useCutoutStore.getState().cutout).toBeNull();
+      expect(useAppStore.getState().activeTool).toBe('select');
       expect(useAppStore.getState().statusMessage).toBe('Ready');
     });
   });
@@ -106,7 +119,7 @@ describe('cutout store actions', () => {
     it('should add a prompt and set processing', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -137,7 +150,7 @@ describe('cutout store actions', () => {
     it('should set the mask and update confidence', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -155,7 +168,7 @@ describe('cutout store actions', () => {
     it('should change brush mode', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -171,7 +184,7 @@ describe('cutout store actions', () => {
     it('should set brush size within valid range', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -182,7 +195,7 @@ describe('cutout store actions', () => {
     it('should clamp brush size to 1-200 range', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -198,7 +211,7 @@ describe('cutout store actions', () => {
     it('should set boundary adjustment within valid range', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -212,7 +225,7 @@ describe('cutout store actions', () => {
     it('should clamp to -100..100 range', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -228,7 +241,7 @@ describe('cutout store actions', () => {
     it('should set feather radius within valid range', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -239,7 +252,7 @@ describe('cutout store actions', () => {
     it('should clamp to 0..50 range', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -255,7 +268,7 @@ describe('cutout store actions', () => {
     it('should replace the mask data', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -274,7 +287,7 @@ describe('cutout store actions', () => {
     it('should do nothing if no mask exists', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
@@ -289,32 +302,34 @@ describe('cutout store actions', () => {
     it('should apply the mask to the selected layer', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
       useCutoutStore.getState().setCutoutMask(createTestMask());
 
       useCutoutStore.getState().applyCutoutAsMask();
 
-      const layer = useAppStore.getState().document!.rootGroup.children[0];
+      const layer = findLayerById(useAppStore.getState().document!.rootGroup, layerId)!;
       expect(layer.mask).toBeDefined();
       expect(layer.mask!.enabled).toBe(true);
       expect(layer.mask!.width).toBe(100);
       expect(layer.mask!.height).toBe(100);
       // Cutout should be cleared
       expect(useCutoutStore.getState().cutout).toBeNull();
+      expect(useAppStore.getState().activeTool).toBe('select');
     });
 
     it('should do nothing if no mask exists', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('L1');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
 
       useCutoutStore.getState().applyCutoutAsMask();
 
-      expect(useAppStore.getState().document!.rootGroup.children[0].mask).toBeUndefined();
+      const layer = findLayerById(useAppStore.getState().document!.rootGroup, layerId)!;
+      expect(layer.mask).toBeUndefined();
     });
   });
 
@@ -322,7 +337,8 @@ describe('cutout store actions', () => {
     it('should create a new layer from the masked selection', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('Source');
-      const layerId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const layerId = getSelectedLayerId();
+      const countBefore = useAppStore.getState().document!.rootGroup.children.length;
       useAppStore.getState().selectLayer(layerId);
       useCutoutStore.getState().startCutout();
       useCutoutStore.getState().setCutoutMask(createTestMask());
@@ -330,26 +346,29 @@ describe('cutout store actions', () => {
       useCutoutStore.getState().cutToNewLayer();
 
       const children = useAppStore.getState().document!.rootGroup.children;
-      expect(children).toHaveLength(2);
-      expect(children[1].name).toBe('Source cutout');
-      expect(children[1].type).toBe('raster');
+      expect(children).toHaveLength(countBefore + 1);
+      const newLayer = children[children.length - 1];
+      expect(newLayer.name).toBe('Source cutout');
+      expect(newLayer.type).toBe('raster');
       // New layer should be selected
-      expect(useAppStore.getState().selectedLayerId).toBe(children[1].id);
+      expect(useAppStore.getState().selectedLayerId).toBe(newLayer.id);
       // Cutout should be cleared
       expect(useCutoutStore.getState().cutout).toBeNull();
+      expect(useAppStore.getState().activeTool).toBe('select');
     });
 
     it('should reject non-raster layers', () => {
       createTestDocument();
       useAppStore.getState().addLayerGroup('Group');
-      const groupId = useAppStore.getState().document!.rootGroup.children[0].id;
+      const groupId = getSelectedLayerId();
+      const countBefore = useAppStore.getState().document!.rootGroup.children.length;
       useAppStore.getState().selectLayer(groupId);
       useCutoutStore.getState().startCutout();
       useCutoutStore.getState().setCutoutMask(createTestMask());
 
       useCutoutStore.getState().cutToNewLayer();
 
-      expect(useAppStore.getState().document!.rootGroup.children).toHaveLength(1);
+      expect(useAppStore.getState().document!.rootGroup.children).toHaveLength(countBefore);
       expect(useAppStore.getState().statusMessage).toBe('Select a raster layer to cut');
     });
   });

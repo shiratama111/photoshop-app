@@ -24,6 +24,7 @@ import * as fs from 'fs';
 import { buildMenu } from './menu';
 import { registerFileDialogHandlers } from './file-dialog';
 import { registerAutoSaveHandlers } from './auto-save';
+import { bufferToArrayBuffer } from './buffer-utils';
 
 /** The main application window. */
 let mainWindow: BrowserWindow | null = null;
@@ -33,6 +34,38 @@ const isDev = !app.isPackaged;
 
 /** Whether the close has been confirmed by the renderer. */
 let closeConfirmed = false;
+
+/** Try loading the dev renderer from known local Vite ports. */
+async function loadDevRenderer(win: BrowserWindow): Promise<void> {
+  const configuredUrl = process.env.VITE_DEV_SERVER_URL;
+  const candidates = [
+    configuredUrl,
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://localhost:5176',
+  ].filter((u): u is string => Boolean(u));
+  const uniqueCandidates = [...new Set(candidates)];
+
+  let lastError: unknown = null;
+  for (const url of uniqueCandidates) {
+    try {
+      await win.loadURL(url);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const message = encodeURIComponent(
+    'Failed to connect to Vite dev server. Start it with: pnpm dev',
+  );
+  await win.loadURL(`data:text/html,<h2>${message}</h2>`);
+  if (lastError) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load dev renderer from known ports:', lastError);
+  }
+}
 
 /**
  * Create the main application window.
@@ -55,8 +88,8 @@ function createWindow(): void {
 
   // Load the renderer
   if (isDev) {
-    // In dev mode, load from Vite dev server
-    void mainWindow.loadURL('http://localhost:5173');
+    // In dev mode, load from local Vite dev server (with port fallback).
+    void loadDevRenderer(mainWindow);
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load the built HTML
@@ -100,7 +133,7 @@ function registerWindowHandlers(): void {
     try {
       if (!fs.existsSync(filePath)) return null;
       const data = fs.readFileSync(filePath);
-      return { filePath, data: data.buffer };
+      return { filePath, data: bufferToArrayBuffer(data) };
     } catch {
       return null;
     }

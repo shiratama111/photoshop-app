@@ -14,7 +14,7 @@
  * @see APP-006: AI cutout UI
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../../store';
 import { useCutoutStore } from './cutout-store';
 import type { PointPrompt } from '@photoshop-app/types';
@@ -32,7 +32,7 @@ type InteractionMode = 'prompt' | 'brush';
 
 /** CutoutTool provides the floating options panel and canvas interaction. */
 export function CutoutTool(): React.JSX.Element | null {
-  const document = useAppStore((s) => s.document);
+  const appDocument = useAppStore((s) => s.document);
   const zoom = useAppStore((s) => s.zoom);
   const panOffset = useAppStore((s) => s.panOffset);
 
@@ -52,9 +52,9 @@ export function CutoutTool(): React.JSX.Element | null {
   const [mode, setMode] = useState<InteractionMode>('prompt');
   const [lastBrushPos, setLastBrushPos] = useState<{ x: number; y: number } | null>(null);
 
-  if (!cutout || !document) return null;
+  if (!cutout || !appDocument) return null;
 
-  const canvasSize = document.canvas.size;
+  const canvasSize = appDocument.canvas.size;
 
   /** Convert screen coordinates to canvas coordinates. */
   const screenToCanvas = (screenX: number, screenY: number): { x: number; y: number } => ({
@@ -62,71 +62,80 @@ export function CutoutTool(): React.JSX.Element | null {
     y: Math.round((screenY - panOffset.y) / zoom),
   });
 
-  /** Handle canvas click for point prompts. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleCanvasClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>): void => {
-      if (mode !== 'prompt') return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const pos = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
+  /** Handle canvas mouse down for point prompts. */
+  const handlePromptMouseDown = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (mode !== 'prompt') return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
 
-      // Out of bounds check
-      if (pos.x < 0 || pos.x >= canvasSize.width || pos.y < 0 || pos.y >= canvasSize.height) {
-        return;
-      }
+    // Out of bounds check
+    if (pos.x < 0 || pos.x >= canvasSize.width || pos.y < 0 || pos.y >= canvasSize.height) {
+      return;
+    }
 
-      const label = e.button === 2 || e.altKey ? 'negative' : 'positive';
-      const prompt: PointPrompt = { position: pos, label };
-      addCutoutPrompt(prompt);
+    const defaultLabel = cutout.brushMode === 'remove' ? 'negative' : 'positive';
+    const label = e.button === 2 || e.altKey ? 'negative' : defaultLabel;
+    const prompt: PointPrompt = { position: pos, label };
+    addCutoutPrompt(prompt);
 
-      // Run AI inference
-      void runInference([...cutout.prompts, prompt]);
-    },
-    [mode, canvasSize, cutout?.prompts, zoom, panOffset],
-  );
+    // Run AI inference
+    void runInference([...cutout.prompts, prompt]);
+  };
 
   /** Handle brush mouse down. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleBrushDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>): void => {
-      if (mode !== 'brush' || !cutout.currentMask) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const pos = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
-      const value = cutout.brushMode === 'add' ? 255 : 0;
-      const newData = new Uint8Array(cutout.currentMask.data);
-      paintBrush(newData, cutout.currentMask.size, pos.x, pos.y, cutout.brushSize, value as 0 | 255);
-      updateCutoutMaskData(newData);
-      setLastBrushPos(pos);
-    },
-    [mode, cutout?.currentMask, cutout?.brushMode, cutout?.brushSize, zoom, panOffset],
-  );
+  const handleBrushDown = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (mode !== 'brush' || !cutout.currentMask) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
+    const value = cutout.brushMode === 'add' ? 255 : 0;
+    const newData = new Uint8Array(cutout.currentMask.data);
+    paintBrush(newData, cutout.currentMask.size, pos.x, pos.y, cutout.brushSize, value as 0 | 255);
+    updateCutoutMaskData(newData);
+    setLastBrushPos(pos);
+  };
 
   /** Handle brush mouse move (drag). */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleBrushMove = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>): void => {
-      if (mode !== 'brush' || !cutout.currentMask || !lastBrushPos || e.buttons !== 1) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const pos = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
-      const value = cutout.brushMode === 'add' ? 255 : 0;
-      const newData = new Uint8Array(cutout.currentMask.data);
-      paintBrushLine(
-        newData, cutout.currentMask.size,
-        lastBrushPos.x, lastBrushPos.y,
-        pos.x, pos.y,
-        cutout.brushSize, value as 0 | 255,
-      );
-      updateCutoutMaskData(newData);
-      setLastBrushPos(pos);
-    },
-    [mode, cutout?.currentMask, cutout?.brushMode, cutout?.brushSize, lastBrushPos, zoom, panOffset],
-  );
+  const handleBrushMove = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (mode !== 'brush' || !cutout.currentMask || !lastBrushPos || e.buttons !== 1) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
+    const value = cutout.brushMode === 'add' ? 255 : 0;
+    const newData = new Uint8Array(cutout.currentMask.data);
+    paintBrushLine(
+      newData, cutout.currentMask.size,
+      lastBrushPos.x, lastBrushPos.y,
+      pos.x, pos.y,
+      cutout.brushSize, value as 0 | 255,
+    );
+    updateCutoutMaskData(newData);
+    setLastBrushPos(pos);
+  };
 
   /** Handle brush mouse up. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleBrushUp = useCallback((): void => {
+  const handleBrushUp = (): void => {
     setLastBrushPos(null);
-  }, []);
+  };
+
+  const handleOverlayMouseDown = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (mode === 'prompt') {
+      handlePromptMouseDown(e);
+      return;
+    }
+    handleBrushDown(e);
+  };
+
+  const handleOverlayMouseMove = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (mode === 'brush') {
+      handleBrushMove(e);
+    }
+  };
+
+  const handleOverlayMouseUp = (): void => {
+    if (mode === 'brush') {
+      handleBrushUp();
+    }
+  };
 
   /** Run AI segmentation inference with the given prompts. */
   async function runInference(prompts: PointPrompt[]): Promise<void> {
@@ -137,7 +146,7 @@ export function CutoutTool(): React.JSX.Element | null {
       await provider.initialize();
 
       // Get the image data from the selected layer or canvas
-      const exportCanvas = document.createElement('canvas');
+      const exportCanvas = window.document.createElement('canvas');
       const state = useAppStore.getState();
       if (state.renderForExport) {
         const rendered = state.renderForExport();
@@ -219,6 +228,9 @@ export function CutoutTool(): React.JSX.Element | null {
         panOffset={panOffset}
         brushActive={mode === 'brush'}
         brushSize={cutout.brushSize}
+        onCanvasMouseDown={handleOverlayMouseDown}
+        onCanvasMouseMove={handleOverlayMouseMove}
+        onCanvasMouseUp={handleOverlayMouseUp}
       />
 
       {/* Options panel */}

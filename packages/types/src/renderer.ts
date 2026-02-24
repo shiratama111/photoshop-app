@@ -44,6 +44,8 @@ export interface RenderOptions {
   showGuides: boolean;
   /** Background pattern for transparent areas ('checkerboard' or solid color). */
   background: 'checkerboard' | 'white' | 'black';
+  /** Document dimensions for artboard/pasteboard rendering. */
+  documentSize?: { width: number; height: number };
 }
 
 /** Renderer interface for compositing layers onto a canvas. */

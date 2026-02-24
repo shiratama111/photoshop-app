@@ -13,6 +13,7 @@ import { dialog, ipcMain, app } from 'electron';
 import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import { bufferToArrayBuffer } from './buffer-utils';
 
 /** A single entry in the recent-files list. */
 export interface RecentFileEntry {
@@ -88,7 +89,7 @@ export function registerFileDialogHandlers(
     const filePath = result.filePaths[0];
     const data = fs.readFileSync(filePath);
     addRecentFile(filePath);
-    return { filePath, data: data.buffer };
+    return { filePath, data: bufferToArrayBuffer(data) };
   });
 
   // File > Save / Save As

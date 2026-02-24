@@ -44,10 +44,11 @@ html, body, #root {
   display: grid;
   height: 100vh;
   grid-template-areas:
-    "toolbar  toolbar"
-    "sidebar  canvas"
+    "toolbar   toolbar"
+    "options   options"
+    "sidebar   canvas"
     "statusbar statusbar";
-  grid-template-rows: var(--toolbar-height) 1fr var(--statusbar-height);
+  grid-template-rows: var(--toolbar-height) auto 1fr var(--statusbar-height);
   grid-template-columns: var(--sidebar-width) 1fr;
 }
 
@@ -309,6 +310,20 @@ html, body, #root {
 }
 
 .canvas-empty p { margin: 8px 0; }
+
+.canvas-empty__new-btn {
+  margin-top: 12px;
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.canvas-empty__new-btn:hover { background: #006cbd; }
 
 /* Status Bar */
 .statusbar {
@@ -1015,6 +1030,11 @@ html, body, #root {
   z-index: 45;
 }
 
+.selection-overlay--interactive {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
 .selection-marching-ants {
   position: absolute;
   border: 1px dashed #000;
@@ -1036,4 +1056,375 @@ html, body, #root {
   transform: translate(-50%, -50%);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
   z-index: 60;
+}
+
+/* Brush Options Panel — APP-016 */
+.brush-options-panel {
+  grid-area: options;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  min-height: 32px;
+  flex-wrap: wrap;
+}
+
+.brush-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brush-option__label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 40px;
+}
+
+.brush-option__label--disabled { color: var(--text-disabled); }
+
+.brush-option__slider {
+  width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.brush-option__slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.brush-option__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.brush-option__slider:disabled::-webkit-slider-thumb {
+  background: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.brush-option__value {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: right;
+}
+
+.brush-option__value--disabled { color: var(--text-disabled); }
+
+/* Brush Variant Selector — APP-016 */
+.brush-variant-selector {
+  display: flex;
+  gap: 2px;
+}
+
+.brush-variant-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.brush-variant-btn:hover { background: var(--bg-hover); }
+.brush-variant-btn--active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Color swatch button in options panel — APP-016 */
+.brush-option--color { position: relative; }
+
+.brush-option__color-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.brush-option__color-swatch:hover { border-color: var(--text-primary); }
+
+.brush-option__picker-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 200;
+  margin-top: 4px;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Color Picker — APP-016 */
+.color-picker { display: flex; flex-direction: column; gap: 6px; }
+
+.color-picker__sv-container {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  cursor: crosshair;
+}
+
+.color-picker__sv-canvas {
+  display: block;
+  width: 200px;
+  height: 200px;
+  border-radius: 2px;
+}
+
+.color-picker__sv-crosshair {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-picker__bar-container {
+  position: relative;
+  width: 200px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.color-picker__bar-canvas {
+  display: block;
+  width: 200px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.color-picker__bar-indicator {
+  position: absolute;
+  top: -1px;
+  width: 4px;
+  height: 18px;
+  border: 1px solid #fff;
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.color-picker__info {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.color-picker__swatches {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.color-picker__swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.color-picker__swatch--previous { cursor: pointer; opacity: 0.7; }
+.color-picker__swatch--previous:hover { opacity: 1; }
+
+.color-picker__inputs { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+
+.color-picker__input-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.color-picker__label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 14px;
+  text-align: right;
+}
+
+.color-picker__text-input {
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 10px;
+  outline: none;
+}
+
+.color-picker__text-input:focus { border-color: var(--accent); }
+
+.color-picker__hex-input { width: 64px; }
+.color-picker__num-input { width: 36px; text-align: right; }
+
+/* Remove spin buttons from number inputs inside color picker */
+.color-picker__num-input::-webkit-inner-spin-button,
+.color-picker__num-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Color Palette — APP-016 */
+.color-palette {
+  flex-shrink: 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.color-palette__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.color-palette__fg-bg {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.color-palette__swatch {
+  position: absolute;
+  border: 2px solid var(--border);
+  border-radius: 2px;
+}
+
+.color-palette__swatch--fg {
+  width: 24px;
+  height: 24px;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.color-palette__swatch--bg {
+  width: 24px;
+  height: 24px;
+  bottom: 0;
+  right: 0;
+  z-index: 0;
+}
+
+.color-palette__btn {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.color-palette__btn:hover { background: var(--bg-hover); }
+
+.color-palette__grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 1px;
+}
+
+.color-palette__tile {
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  border-radius: 1px;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.1s, transform 0.1s;
+}
+
+.color-palette__tile:hover {
+  border-color: var(--text-primary);
+  transform: scale(1.15);
+  z-index: 1;
+}
+
+/* New Document Dialog — APP-017 */
+.new-document-dialog { width: 340px; }
+
+.new-document-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.new-document-label {
+  flex-shrink: 0;
+  width: 50px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.new-document-input {
+  width: 80px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.new-document-input:focus { border-color: var(--accent); }
+
+.new-document-input--wide { flex: 1; width: auto; }
+
+.new-document-select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.new-document-select:focus { border-color: var(--accent); }
+
+.new-document-unit {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.new-document-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+
+/* Remove spin buttons from number inputs in new document dialog */
+.new-document-input::-webkit-inner-spin-button,
+.new-document-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }

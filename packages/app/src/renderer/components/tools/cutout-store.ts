@@ -86,8 +86,12 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
 
   startCutout: (): void => {
     const { document: doc, selectedLayerId } = useAppStore.getState();
-    if (!doc) return;
+    if (!doc) {
+      useAppStore.getState().setActiveTool('select');
+      return;
+    }
     if (!selectedLayerId) {
+      useAppStore.getState().setActiveTool('select');
       useAppStore.getState().setStatusMessage('Select a layer first');
       return;
     }
@@ -109,6 +113,7 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
 
   cancelCutout: (): void => {
     set({ cutout: null });
+    useAppStore.getState().setActiveTool('select');
     useAppStore.getState().setStatusMessage('Ready');
   },
 
@@ -203,6 +208,7 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
     cmd.execute();
     doc.dirty = true;
     set({ cutout: null });
+    useAppStore.getState().setActiveTool('select');
     useAppStore.setState({ revision: useAppStore.getState().revision + 1 });
     useAppStore.getState().setStatusMessage(`Applied mask to: ${layer.name}`);
   },
@@ -244,6 +250,7 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
     cmd.execute();
     doc.dirty = true;
     set({ cutout: null });
+    useAppStore.getState().setActiveTool('select');
     useAppStore.setState({
       selectedLayerId: newLayer.id,
       revision: useAppStore.getState().revision + 1,

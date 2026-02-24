@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
 
 function resetStore(): void {
@@ -38,17 +39,18 @@ describe('APP-011: Text Box Resize', () => {
     store.addTextLayer('Test Text', 'Hello');
 
     const doc = useAppStore.getState().document!;
-    const textLayer = doc.rootGroup.children[0];
+    const textLayerId = useAppStore.getState().selectedLayerId!;
+    const textLayer = findLayerById(doc.rootGroup, textLayerId)!;
     expect(textLayer.type).toBe('text');
 
-    store.setTextProperty(textLayer.id, 'textBounds', {
+    store.setTextProperty(textLayerId, 'textBounds', {
       x: 10,
       y: 20,
       width: 200,
       height: 100,
     });
 
-    const updated = useAppStore.getState().document!.rootGroup.children[0];
+    const updated = findLayerById(useAppStore.getState().document!.rootGroup, textLayerId)!;
     if (updated.type === 'text') {
       expect(updated.textBounds).toEqual({
         x: 10,
@@ -64,19 +66,19 @@ describe('APP-011: Text Box Resize', () => {
     const store = useAppStore.getState();
     store.addTextLayer('Resizable', 'Test');
 
-    const textLayer = useAppStore.getState().document!.rootGroup.children[0];
+    const textLayerId = useAppStore.getState().selectedLayerId!;
 
     // First set
-    store.setTextProperty(textLayer.id, 'textBounds', {
+    store.setTextProperty(textLayerId, 'textBounds', {
       x: 0, y: 0, width: 100, height: 50,
     });
 
     // Update to larger
-    store.setTextProperty(textLayer.id, 'textBounds', {
+    store.setTextProperty(textLayerId, 'textBounds', {
       x: 0, y: 0, width: 300, height: 150,
     });
 
-    const updated = useAppStore.getState().document!.rootGroup.children[0];
+    const updated = findLayerById(useAppStore.getState().document!.rootGroup, textLayerId)!;
     if (updated.type === 'text') {
       expect(updated.textBounds?.width).toBe(300);
       expect(updated.textBounds?.height).toBe(150);
@@ -88,16 +90,16 @@ describe('APP-011: Text Box Resize', () => {
     const store = useAppStore.getState();
     store.addTextLayer('Undo Test', 'Text');
 
-    const textLayer = useAppStore.getState().document!.rootGroup.children[0];
+    const textLayerId = useAppStore.getState().selectedLayerId!;
 
-    store.setTextProperty(textLayer.id, 'textBounds', {
+    store.setTextProperty(textLayerId, 'textBounds', {
       x: 0, y: 0, width: 200, height: 100,
     });
 
     // Undo should restore null textBounds
     store.undo();
 
-    const restored = useAppStore.getState().document!.rootGroup.children[0];
+    const restored = findLayerById(useAppStore.getState().document!.rootGroup, textLayerId)!;
     if (restored.type === 'text') {
       expect(restored.textBounds).toBeNull();
     }
@@ -108,10 +110,10 @@ describe('APP-011: Text Box Resize', () => {
     const store = useAppStore.getState();
     store.addTextLayer('Edit Me', 'Content');
 
-    const textLayer = useAppStore.getState().document!.rootGroup.children[0];
-    store.startEditingText(textLayer.id);
+    const textLayerId = useAppStore.getState().selectedLayerId!;
+    store.startEditingText(textLayerId);
 
-    expect(useAppStore.getState().editingTextLayerId).toBe(textLayer.id);
+    expect(useAppStore.getState().editingTextLayerId).toBe(textLayerId);
   });
 
   it('should stop editing when stopEditingText is called', () => {
@@ -119,8 +121,8 @@ describe('APP-011: Text Box Resize', () => {
     const store = useAppStore.getState();
     store.addTextLayer('Edit Me', 'Content');
 
-    const textLayer = useAppStore.getState().document!.rootGroup.children[0];
-    store.startEditingText(textLayer.id);
+    const textLayerId = useAppStore.getState().selectedLayerId!;
+    store.startEditingText(textLayerId);
     store.stopEditingText();
 
     expect(useAppStore.getState().editingTextLayerId).toBeNull();
