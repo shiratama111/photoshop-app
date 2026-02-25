@@ -538,6 +538,19 @@ function getLayerSize(layer: Layer): { width: number; height: number } {
   return { width: 0, height: 0 };
 }
 
+function estimateTextLayerBounds(layer: TextLayer): { x: number; y: number; width: number; height: number } {
+  const lines = layer.text.split('\n');
+  const longestLine = Math.max(...lines.map((line) => line.length));
+  const estimatedWidth = longestLine * layer.fontSize * 0.6;
+  const estimatedHeight = lines.length * layer.fontSize * layer.lineHeight;
+  return {
+    x: layer.position.x,
+    y: layer.position.y,
+    width: Math.max(20, estimatedWidth),
+    height: Math.max(20, estimatedHeight),
+  };
+}
+
 /** Extract file extension from a path (lowercase, no dot). */
 function getExtension(filePath: string): string {
   const dot = filePath.lastIndexOf('.');
@@ -1576,7 +1589,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }
   },
 
-  // PS-TEXT-006: Resize text layer — update textBounds + fontSize proportionally
+  // PS-TEXT-006: Resize text layer - update textBounds + fontSize proportionally
   resizeTextLayer: (layerId, newWidth, newHeight): void => {
     const { document: doc } = get();
     if (!doc) return;
@@ -1584,26 +1597,29 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!layer || layer.type !== 'text') return;
     const textLayer = layer as TextLayer;
 
-    // Compute old bounds (textBounds or fallback estimate)
-    const oldBounds = textLayer.textBounds ?? {
-      x: textLayer.position.x,
-      y: textLayer.position.y,
-      width: Math.max(1, textLayer.fontSize * 5),
-      height: Math.max(1, textLayer.fontSize * textLayer.lineHeight),
-    };
+    const targetWidth = Math.max(1, Math.round(newWidth));
+    const targetHeight = Math.max(1, Math.round(newHeight));
+
+    // Compute old bounds from textBounds, or estimate from current text metrics.
+    const oldBounds = textLayer.textBounds ?? estimateTextLayerBounds(textLayer);
 
     const oldW = oldBounds.width;
     const oldH = oldBounds.height;
-    if (oldW === newWidth && oldH === newHeight) return;
+    if (oldW === targetWidth && oldH === targetHeight) return;
 
-    // Scale factor: arithmetic mean (consistent with document scaling)
-    const scaleX = newWidth / oldW;
-    const scaleY = newHeight / oldH;
-    const scaleFactor = (scaleX + scaleY) / 2;
+    const scaleX = targetWidth / oldW;
+    const scaleY = targetHeight / oldH;
+    // Geometric mean keeps area-consistent scaling under non-uniform resize.
+    const scaleFactor = Math.sqrt(scaleX * scaleY);
 
     const oldFontSize = textLayer.fontSize;
     const newFontSize = Math.max(1, Math.round(oldFontSize * scaleFactor));
-    const newTextBounds = { x: oldBounds.x, y: oldBounds.y, width: newWidth, height: newHeight };
+    const newTextBounds = {
+      x: textLayer.position.x,
+      y: textLayer.position.y,
+      width: targetWidth,
+      height: targetHeight,
+    };
     const oldTextBounds = textLayer.textBounds ? { ...textLayer.textBounds } : null;
 
     // Apply changes
@@ -1612,7 +1628,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
     // Undoable command (batch: fontSize + textBounds)
     const cmd: Command = {
-      description: `Resize text "${textLayer.name}" to ${newWidth} x ${newHeight}`,
+      description: `Resize text "${textLayer.name}" to ${targetWidth} x ${targetHeight}`,
       execute(): void {
         textLayer.fontSize = newFontSize;
         textLayer.textBounds = newTextBounds;
@@ -1634,8 +1650,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     });
     eventBus.emit('document:changed');
     eventBus.emit('layer:property-changed', { layerId, property: 'fontSize' });
+    eventBus.emit('layer:property-changed', { layerId, property: 'textBounds' });
     doc.dirty = true;
-    set({ statusMessage: `${t('status.resizedLayer')}: ${newWidth} x ${newHeight}` });
+    set({ statusMessage: `${t('status.resizedLayer')}: ${targetWidth} x ${targetHeight}` });
     get().updateTitleBar();
   },
 

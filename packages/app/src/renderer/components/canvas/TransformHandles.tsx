@@ -45,6 +45,24 @@ interface Bounds {
   height: number;
 }
 
+/**
+ * Estimate text layer bounds when textBounds is not set yet.
+ * Keep this formula in sync with store.resizeTextLayer fallback sizing.
+ */
+function estimateTextLayerBounds(textLayer: TextLayer): Bounds {
+  const lines = textLayer.text.split('\n');
+  const longestLine = Math.max(...lines.map((line) => line.length));
+  const estimatedWidth = longestLine * textLayer.fontSize * 0.6;
+  const estimatedHeight = lines.length * textLayer.fontSize * textLayer.lineHeight;
+
+  return {
+    x: textLayer.position.x,
+    y: textLayer.position.y,
+    width: Math.max(20, estimatedWidth),
+    height: Math.max(20, estimatedHeight),
+  };
+}
+
 /** TransformHandles renders bounding box + handles for the selected layer. */
 export function TransformHandles(): React.JSX.Element | null {
   const document = useAppStore((s) => s.document);
@@ -109,11 +127,8 @@ export function TransformHandles(): React.JSX.Element | null {
     if (tb) {
       layerBounds = { x: textLayer.position.x, y: textLayer.position.y, width: tb.width, height: tb.height };
     } else {
-      // textBounds not set — estimate from fontSize
-      const lines = textLayer.text.split('\n');
-      const estW = Math.max(...lines.map(l => l.length)) * textLayer.fontSize * 0.6;
-      const estH = lines.length * textLayer.fontSize * textLayer.lineHeight;
-      layerBounds = { x: textLayer.position.x, y: textLayer.position.y, width: Math.max(20, estW), height: Math.max(20, estH) };
+      // textBounds is not set yet, so estimate from current text metrics.
+      layerBounds = estimateTextLayerBounds(textLayer);
     }
   } else {
     // raster (existing logic)

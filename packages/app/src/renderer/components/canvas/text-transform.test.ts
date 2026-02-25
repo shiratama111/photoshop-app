@@ -148,6 +148,23 @@ describe('PS-TEXT-006: Text Layer Transform', () => {
     expect(layer.fontSize).toBeGreaterThan(oldFontSize);
   });
 
+  it('should keep fontSize stable when non-uniform resize preserves area', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+    store.addTextLayer('Non-uniform', 'Area');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+
+    setTextBounds(layerId, 100, 100);
+    const oldFontSize = layer.fontSize;
+
+    // area is unchanged: 100*100 -> 200*50
+    store.resizeTextLayer(layerId, 200, 50);
+
+    expect(layer.fontSize).toBe(oldFontSize);
+  });
+
   it('should decrease fontSize when scaling down (min 1px)', () => {
     createTestDocument();
     const store = useAppStore.getState();
@@ -242,6 +259,39 @@ describe('PS-TEXT-006: Text Layer Transform', () => {
     expect(layer.textBounds).not.toBeNull();
     expect(layer.textBounds!.width).toBe(200);
     expect(layer.textBounds!.height).toBe(100);
+    expect(layer.fontSize).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should use text-metric fallback consistently when textBounds is null', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+    store.addTextLayer('Metric Fallback', 'ABCDEFGHIJ');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+    const oldFontSize = layer.fontSize;
+
+    const lines = layer.text.split('\n');
+    const oldWidth = Math.max(20, Math.max(...lines.map((line) => line.length)) * oldFontSize * 0.6);
+    const oldHeight = Math.max(20, lines.length * oldFontSize * layer.lineHeight);
+
+    store.resizeTextLayer(layerId, oldWidth * 2, oldHeight * 2);
+    expect(layer.fontSize).toBe(oldFontSize * 2);
+  });
+
+  it('should clamp invalid target dimensions to at least 1px', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+    store.addTextLayer('Clamp', 'Clamp');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+
+    setTextBounds(layerId, 100, 100);
+    store.resizeTextLayer(layerId, 0, -25);
+
+    expect(layer.textBounds!.width).toBe(1);
+    expect(layer.textBounds!.height).toBe(1);
     expect(layer.fontSize).toBeGreaterThanOrEqual(1);
   });
 
