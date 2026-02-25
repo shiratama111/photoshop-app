@@ -206,6 +206,12 @@ function offsetsEqual(a: { x: number; y: number }, b: { x: number; y: number }):
   return nearlyEqual(a.x, b.x) && nearlyEqual(a.y, b.y);
 }
 
+/** Shared singleton instances. */
+const commandHistory = new CommandHistoryImpl();
+const eventBus = new EventBusImpl();
+const viewport = new ViewportImpl();
+const renderer = new Canvas2DRenderer();
+
 /** Application state. */
 export interface AppState {
   /** Currently active document, or null. */
