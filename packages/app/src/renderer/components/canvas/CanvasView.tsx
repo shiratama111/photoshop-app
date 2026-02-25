@@ -35,6 +35,7 @@ import { t } from '../../i18n';
 import { TransformHandles } from './TransformHandles';
 import { SelectionOverlay } from './SelectionOverlay';
 import { CutoutTool } from '../tools/CutoutTool';
+import { spacePanState } from './spacePanState';
 
 /** Module-level brush engine instance (APP-014). */
 const brushEngine = new BrushEngine();
@@ -66,8 +67,7 @@ export function CanvasView(): React.JSX.Element {
   const renderRequestRef = useRef<number | null>(null);
   const observedSizeRef = useRef<{ width: number; height: number } | null>(null);
 
-  // Space-key pan state (PS-PAN-001)
-  const isSpacePressed = useRef(false);
+  // Space-key pan state — shared via spacePanState module (PS-PAN-001, PS-PAN-002)
   const [panCursor, setPanCursor] = useState<'grab' | 'grabbing' | null>(null);
 
   // Tool-specific drag state
@@ -189,13 +189,13 @@ export function CanvasView(): React.JSX.Element {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (active?.isContentEditable) return;
       e.preventDefault();
-      isSpacePressed.current = true;
+      spacePanState.isSpacePressed = true;
       setPanCursor(isPanning.current ? 'grabbing' : 'grab');
     };
 
     const handleKeyUp = (e: KeyboardEvent): void => {
       if (e.code !== 'Space') return;
-      isSpacePressed.current = false;
+      spacePanState.isSpacePressed = false;
       if (isPanning.current) {
         // Still dragging — will clear on mouseup
         return;
@@ -205,7 +205,7 @@ export function CanvasView(): React.JSX.Element {
 
     const handleWindowBlur = (): void => {
       // Prevent sticky Space-pan state if keyup is missed on focus loss.
-      isSpacePressed.current = false;
+      spacePanState.isSpacePressed = false;
       if (!isPanning.current) {
         setPanCursor(null);
       }
@@ -257,7 +257,7 @@ export function CanvasView(): React.JSX.Element {
       }
 
       // Space + left button — temporary pan (PS-PAN-001)
-      if (e.button === 0 && isSpacePressed.current) {
+      if (e.button === 0 && spacePanState.isSpacePressed) {
         e.preventDefault();
         isPanning.current = true;
         lastPanPoint.current = { x: e.clientX, y: e.clientY };
@@ -265,8 +265,41 @@ export function CanvasView(): React.JSX.Element {
         return;
       }
 
-      // Left button + brush/eraser tool — start stroke (APP-014)
+      // Left button + text tool — click to create or edit text (PS-TEXT-003)
       const tool = useAppStore.getState().activeTool;
+      if (e.button === 0 && tool === 'text' && document) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const vp = getViewport();
+        const docPt = vp.screenToDocument({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
+
+        // Check if clicking on an existing text layer
+        const textLayers = flattenLayers(document.rootGroup);
+        for (let i = textLayers.length - 1; i >= 0; i--) {
+          const layer = textLayers[i];
+          if (layer.type !== 'text' || !layer.visible) continue;
+          const tl = layer as TextLayer;
+          const hitW = tl.textBounds ? tl.textBounds.width : Math.max(100, tl.fontSize * 10);
+          const hitH = tl.textBounds ? tl.textBounds.height : tl.fontSize * tl.lineHeight * 3;
+          if (
+            docPt.x >= tl.position.x &&
+            docPt.x <= tl.position.x + hitW &&
+            docPt.y >= tl.position.y &&
+            docPt.y <= tl.position.y + hitH
+          ) {
+            startEditingText(tl.id);
+            return;
+          }
+        }
+
+        // No existing text hit — create new text layer at click position
+        useAppStore.getState().addTextLayerAt(docPt.x, docPt.y);
+        return;
+      }
+
+      // Left button + brush/eraser tool — start stroke (APP-014)
       if (
         e.button === 0 &&
         (tool === 'brush' || tool === 'eraser') &&
@@ -548,7 +581,7 @@ export function CanvasView(): React.JSX.Element {
       if (isPanning.current) {
         isPanning.current = false;
         // Restore cursor: grab if Space still held, else clear
-        setPanCursor(isSpacePressed.current ? 'grab' : null);
+        setPanCursor(spacePanState.isSpacePressed ? 'grab' : null);
       }
 
       // Brush commit (APP-014)
@@ -714,7 +747,8 @@ export function CanvasView(): React.JSX.Element {
   const isBrushTool = activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'clone';
   const cursorDiameter = brushSize * zoom;
   const isEyedropper = activeTool === 'eyedropper';
-  const isCrosshair = activeTool === 'gradient' || activeTool === 'shape' || activeTool === 'fill';
+  const isSelectionTool = activeTool === 'select' || activeTool === 'crop';
+  const isCrosshair = activeTool === 'gradient' || activeTool === 'shape' || activeTool === 'fill' || isSelectionTool;
   const isTextTool = activeTool === 'text';
 
   // Pan cursor class takes priority over tool cursor (PS-PAN-001)

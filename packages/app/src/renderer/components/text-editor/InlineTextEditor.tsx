@@ -29,13 +29,29 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const setTextProperty = useAppStore((s) => s.setTextProperty);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isComposing = useRef(false);
 
   useEffect(() => {
     textareaRef.current?.focus();
   }, [editingTextLayerId]);
 
+  const handleCompositionStart = useCallback((): void => {
+    isComposing.current = true;
+  }, []);
+
+  const handleCompositionEnd = useCallback(
+    (e: React.CompositionEvent<HTMLTextAreaElement>): void => {
+      isComposing.current = false;
+      if (editingTextLayerId) {
+        setTextProperty(editingTextLayerId, 'text', e.currentTarget.value);
+      }
+    },
+    [editingTextLayerId, setTextProperty],
+  );
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+      if (isComposing.current) return;
       if (editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', e.target.value);
       }
@@ -45,12 +61,13 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent): void => {
+      if (e.nativeEvent.isComposing) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
-        stopEditingText();
+        stopEditingText(editingTextLayerId ?? undefined);
       }
     },
-    [stopEditingText],
+    [editingTextLayerId, stopEditingText],
   );
 
   const handleBlur = useCallback((): void => {
@@ -76,7 +93,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
         }
       }
     }
-    stopEditingText();
+    stopEditingText(editingTextLayerId);
   }, [editingTextLayerId, setTextProperty, stopEditingText]);
 
   if (!editingTextLayerId || !document) return null;
@@ -114,6 +131,8 @@ export function InlineTextEditor(): React.JSX.Element | null {
       value={textLayer.text}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
       onBlur={handleBlur}
       style={{
         left: `${left}px`,

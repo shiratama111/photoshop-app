@@ -83,6 +83,22 @@ describe('InlineTextEditor store actions', () => {
       useAppStore.getState().stopEditingText();
       expect(useAppStore.getState().editingTextLayerId).toBeNull();
     });
+
+    it('should not clear a newer editor when expected layer id does not match', () => {
+      createTestDocument();
+      const store = useAppStore.getState();
+      store.addTextLayer('T1', 'First');
+      const firstId = useAppStore.getState().selectedLayerId!;
+      store.startEditingText(firstId);
+
+      store.addTextLayer('T2', 'Second');
+      const secondId = useAppStore.getState().selectedLayerId!;
+      store.startEditingText(secondId);
+
+      // Simulate stale blur from the first editor instance.
+      store.stopEditingText(firstId);
+      expect(useAppStore.getState().editingTextLayerId).toBe(secondId);
+    });
   });
 
   describe('layer style dialog', () => {

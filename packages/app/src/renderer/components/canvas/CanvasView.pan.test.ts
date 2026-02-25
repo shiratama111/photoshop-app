@@ -1,17 +1,20 @@
 /**
  * @module CanvasView.pan.test
- * Unit tests for Space+drag pan behavior (PS-PAN-001).
+ * Unit tests for Space+drag pan behavior (PS-PAN-001, PS-PAN-002).
  *
  * Tests verify:
  * - Space+left-drag initiates pan and suppresses tool processing
  * - Middle-click pan still works as before
  * - Space key is ignored when input elements are focused
  * - Cursor state transitions (grab / grabbing / default)
+ * - SelectionOverlay defers to pan when Space is held (PS-PAN-002)
  *
  * @see docs/agent-briefs/PS-PAN-001.md
+ * @see docs/agent-briefs/PS-PAN-002.md
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { spacePanState } from './spacePanState';
 
 // ---------------------------------------------------------------------------
 // DOM / global mocks for Node.js test environment
@@ -57,9 +60,11 @@ vi.stubGlobal('ImageData', class MockImageData {
 /**
  * Encapsulates the pan state machine extracted from CanvasView so we can
  * test transitions in isolation.
+ *
+ * Uses the shared spacePanState module (PS-PAN-002) as the single source
+ * of truth for Space-key press status.
  */
 function createPanStateMachine(): {
-  isSpacePressed: { current: boolean };
   isPanning: { current: boolean };
   panCursor: { value: 'grab' | 'grabbing' | null };
   lastPanPoint: { current: { x: number; y: number } };
@@ -71,14 +76,12 @@ function createPanStateMachine(): {
   getActiveElement: () => HTMLElement | null;
   setActiveElement: (el: HTMLElement | null) => void;
 } {
-  const isSpacePressed = { current: false };
   const isPanning = { current: false };
   const panCursor = { value: null as 'grab' | 'grabbing' | null };
   const lastPanPoint = { current: { x: 0, y: 0 } };
   let activeElement: HTMLElement | null = null;
 
   return {
-    isSpacePressed,
     isPanning,
     panCursor,
     lastPanPoint,
@@ -91,13 +94,13 @@ function createPanStateMachine(): {
       const tag = activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (activeElement?.isContentEditable) return;
-      isSpacePressed.current = true;
+      spacePanState.isSpacePressed = true;
       panCursor.value = 'grab';
     },
 
     handleKeyUp(e: Partial<KeyboardEvent>): void {
       if (e.code !== 'Space') return;
-      isSpacePressed.current = false;
+      spacePanState.isSpacePressed = false;
       if (isPanning.current) return; // will clear on mouseup
       panCursor.value = null;
     },
@@ -111,7 +114,7 @@ function createPanStateMachine(): {
         return 'pan';
       }
       // Space + left button
-      if (button === 0 && isSpacePressed.current) {
+      if (button === 0 && spacePanState.isSpacePressed) {
         isPanning.current = true;
         lastPanPoint.current = { x: clientX, y: clientY };
         panCursor.value = 'grabbing';
@@ -136,7 +139,7 @@ function createPanStateMachine(): {
     handleMouseUp(): void {
       if (isPanning.current) {
         isPanning.current = false;
-        panCursor.value = isSpacePressed.current ? 'grab' : null;
+        panCursor.value = spacePanState.isSpacePressed ? 'grab' : null;
       }
     },
   };
@@ -150,6 +153,7 @@ describe('PS-PAN-001: Space + drag pan', () => {
   let sm: ReturnType<typeof createPanStateMachine>;
 
   beforeEach(() => {
+    spacePanState.isSpacePressed = false;
     sm = createPanStateMachine();
   });
 
@@ -157,18 +161,18 @@ describe('PS-PAN-001: Space + drag pan', () => {
 
   it('should set isSpacePressed on Space keydown', () => {
     sm.handleKeyDown({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(true);
+    expect(spacePanState.isSpacePressed).toBe(true);
   });
 
   it('should clear isSpacePressed on Space keyup', () => {
     sm.handleKeyDown({ code: 'Space' });
     sm.handleKeyUp({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(false);
+    expect(spacePanState.isSpacePressed).toBe(false);
   });
 
   it('should ignore non-Space keys', () => {
     sm.handleKeyDown({ code: 'KeyA' });
-    expect(sm.isSpacePressed.current).toBe(false);
+    expect(spacePanState.isSpacePressed).toBe(false);
     expect(sm.panCursor.value).toBeNull();
   });
 
@@ -272,32 +276,32 @@ describe('PS-PAN-001: Space + drag pan', () => {
   it('should not activate Space pan when INPUT is focused', () => {
     sm.setActiveElement({ tagName: 'INPUT' } as unknown as HTMLElement);
     sm.handleKeyDown({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(false);
+    expect(spacePanState.isSpacePressed).toBe(false);
     expect(sm.panCursor.value).toBeNull();
   });
 
   it('should not activate Space pan when TEXTAREA is focused', () => {
     sm.setActiveElement({ tagName: 'TEXTAREA' } as unknown as HTMLElement);
     sm.handleKeyDown({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(false);
+    expect(spacePanState.isSpacePressed).toBe(false);
   });
 
   it('should not activate Space pan when SELECT is focused', () => {
     sm.setActiveElement({ tagName: 'SELECT' } as unknown as HTMLElement);
     sm.handleKeyDown({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(false);
+    expect(spacePanState.isSpacePressed).toBe(false);
   });
 
   it('should not activate Space pan when contentEditable element is focused', () => {
     sm.setActiveElement({ tagName: 'DIV', isContentEditable: true } as unknown as HTMLElement);
     sm.handleKeyDown({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(false);
+    expect(spacePanState.isSpacePressed).toBe(false);
   });
 
   it('should activate Space pan when non-input element is focused', () => {
     sm.setActiveElement({ tagName: 'DIV', isContentEditable: false } as unknown as HTMLElement);
     sm.handleKeyDown({ code: 'Space' });
-    expect(sm.isSpacePressed.current).toBe(true);
+    expect(spacePanState.isSpacePressed).toBe(true);
   });
 
   // ---- Right-click should not trigger pan ----

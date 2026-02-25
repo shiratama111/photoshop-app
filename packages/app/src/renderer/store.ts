@@ -252,6 +252,8 @@ export interface AppActions {
   // Text layer operations \u2014 APP-005
   /** Add a new text layer. */
   addTextLayer: (name?: string, text?: string) => void;
+  /** Add a new text layer at a specific document position and start editing (PS-TEXT-003). */
+  addTextLayerAt: (x: number, y: number, name?: string) => void;
   /** Set a text-specific property (undoable). */
   setTextProperty: (layerId: string, key: string, value: unknown) => void;
   /** Add an effect to a layer (undoable). */
@@ -262,8 +264,8 @@ export interface AppActions {
   updateLayerEffect: (layerId: string, index: number, effect: LayerEffect) => void;
   /** Start inline editing a text layer. */
   startEditingText: (layerId: string) => void;
-  /** Stop inline editing. */
-  stopEditingText: () => void;
+  /** Stop inline editing. If expectedLayerId is provided, stop only when it matches current editor. */
+  stopEditingText: (expectedLayerId?: string) => void;
   /** Open the layer style dialog. */
   openLayerStyleDialog: (layerId: string) => void;
   /** Close the layer style dialog. */
@@ -1007,6 +1009,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     get().updateTitleBar();
   },
 
+  addTextLayerAt: (x, y, name): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layerName = name ?? `Text ${doc.rootGroup.children.length + 1}`;
+    const layer = createTextLayer(layerName, '');
+    layer.position = { x, y };
+    const cmd = new AddLayerCommand(doc.rootGroup, layer);
+    executeCommand(cmd, set);
+    set({
+      selectedLayerId: layer.id,
+      editingTextLayerId: layer.id,
+      statusMessage: `${t('status.added')}: ${layerName}`,
+    });
+    doc.selectedLayerId = layer.id;
+    doc.dirty = true;
+    eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
+    get().updateTitleBar();
+  },
+
   setTextProperty: (layerId, key, value): void => {
     const { document: doc } = get();
     if (!doc) return;
@@ -1084,7 +1105,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({ editingTextLayerId: layerId, selectedLayerId: layerId });
   },
 
-  stopEditingText: (): void => {
+  stopEditingText: (expectedLayerId): void => {
+    if (expectedLayerId) {
+      const { editingTextLayerId } = get();
+      if (editingTextLayerId !== expectedLayerId) return;
+    }
     set({ editingTextLayerId: null });
   },
 

@@ -5,13 +5,20 @@
  * Supports rect selection, ellipse selection, and magic wand.
  * Uses CSS animation for the marching ants effect.
  *
+ * Event priority (PS-PAN-002):
+ *   1. Space + left-click → pan (event propagates to CanvasView)
+ *   2. Left-click on interactive overlay → selection drag / magic wand
+ *   3. All other events → pass through (pointer-events: none)
+ *
  * @see APP-015: Selection tools
+ * @see docs/agent-briefs/PS-PAN-002.md
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { useAppStore, getViewport } from '../../store';
 import type { RasterLayer } from '@photoshop-app/types';
 import { flattenLayers, magicWandSelect, selectionBounds } from '@photoshop-app/core';
+import { spacePanState } from './spacePanState';
 
 /** SelectionOverlay renders marching ants around the current selection. */
 export function SelectionOverlay(): React.JSX.Element | null {
@@ -49,6 +56,10 @@ export function SelectionOverlay(): React.JSX.Element | null {
       const tool = useAppStore.getState().activeTool;
       if (tool !== 'select' && tool !== 'crop') return;
       if (e.button !== 0) return;
+
+      // PS-PAN-002: When Space is held, let the event propagate to
+      // CanvasView so that Space+drag pan takes priority over selection.
+      if (spacePanState.isSpacePressed) return;
 
       const subTool = useAppStore.getState().selectionSubTool;
 
