@@ -34,6 +34,8 @@ import type {
   UnitsValue,
 } from 'ag-psd';
 
+type RgbaColor = { r: number; g: number; b: number; a: number };
+
 /** ag-psd blend mode string → our BlendMode enum value. */
 const BLEND_MODE_MAP: Record<string, BlendMode> = {
   'normal': 'normal' as BlendMode,
@@ -501,7 +503,7 @@ function normalizeStopPosition(location: number | undefined): number {
   return clamp(location, 0, 1);
 }
 
-function mapColor(color: AgColor | undefined, fallback: { r: number; g: number; b: number; a: number }) {
+function mapColor(color: AgColor | undefined, fallback: RgbaColor): RgbaColor {
   if (!color) return fallback;
   const c = color as Partial<{
     r: number;

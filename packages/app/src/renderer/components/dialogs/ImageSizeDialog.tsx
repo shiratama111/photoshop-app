@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
 
+function normalizeDimension(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.round(value));
+}
+
 export const ImageSizeDialog: React.FC = () => {
   const { showImageSizeDialog, document, resizeDocument, closeImageSizeDialog } = useAppStore();
 
@@ -25,32 +30,44 @@ export const ImageSizeDialog: React.FC = () => {
     return ((w * h) / 1_000_000).toFixed(2);
   };
 
-  const handleWidthChange = (newWidth: number) => {
-    setWidth(newWidth);
+  const handleWidthChange = (newWidth: number): void => {
+    const normalizedWidth = normalizeDimension(newWidth);
+    setWidth(normalizedWidth);
     if (constrainProportions && aspectRatio > 0) {
-      setHeight(Math.round(newWidth / aspectRatio));
+      setHeight(normalizeDimension(normalizedWidth / aspectRatio));
     }
   };
 
-  const handleHeightChange = (newHeight: number) => {
-    setHeight(newHeight);
+  const handleHeightChange = (newHeight: number): void => {
+    const normalizedHeight = normalizeDimension(newHeight);
+    setHeight(normalizedHeight);
     if (constrainProportions && aspectRatio > 0) {
-      setWidth(Math.round(newHeight * aspectRatio));
+      setWidth(normalizeDimension(normalizedHeight * aspectRatio));
     }
   };
 
-  const handleOk = () => {
-    resizeDocument(width, height, { mode: 'image' });
+  const handleOk = (): void => {
+    if (width > 0 && height > 0) {
+      resizeDocument(width, height, { mode: 'image' });
+      closeImageSizeDialog();
+    }
+  };
+
+  const handleCancel = (): void => {
     closeImageSizeDialog();
   };
 
-  const handleCancel = () => {
-    closeImageSizeDialog();
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === 'Enter') {
+      handleOk();
+    } else if (e.key === 'Escape') {
+      handleCancel();
+    }
   };
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog">
+      <div className="dialog" onKeyDown={handleKeyDown}>
         <div className="dialog-header">
           <h2>Image Size</h2>
         </div>
@@ -59,7 +76,7 @@ export const ImageSizeDialog: React.FC = () => {
           <div className="new-document-field">
             <label className="new-document-label">Current Size:</label>
             <div>
-              {document.canvas.size.width} × {document.canvas.size.height} px ({calculateMegapixels(document.canvas.size.width, document.canvas.size.height)} MP)
+              {document.canvas.size.width} x {document.canvas.size.height} px ({calculateMegapixels(document.canvas.size.width, document.canvas.size.height)} MP)
             </div>
           </div>
 
@@ -103,7 +120,7 @@ export const ImageSizeDialog: React.FC = () => {
           <div className="new-document-field">
             <label className="new-document-label">New Size:</label>
             <div>
-              {width} × {height} px ({calculateMegapixels(width, height)} MP)
+              {width} x {height} px ({calculateMegapixels(width, height)} MP)
             </div>
           </div>
         </div>
@@ -112,7 +129,7 @@ export const ImageSizeDialog: React.FC = () => {
           <button className="dialog-btn" onClick={handleCancel}>
             Cancel
           </button>
-          <button className="dialog-btn dialog-btn--primary" onClick={handleOk}>
+          <button className="dialog-btn dialog-btn--primary" onClick={handleOk} disabled={width <= 0 || height <= 0}>
             OK
           </button>
         </div>

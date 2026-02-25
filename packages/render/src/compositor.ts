@@ -1175,7 +1175,7 @@ export class Canvas2DRenderer implements Renderer {
       gtc.fillStyle = gradient;
       gtc.fillRect(0, 0, bounds.width, bounds.height);
       gtc.globalCompositeOperation = 'destination-in';
-      gtc.drawImage(maskCanvas, 0, 0);
+      gradientCtx.drawImage(maskCanvas, 0, 0);
       gtc.globalCompositeOperation = 'source-over';
 
       ctx.save();

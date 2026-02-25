@@ -32,7 +32,7 @@ export interface CanvasContext2DLike {
   scale(sx: number, sy: number): void;
   setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
   fillRect(x: number, y: number, w: number, h: number): void;
-  fillStyle: string | CanvasPattern;
+  fillStyle: string | CanvasPattern | CanvasGradient;
   createPattern(image: CanvasLike, repetition: string): CanvasPattern | null;
 }
 

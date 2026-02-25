@@ -13,6 +13,8 @@ import type {
   UnitsValue,
 } from 'ag-psd';
 
+type AgBevelStyle = 'inner bevel' | 'outer bevel' | 'emboss' | 'pillow emboss' | 'stroke emboss';
+
 /**
  * Convert an internal Layer to an ag-psd Layer for export.
  */
@@ -248,7 +250,9 @@ function mapGradientOverlay(effect: Extract<Layer['effects'][number], { type: 'g
   return gradientOverlay;
 }
 
-function mapBevelStyle(style: Extract<Layer['effects'][number], { type: 'bevel-emboss' }>['style']) {
+function mapBevelStyle(
+  style: Extract<Layer['effects'][number], { type: 'bevel-emboss' }>['style'],
+): AgBevelStyle {
   switch (style) {
     case 'outer-bevel':
       return 'outer bevel' as const;
@@ -268,7 +272,7 @@ function px(value: number): UnitsValue {
   return { units: 'Pixels', value };
 }
 
-function toAgColor(color: { r: number; g: number; b: number; a: number }) {
+function toAgColor(color: { r: number; g: number; b: number; a: number }): { r: number; g: number; b: number } {
   return {
     r: clamp(Math.round(color.r), 0, 255),
     g: clamp(Math.round(color.g), 0, 255),

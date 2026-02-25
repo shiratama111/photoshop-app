@@ -67,7 +67,7 @@ import { useAppStore } from '../store';
 
 const mockGetState = vi.mocked(useAppStore.getState);
 
-function createMockDocument(overrides?: Partial<{
+type MockDocumentOverrides = Partial<{
   id: string;
   name: string;
   width: number;
@@ -75,7 +75,33 @@ function createMockDocument(overrides?: Partial<{
   dpi: number;
   selectedLayerId: string | null;
   children: unknown[];
-}>) {
+}>;
+
+type MockDocument = {
+  id: string;
+  name: string;
+  canvas: {
+    size: {
+      width: number;
+      height: number;
+    };
+    dpi: number;
+  };
+  selectedLayerId: string | null;
+  rootGroup: {
+    id: string;
+    name: string;
+    type: 'group';
+    visible: boolean;
+    opacity: number;
+    blendMode: 'normal';
+    position: { x: number; y: number };
+    effects: unknown[];
+    children: unknown[];
+  };
+};
+
+function createMockDocument(overrides?: MockDocumentOverrides): MockDocument {
   return {
     id: overrides?.id ?? 'doc-1',
     name: overrides?.name ?? 'Test Document',

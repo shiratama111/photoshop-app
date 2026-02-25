@@ -9,6 +9,8 @@ import {
   colorBalance,
 } from '@photoshop-app/core';
 
+type CurvePreset = 'default' | 'increase-contrast' | 'lighter' | 'darker' | 'linear';
+
 export const AdjustmentsDialog: React.FC = () => {
   const adjustmentDialog = useAppStore((state) => state.adjustmentDialog);
   const closeAdjustmentDialog = useAppStore((state) => state.closeAdjustmentDialog);
@@ -31,7 +33,7 @@ export const AdjustmentsDialog: React.FC = () => {
   const [outputWhite, setOutputWhite] = useState(255);
 
   // Curves state
-  const [curvePreset, setCurvePreset] = useState('default');
+  const [curvePreset, setCurvePreset] = useState<CurvePreset>('default');
 
   // Color Balance state
   const [shadowsValue, setShadowsValue] = useState(0);
@@ -62,7 +64,7 @@ export const AdjustmentsDialog: React.FC = () => {
     return null;
   }
 
-  const handleApply = () => {
+  const handleApply = (): void => {
     switch (adjustmentDialog.type) {
       case 'brightness-contrast':
         applyFilter((imageData) => {
@@ -104,11 +106,11 @@ export const AdjustmentsDialog: React.FC = () => {
     closeAdjustmentDialog();
   };
 
-  const handleCancel = () => {
+  const handleCancel = (): void => {
     closeAdjustmentDialog();
   };
 
-  const getCurvePoints = (preset: string): Array<{ x: number; y: number }> => {
+  const getCurvePoints = (preset: CurvePreset): Array<{ x: number; y: number }> => {
     switch (preset) {
       case 'increase-contrast':
         return [
@@ -140,7 +142,7 @@ export const AdjustmentsDialog: React.FC = () => {
     }
   };
 
-  const renderControls = () => {
+  const renderControls = (): React.JSX.Element | null => {
     switch (adjustmentDialog.type) {
       case 'brightness-contrast':
         return (
@@ -283,7 +285,7 @@ export const AdjustmentsDialog: React.FC = () => {
             <select
               className="effect-slider-value"
               value={curvePreset}
-              onChange={(e) => setCurvePreset(e.target.value)}
+              onChange={(e) => setCurvePreset(e.target.value as CurvePreset)}
             >
               <option value="default">Default</option>
               <option value="increase-contrast">Increase Contrast</option>
@@ -341,7 +343,7 @@ export const AdjustmentsDialog: React.FC = () => {
     }
   };
 
-  const getDialogTitle = () => {
+  const getDialogTitle = (): string => {
     switch (adjustmentDialog.type) {
       case 'brightness-contrast':
         return 'Brightness/Contrast';

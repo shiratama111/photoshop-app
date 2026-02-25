@@ -6,6 +6,10 @@ type AnchorPosition =
   | 'middle-left' | 'center' | 'middle-right'
   | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
+function parseDimensionInput(value: string): number {
+  return Math.max(1, Number.parseInt(value, 10) || 0);
+}
+
 export const CanvasSizeDialog: React.FC = () => {
   const {
     showCanvasSizeDialog,
@@ -30,18 +34,18 @@ export const CanvasSizeDialog: React.FC = () => {
     return null;
   }
 
-  const handleOk = () => {
+  const handleOk = (): void => {
     if (width > 0 && height > 0) {
       resizeDocument(width, height, { mode: 'canvas', anchor });
       closeCanvasSizeDialog();
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = (): void => {
     closeCanvasSizeDialog();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Enter') {
       handleOk();
     } else if (e.key === 'Escape') {
@@ -79,7 +83,7 @@ export const CanvasSizeDialog: React.FC = () => {
               type="number"
               className="new-document-input"
               value={width}
-              onChange={(e) => setWidth(Math.max(1, parseInt(e.target.value) || 0))}
+              onChange={(e) => setWidth(parseDimensionInput(e.target.value))}
               min={1}
               autoFocus
             />
@@ -95,7 +99,7 @@ export const CanvasSizeDialog: React.FC = () => {
               type="number"
               className="new-document-input"
               value={height}
-              onChange={(e) => setHeight(Math.max(1, parseInt(e.target.value) || 0))}
+              onChange={(e) => setHeight(parseDimensionInput(e.target.value))}
               min={1}
             />
             <span className="new-document-unit">px</span>
