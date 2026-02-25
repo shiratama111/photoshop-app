@@ -47,6 +47,10 @@ function createMockCanvas(width: number, height: number): CanvasLike {
 
 function createMockContext(width: number, height: number): CanvasContext2DLike {
   const canvas = { width, height } as CanvasLike;
+  const makeGradient = (): CanvasGradient => ({
+    addColorStop: vi.fn(),
+  } as unknown as CanvasGradient);
+
   return {
     canvas,
     globalAlpha: 1,
@@ -58,6 +62,7 @@ function createMockContext(width: number, height: number): CanvasContext2DLike {
     clearRect: vi.fn(),
     drawImage: vi.fn(),
     putImageData: vi.fn(),
+    getImageData: vi.fn(() => new ImageData(width, height)),
     translate: vi.fn(),
     scale: vi.fn(),
     setTransform: vi.fn(),
@@ -73,6 +78,8 @@ function createMockContext(width: number, height: number): CanvasContext2DLike {
     lineWidth: 1,
     measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
     createPattern: vi.fn(),
+    createLinearGradient: vi.fn(() => makeGradient()),
+    createRadialGradient: vi.fn(() => makeGradient()),
     font: '',
     textAlign: 'start' as CanvasTextAlign,
     textBaseline: 'alphabetic' as CanvasTextBaseline,
@@ -477,6 +484,326 @@ describe('Canvas2DRenderer', () => {
       renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
       // Disabled effects should be skipped
     });
+
+    it('should render inner shadow on raster layers', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('InnerShadowRaster', {
+        effects: [{
+          type: 'inner-shadow',
+          enabled: true,
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          opacity: 0.6,
+          angle: 120,
+          distance: 6,
+          blur: 8,
+          choke: 10,
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      // Base raster render + inner-shadow composite
+      expect(drawImage.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('should render inner shadow on text layers', () => {
+      const canvas = createMockCanvas(200, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('InnerShadowText', 'Hello');
+      layer.effects = [{
+        type: 'inner-shadow',
+        enabled: true,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        opacity: 0.6,
+        angle: 45,
+        distance: 4,
+        blur: 6,
+        choke: 0,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should skip disabled inner shadow effects', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('DisabledInnerShadow', {
+        effects: [{
+          type: 'inner-shadow',
+          enabled: false,
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          opacity: 0.6,
+          angle: 120,
+          distance: 6,
+          blur: 8,
+          choke: 10,
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      // Raster base draw only
+      expect(drawImage.mock.calls.length).toBe(1);
+    });
+
+    it('should render inner glow (edge source) on raster layers', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('InnerGlowEdgeRaster', {
+        effects: [{
+          type: 'inner-glow',
+          enabled: true,
+          color: { r: 255, g: 220, b: 80, a: 1 },
+          opacity: 0.7,
+          size: 12,
+          choke: 20,
+          source: 'edge',
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      // Base raster + inner glow composite
+      expect(drawImage.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('should render inner glow (center source) on text layers', () => {
+      const canvas = createMockCanvas(220, 140);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('InnerGlowCenterText', 'Glow');
+      layer.effects = [{
+        type: 'inner-glow',
+        enabled: true,
+        color: { r: 120, g: 200, b: 255, a: 1 },
+        opacity: 0.8,
+        size: 10,
+        choke: 0,
+        source: 'center',
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should skip disabled inner glow effects', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('DisabledInnerGlow', {
+        effects: [{
+          type: 'inner-glow',
+          enabled: false,
+          color: { r: 255, g: 220, b: 80, a: 1 },
+          opacity: 0.7,
+          size: 12,
+          choke: 20,
+          source: 'edge',
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      expect(drawImage.mock.calls.length).toBe(1);
+    });
+
+    it('should render gradient overlay (linear) on text layers', () => {
+      const canvas = createMockCanvas(220, 140);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('GradientText', 'Gradient');
+      layer.effects = [{
+        type: 'gradient-overlay',
+        enabled: true,
+        opacity: 0.9,
+        angle: 45,
+        gradientType: 'linear',
+        reverse: false,
+        scale: 100,
+        stops: [
+          { position: 0, color: { r: 255, g: 0, b: 0, a: 1 } },
+          { position: 1, color: { r: 0, g: 0, b: 255, a: 1 } },
+        ],
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.createLinearGradient).toHaveBeenCalled();
+    });
+
+    it('should render gradient overlay (radial) on raster layers', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('GradientRaster', {
+        effects: [{
+          type: 'gradient-overlay',
+          enabled: true,
+          opacity: 0.8,
+          angle: 0,
+          gradientType: 'radial',
+          reverse: true,
+          scale: 120,
+          stops: [
+            { position: 0, color: { r: 255, g: 255, b: 0, a: 1 } },
+            { position: 1, color: { r: 255, g: 0, b: 255, a: 1 } },
+          ],
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      expect(drawImage.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('should skip disabled gradient overlay effects', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('DisabledGradientOverlay', {
+        effects: [{
+          type: 'gradient-overlay',
+          enabled: false,
+          opacity: 0.8,
+          angle: 0,
+          gradientType: 'linear',
+          reverse: false,
+          scale: 100,
+          stops: [
+            { position: 0, color: { r: 255, g: 255, b: 255, a: 1 } },
+            { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } },
+          ],
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      expect(drawImage.mock.calls.length).toBe(1);
+    });
+
+    it('should render bevel & emboss on text layers', () => {
+      const canvas = createMockCanvas(260, 180);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('BevelText', 'Bevel');
+      layer.effects = [{
+        type: 'bevel-emboss',
+        enabled: true,
+        style: 'inner-bevel',
+        depth: 150,
+        direction: 'up',
+        size: 8,
+        soften: 2,
+        angle: 120,
+        altitude: 30,
+        highlightColor: { r: 255, g: 255, b: 255, a: 1 },
+        highlightOpacity: 0.75,
+        shadowColor: { r: 0, g: 0, b: 0, a: 1 },
+        shadowOpacity: 0.75,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should render bevel & emboss styles on raster layers without throwing', () => {
+      const styles = [
+        'outer-bevel',
+        'inner-bevel',
+        'emboss',
+        'pillow-emboss',
+        'stroke-emboss',
+      ] as const;
+
+      for (const style of styles) {
+        const canvas = createMockCanvas(160, 160);
+        const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+        const layer = makeRasterLayer(`BevelRaster-${style}`, {
+          effects: [{
+            type: 'bevel-emboss',
+            enabled: true,
+            style,
+            depth: 200,
+            direction: 'down',
+            size: 10,
+            soften: 3,
+            angle: 45,
+            altitude: 50,
+            highlightColor: { r: 255, g: 255, b: 255, a: 1 },
+            highlightOpacity: 0.6,
+            shadowColor: { r: 10, g: 10, b: 10, a: 1 },
+            shadowOpacity: 0.6,
+          }],
+        });
+        const doc = createTestDocument([layer]);
+        const options = createRenderOptions({ renderEffects: true });
+
+        expect(() => {
+          renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+        }).not.toThrow();
+
+        const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+        expect(drawImage.mock.calls.length).toBeGreaterThan(1);
+      }
+    });
+
+    it('should skip disabled bevel & emboss effects', () => {
+      const canvas = createMockCanvas(120, 120);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('DisabledBevel', {
+        effects: [{
+          type: 'bevel-emboss',
+          enabled: false,
+          style: 'inner-bevel',
+          depth: 100,
+          direction: 'up',
+          size: 6,
+          soften: 1,
+          angle: 120,
+          altitude: 30,
+          highlightColor: { r: 255, g: 255, b: 255, a: 1 },
+          highlightOpacity: 0.75,
+          shadowColor: { r: 0, g: 0, b: 0, a: 1 },
+          shadowOpacity: 0.75,
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const drawImage = ctx.drawImage as ReturnType<typeof vi.fn>;
+      expect(drawImage.mock.calls.length).toBe(1);
+    });
   });
 
   describe('renderLayerThumbnail', () => {
@@ -782,6 +1109,58 @@ describe('Canvas2DRenderer', () => {
 
       // fillText called for normal text + overlay
       expect(ctx.fillText.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should render raster + color overlay with an additional overlay pass', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeRasterLayer('RasterOverlay', {
+        effects: [{
+          type: 'color-overlay',
+          enabled: true,
+          color: { r: 255, g: 0, b: 0, a: 1 },
+          opacity: 0.7,
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Base raster draw + overlay draw.
+      expect(ctx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should apply mask alpha when multiplying raster pixels', () => {
+      const tempCtx = createMockContext(1, 1) as unknown as Record<string, unknown>;
+      const maskedPixel = new ImageData(new Uint8ClampedArray([10, 20, 30, 200]), 1, 1);
+      const getImageDataSpy = vi.fn(() => maskedPixel);
+      const putImageDataSpy = vi.fn();
+      tempCtx.getImageData = getImageDataSpy;
+      tempCtx.putImageData = putImageDataSpy;
+
+      const layer = makeRasterLayer('Masked', {
+        bounds: { x: 0, y: 0, width: 1, height: 1 },
+        mask: {
+          data: new Uint8Array([128]),
+          width: 1,
+          height: 1,
+          offset: { x: 0, y: 0 },
+          enabled: true,
+        },
+      });
+
+      (renderer as unknown as {
+        applyMask: (ctx: CanvasContext2DLike, layer: RasterLayer) => void;
+      }).applyMask(tempCtx as unknown as CanvasContext2DLike, layer);
+
+      expect(getImageDataSpy).toHaveBeenCalledWith(0, 0, 1, 1);
+      expect(putImageDataSpy).toHaveBeenCalledTimes(1);
+      const output = putImageDataSpy.mock.calls[0][0] as ImageData;
+      expect(output.data[0]).toBe(10);
+      expect(output.data[1]).toBe(20);
+      expect(output.data[2]).toBe(30);
+      expect(output.data[3]).toBe(100);
     });
 
     it('should render raster + drop shadow with fillRect (regression)', () => {

@@ -17,9 +17,13 @@
  */
 
 import type {
+  BevelEmbossEffect,
   ColorOverlayEffect,
   Document,
   DropShadowEffect,
+  GradientOverlayEffect,
+  InnerGlowEffect,
+  InnerShadowEffect,
   Layer,
   LayerGroup,
   OuterGlowEffect,
@@ -376,7 +380,7 @@ export class Canvas2DRenderer implements Renderer {
     ctx: CanvasContext2DLike,
     layer: TextLayer,
     overrides?: {
-      fillStyle?: string;
+      fillStyle?: string | CanvasGradient | CanvasPattern;
       strokeStyle?: string;
       lineWidth?: number;
       renderFill?: boolean;
@@ -426,7 +430,7 @@ export class Canvas2DRenderer implements Renderer {
     tc: CanvasRenderingContext2D,
     layer: TextLayer,
     overrides?: {
-      fillStyle?: string;
+      fillStyle?: string | CanvasGradient | CanvasPattern;
       strokeStyle?: string;
       lineWidth?: number;
       renderFill?: boolean;
@@ -737,18 +741,47 @@ export class Canvas2DRenderer implements Renderer {
    */
   private applyMask(ctx: CanvasContext2DLike, layer: RasterLayer): void {
     const mask = layer.mask;
-    if (!mask || !mask.data.length) return;
+    if (!mask || !mask.enabled || !mask.data.length) return;
 
-    const { width, height } = layer.bounds;
+    const width = Math.max(0, Math.floor(layer.bounds.width));
+    const height = Math.max(0, Math.floor(layer.bounds.height));
+    if (width <= 0 || height <= 0) return;
+
+    const tc = ctx as unknown as CanvasRenderingContext2D;
+    if (typeof tc.getImageData !== 'function' || typeof tc.putImageData !== 'function') return;
+
     try {
-      // In browser: modify pixel data with mask alpha
-      // This is a placeholder — real implementation would use
-      // getImageData/putImageData to multiply alpha by mask
-      void ctx;
-      void width;
-      void height;
+      const imageData = tc.getImageData(0, 0, width, height);
+      const pixels = imageData.data;
+      const maskWidth = mask.width;
+      const maskHeight = mask.height;
+      const offsetX = Math.round(mask.offset.x);
+      const offsetY = Math.round(mask.offset.y);
+
+      for (let y = 0; y < height; y++) {
+        const my = y - offsetY;
+        const maskYInRange = my >= 0 && my < maskHeight;
+
+        for (let x = 0; x < width; x++) {
+          let maskAlpha = 0;
+          if (maskYInRange) {
+            const mx = x - offsetX;
+            if (mx >= 0 && mx < maskWidth) {
+              const maskIndex = my * maskWidth + mx;
+              if (maskIndex >= 0 && maskIndex < mask.data.length) {
+                maskAlpha = mask.data[maskIndex];
+              }
+            }
+          }
+
+          const alphaIndex = (y * width + x) * 4 + 3;
+          pixels[alphaIndex] = Math.round((pixels[alphaIndex] * maskAlpha) / 255);
+        }
+      }
+
+      tc.putImageData(imageData, 0, 0);
     } catch {
-      // Not available in test environment
+      // getImageData may be unavailable in restricted test environments.
     }
   }
 
@@ -772,7 +805,15 @@ export class Canvas2DRenderer implements Renderer {
   private renderEffectsInFront(ctx: CanvasContext2DLike, layer: RasterLayer | TextLayer): void {
     for (const effect of layer.effects) {
       if (!effect.enabled) continue;
-      if (effect.type === 'stroke') {
+      if (effect.type === 'inner-shadow') {
+        this.renderInnerShadow(ctx, layer, effect);
+      } else if (effect.type === 'inner-glow') {
+        this.renderInnerGlow(ctx, layer, effect);
+      } else if (effect.type === 'gradient-overlay') {
+        this.renderGradientOverlay(ctx, layer, effect);
+      } else if (effect.type === 'bevel-emboss') {
+        this.renderBevelEmboss(ctx, layer, effect);
+      } else if (effect.type === 'stroke') {
         this.renderStroke(ctx, layer, effect);
       } else if (effect.type === 'color-overlay') {
         this.renderColorOverlay(ctx, layer, effect);
@@ -840,6 +881,366 @@ export class Canvas2DRenderer implements Renderer {
     ctx.restore();
   }
 
+  /**
+   * Render inner shadow by building an interior edge mask, blurring it,
+   * then tinting and compositing it back onto the layer.
+   */
+  private renderInnerShadow(
+    ctx: CanvasContext2DLike,
+    layer: RasterLayer | TextLayer,
+    effect: InnerShadowEffect,
+  ): void {
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) return;
+
+    const { color, opacity, angle, distance, blur, choke } = effect;
+    const rad = (angle * Math.PI) / 180;
+    const dx = Math.cos(rad) * distance;
+    const dy = -Math.sin(rad) * distance;
+    const padding = Math.ceil(Math.abs(dx) + Math.abs(dy) + blur + 2);
+
+    const workWidth = bounds.width + padding * 2;
+    const workHeight = bounds.height + padding * 2;
+    if (workWidth <= 0 || workHeight <= 0) return;
+
+    const maskCanvas = this.pool.acquire(workWidth, workHeight);
+    const edgeCanvas = this.pool.acquire(workWidth, workHeight);
+    const blurCanvas = this.pool.acquire(workWidth, workHeight);
+    const colorCanvas = this.pool.acquire(workWidth, workHeight);
+
+    try {
+      const maskCtx = maskCanvas.getContext('2d');
+      const edgeCtx = edgeCanvas.getContext('2d');
+      const blurCtx = blurCanvas.getContext('2d');
+      const colorCtx = colorCanvas.getContext('2d');
+      if (!maskCtx || !edgeCtx || !blurCtx || !colorCtx) return;
+
+      if (!this.renderLayerMask(maskCtx, layer, padding, workWidth, workHeight)) return;
+
+      // Build an inner edge mask: source minus shifted source.
+      edgeCtx.clearRect(0, 0, workWidth, workHeight);
+      edgeCtx.drawImage(maskCanvas, 0, 0);
+      edgeCtx.globalCompositeOperation = 'destination-out';
+      edgeCtx.drawImage(maskCanvas, dx, dy);
+      edgeCtx.globalCompositeOperation = 'source-over';
+
+      // Choke reduces blur falloff. We approximate by shrinking blur radius and boosting opacity.
+      const chokeRatio = Math.max(0, Math.min(1, choke / 100));
+      const blurRadius = Math.max(0, blur * (1 - chokeRatio));
+      const opacityBoost = Math.min(1, opacity * (1 + chokeRatio * 0.5));
+
+      blurCtx.clearRect(0, 0, workWidth, workHeight);
+      blurCtx.filter = `blur(${blurRadius}px)`;
+      blurCtx.drawImage(edgeCanvas, 0, 0);
+      blurCtx.filter = 'none';
+      blurCtx.globalCompositeOperation = 'destination-in';
+      blurCtx.drawImage(maskCanvas, 0, 0);
+      blurCtx.globalCompositeOperation = 'source-over';
+
+      colorCtx.clearRect(0, 0, workWidth, workHeight);
+      colorCtx.drawImage(blurCanvas, 0, 0);
+      colorCtx.globalCompositeOperation = 'source-in';
+      colorCtx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+      colorCtx.fillRect(0, 0, workWidth, workHeight);
+      colorCtx.globalCompositeOperation = 'source-over';
+
+      ctx.save();
+      ctx.globalAlpha = opacityBoost;
+      ctx.drawImage(
+        colorCanvas,
+        layer.position.x - padding,
+        layer.position.y - padding,
+      );
+      ctx.restore();
+    } finally {
+      this.pool.release(maskCanvas);
+      this.pool.release(edgeCanvas);
+      this.pool.release(blurCanvas);
+      this.pool.release(colorCanvas);
+    }
+  }
+
+  /**
+   * Render inner glow inside the layer shape.
+   * - edge: ring mask near inner boundary
+   * - center: full interior mask with blurred falloff
+   */
+  private renderInnerGlow(
+    ctx: CanvasContext2DLike,
+    layer: RasterLayer | TextLayer,
+    effect: InnerGlowEffect,
+  ): void {
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) return;
+
+    const { color, opacity, size, choke, source } = effect;
+    const padding = Math.ceil(size + 2);
+    const workWidth = bounds.width + padding * 2;
+    const workHeight = bounds.height + padding * 2;
+    if (workWidth <= 0 || workHeight <= 0) return;
+
+    const maskCanvas = this.pool.acquire(workWidth, workHeight);
+    const shapeCanvas = this.pool.acquire(workWidth, workHeight);
+    const blurCanvas = this.pool.acquire(workWidth, workHeight);
+    const colorCanvas = this.pool.acquire(workWidth, workHeight);
+
+    try {
+      const maskCtx = maskCanvas.getContext('2d');
+      const shapeCtx = shapeCanvas.getContext('2d');
+      const blurCtx = blurCanvas.getContext('2d');
+      const colorCtx = colorCanvas.getContext('2d');
+      if (!maskCtx || !shapeCtx || !blurCtx || !colorCtx) return;
+
+      if (!this.renderLayerMask(maskCtx, layer, padding, workWidth, workHeight)) return;
+
+      const chokeRatio = Math.max(0, Math.min(1, choke / 100));
+      const blurRadius = Math.max(0, size * (1 - chokeRatio));
+
+      shapeCtx.clearRect(0, 0, workWidth, workHeight);
+      shapeCtx.drawImage(maskCanvas, 0, 0);
+
+      if (source === 'edge') {
+        // Keep only a ring near the inner edge.
+        const inset = Math.max(1, Math.round(size * 0.5 + chokeRatio * size));
+        const innerW = Math.max(1, workWidth - inset * 2);
+        const innerH = Math.max(1, workHeight - inset * 2);
+        shapeCtx.globalCompositeOperation = 'destination-out';
+        shapeCtx.drawImage(maskCanvas, inset, inset, innerW, innerH);
+        shapeCtx.globalCompositeOperation = 'source-over';
+      } else {
+        // Center source: keep more interior density by masking with a shrunken silhouette.
+        const inset = Math.max(0, Math.round(chokeRatio * size * 0.75));
+        if (inset > 0) {
+          const innerW = Math.max(1, workWidth - inset * 2);
+          const innerH = Math.max(1, workHeight - inset * 2);
+          shapeCtx.globalCompositeOperation = 'destination-in';
+          shapeCtx.drawImage(maskCanvas, inset, inset, innerW, innerH);
+          shapeCtx.globalCompositeOperation = 'source-over';
+        }
+      }
+
+      blurCtx.clearRect(0, 0, workWidth, workHeight);
+      blurCtx.filter = `blur(${blurRadius}px)`;
+      blurCtx.drawImage(shapeCanvas, 0, 0);
+      blurCtx.filter = 'none';
+      blurCtx.globalCompositeOperation = 'destination-in';
+      blurCtx.drawImage(maskCanvas, 0, 0);
+      blurCtx.globalCompositeOperation = 'source-over';
+
+      colorCtx.clearRect(0, 0, workWidth, workHeight);
+      colorCtx.drawImage(blurCanvas, 0, 0);
+      colorCtx.globalCompositeOperation = 'source-in';
+      colorCtx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+      colorCtx.fillRect(0, 0, workWidth, workHeight);
+      colorCtx.globalCompositeOperation = 'source-over';
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(colorCanvas, layer.position.x - padding, layer.position.y - padding);
+      ctx.restore();
+    } finally {
+      this.pool.release(maskCanvas);
+      this.pool.release(shapeCanvas);
+      this.pool.release(blurCanvas);
+      this.pool.release(colorCanvas);
+    }
+  }
+
+  /**
+   * Render gradient overlay for raster/text layers.
+   */
+  private renderGradientOverlay(
+    ctx: CanvasContext2DLike,
+    layer: RasterLayer | TextLayer,
+    effect: GradientOverlayEffect,
+  ): void {
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) return;
+
+    if (layer.type === 'text') {
+      const tc = ctx as unknown as CanvasRenderingContext2D;
+      const gradient = this.createEffectGradient(tc, effect, bounds.width, bounds.height, {
+        x: layer.position.x,
+        y: layer.position.y,
+      });
+      ctx.save();
+      ctx.globalAlpha = effect.opacity;
+      this.renderTextContent(ctx, layer, { fillStyle: gradient });
+      ctx.restore();
+      return;
+    }
+
+    const gradientCanvas = this.pool.acquire(bounds.width, bounds.height);
+    const maskCanvas = this.pool.acquire(bounds.width, bounds.height);
+
+    try {
+      const gradientCtx = gradientCanvas.getContext('2d');
+      const maskCtx = maskCanvas.getContext('2d');
+      if (!gradientCtx || !maskCtx) return;
+      if (!this.renderLayerMask(maskCtx, layer, 0, bounds.width, bounds.height)) return;
+
+      const gtc = gradientCtx as unknown as CanvasRenderingContext2D;
+      const gradient = this.createEffectGradient(gtc, effect, bounds.width, bounds.height, { x: 0, y: 0 });
+      gtc.clearRect(0, 0, bounds.width, bounds.height);
+      gtc.fillStyle = gradient;
+      gtc.fillRect(0, 0, bounds.width, bounds.height);
+      gtc.globalCompositeOperation = 'destination-in';
+      gtc.drawImage(maskCanvas, 0, 0);
+      gtc.globalCompositeOperation = 'source-over';
+
+      ctx.save();
+      ctx.globalAlpha = effect.opacity;
+      ctx.drawImage(gradientCanvas, layer.position.x, layer.position.y);
+      ctx.restore();
+    } finally {
+      this.pool.release(gradientCanvas);
+      this.pool.release(maskCanvas);
+    }
+  }
+
+  /**
+   * Approximate Bevel & Emboss using directional edge masks and tinted light/shadow passes.
+   */
+  private renderBevelEmboss(
+    ctx: CanvasContext2DLike,
+    layer: RasterLayer | TextLayer,
+    effect: BevelEmbossEffect,
+  ): void {
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) return;
+
+    const altitude = Math.max(0, Math.min(90, effect.altitude));
+    const altitudeRad = (altitude * Math.PI) / 180;
+    const depthFactor = Math.max(0.01, effect.depth / 100);
+    const altitudeFactor = Math.max(0.15, Math.cos(altitudeRad));
+    const edgeDistance = Math.max(1, effect.size * depthFactor * altitudeFactor * 0.5);
+    const rad = (effect.angle * Math.PI) / 180;
+    const dx = Math.cos(rad) * edgeDistance;
+    const dy = -Math.sin(rad) * edgeDistance;
+    const padding = Math.ceil(effect.size + Math.abs(dx) + Math.abs(dy) + effect.soften + 3);
+    const workWidth = bounds.width + padding * 2;
+    const workHeight = bounds.height + padding * 2;
+    if (workWidth <= 0 || workHeight <= 0) return;
+
+    const maskCanvas = this.pool.acquire(workWidth, workHeight);
+    const shiftedPosCanvas = this.pool.acquire(workWidth, workHeight);
+    const shiftedNegCanvas = this.pool.acquire(workWidth, workHeight);
+    const highlightEdgeCanvas = this.pool.acquire(workWidth, workHeight);
+    const shadowEdgeCanvas = this.pool.acquire(workWidth, workHeight);
+    const highlightBlurCanvas = this.pool.acquire(workWidth, workHeight);
+    const shadowBlurCanvas = this.pool.acquire(workWidth, workHeight);
+    const highlightColorCanvas = this.pool.acquire(workWidth, workHeight);
+    const shadowColorCanvas = this.pool.acquire(workWidth, workHeight);
+    const tempCanvas = this.pool.acquire(workWidth, workHeight);
+
+    try {
+      const maskCtx = maskCanvas.getContext('2d');
+      const shiftedPosCtx = shiftedPosCanvas.getContext('2d');
+      const shiftedNegCtx = shiftedNegCanvas.getContext('2d');
+      const highlightEdgeCtx = highlightEdgeCanvas.getContext('2d');
+      const shadowEdgeCtx = shadowEdgeCanvas.getContext('2d');
+      const highlightBlurCtx = highlightBlurCanvas.getContext('2d');
+      const shadowBlurCtx = shadowBlurCanvas.getContext('2d');
+      const highlightColorCtx = highlightColorCanvas.getContext('2d');
+      const shadowColorCtx = shadowColorCanvas.getContext('2d');
+      const tempCtx = tempCanvas.getContext('2d');
+
+      if (
+        !maskCtx
+        || !shiftedPosCtx
+        || !shiftedNegCtx
+        || !highlightEdgeCtx
+        || !shadowEdgeCtx
+        || !highlightBlurCtx
+        || !shadowBlurCtx
+        || !highlightColorCtx
+        || !shadowColorCtx
+        || !tempCtx
+      ) {
+        return;
+      }
+
+      if (!this.renderLayerMask(maskCtx, layer, padding, workWidth, workHeight)) return;
+
+      shiftedPosCtx.clearRect(0, 0, workWidth, workHeight);
+      shiftedPosCtx.drawImage(maskCanvas, dx, dy);
+      shiftedNegCtx.clearRect(0, 0, workWidth, workHeight);
+      shiftedNegCtx.drawImage(maskCanvas, -dx, -dy);
+
+      const styleMode =
+        effect.style === 'outer-bevel'
+          ? 'outer'
+          : effect.style === 'emboss'
+            ? 'both'
+            : 'inner';
+
+      const buildEdges = (targetCtx: CanvasContext2DLike, shiftedCanvas: CanvasLike): void => {
+        targetCtx.clearRect(0, 0, workWidth, workHeight);
+        if (styleMode === 'inner') {
+          this.composeInnerEdge(targetCtx, maskCanvas, shiftedCanvas, workWidth, workHeight);
+          return;
+        }
+        if (styleMode === 'outer') {
+          this.composeOuterEdge(targetCtx, shiftedCanvas, maskCanvas, workWidth, workHeight);
+          return;
+        }
+        // both (emboss): add inner + outer terms.
+        this.composeInnerEdge(targetCtx, maskCanvas, shiftedCanvas, workWidth, workHeight);
+        this.composeOuterEdge(tempCtx, shiftedCanvas, maskCanvas, workWidth, workHeight);
+        targetCtx.drawImage(tempCanvas, 0, 0);
+      };
+
+      buildEdges(highlightEdgeCtx, shiftedPosCanvas);
+      buildEdges(shadowEdgeCtx, shiftedNegCanvas);
+
+      const blurRadius = Math.max(0, effect.soften + effect.size * 0.25);
+      highlightBlurCtx.clearRect(0, 0, workWidth, workHeight);
+      shadowBlurCtx.clearRect(0, 0, workWidth, workHeight);
+      highlightBlurCtx.filter = `blur(${blurRadius}px)`;
+      shadowBlurCtx.filter = `blur(${blurRadius}px)`;
+      highlightBlurCtx.drawImage(highlightEdgeCanvas, 0, 0);
+      shadowBlurCtx.drawImage(shadowEdgeCanvas, 0, 0);
+      highlightBlurCtx.filter = 'none';
+      shadowBlurCtx.filter = 'none';
+
+      const swapPolarity =
+        effect.direction === 'down'
+          ? effect.style !== 'pillow-emboss'
+          : effect.style === 'pillow-emboss';
+      const hiColor = swapPolarity ? effect.shadowColor : effect.highlightColor;
+      const hiOpacityBase = swapPolarity ? effect.shadowOpacity : effect.highlightOpacity;
+      const shColor = swapPolarity ? effect.highlightColor : effect.shadowColor;
+      const shOpacityBase = swapPolarity ? effect.highlightOpacity : effect.shadowOpacity;
+      const depthBoost = Math.max(0.25, Math.min(2, effect.depth / 100));
+      const hiOpacity = Math.min(1, hiOpacityBase * depthBoost);
+      const shOpacity = Math.min(1, shOpacityBase * depthBoost);
+
+      this.tintEdgeMask(highlightColorCtx, highlightBlurCanvas, hiColor, workWidth, workHeight);
+      this.tintEdgeMask(shadowColorCtx, shadowBlurCanvas, shColor, workWidth, workHeight);
+
+      ctx.save();
+      ctx.globalAlpha = hiOpacity;
+      ctx.drawImage(highlightColorCanvas, layer.position.x - padding, layer.position.y - padding);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = shOpacity;
+      ctx.drawImage(shadowColorCanvas, layer.position.x - padding, layer.position.y - padding);
+      ctx.restore();
+    } finally {
+      this.pool.release(maskCanvas);
+      this.pool.release(shiftedPosCanvas);
+      this.pool.release(shiftedNegCanvas);
+      this.pool.release(highlightEdgeCanvas);
+      this.pool.release(shadowEdgeCanvas);
+      this.pool.release(highlightBlurCanvas);
+      this.pool.release(shadowBlurCanvas);
+      this.pool.release(highlightColorCanvas);
+      this.pool.release(shadowColorCanvas);
+      this.pool.release(tempCanvas);
+    }
+  }
+
   private renderStroke(
     ctx: CanvasContext2DLike,
     layer: RasterLayer | TextLayer,
@@ -886,22 +1287,226 @@ export class Canvas2DRenderer implements Renderer {
   }
 
   /**
-   * Render color overlay effect — fills text with overlay color.
+   * Estimate drawable bounds used for effect offscreen canvases.
+   */
+  private getEffectBounds(layer: RasterLayer | TextLayer): { width: number; height: number } | null {
+    if (layer.type === 'raster') {
+      const width = Math.ceil(layer.bounds.width);
+      const height = Math.ceil(layer.bounds.height);
+      if (width <= 0 || height <= 0) return null;
+      return { width, height };
+    }
+
+    const lines = layer.text.split('\n');
+    if (layer.textBounds && layer.textBounds.width > 0 && layer.textBounds.height > 0) {
+      return {
+        width: Math.ceil(layer.textBounds.width),
+        height: Math.ceil(layer.textBounds.height),
+      };
+    }
+
+    if (layer.writingMode === 'vertical-rl') {
+      const columns = lines.length;
+      const maxChars = lines.reduce((max, line) => Math.max(max, [...line].length), 0);
+      const colW = layer.fontSize * layer.lineHeight;
+      const charH = layer.fontSize * layer.lineHeight;
+      return {
+        width: Math.max(1, Math.ceil(columns * colW + layer.fontSize)),
+        height: Math.max(1, Math.ceil(maxChars * charH + layer.fontSize)),
+      };
+    }
+
+    const longestLine = lines.reduce((max, line) => Math.max(max, [...line].length), 0);
+    return {
+      width: Math.max(1, Math.ceil(longestLine * layer.fontSize * 0.6 + layer.fontSize)),
+      height: Math.max(1, Math.ceil(lines.length * layer.fontSize * layer.lineHeight + layer.fontSize)),
+    };
+  }
+
+  /**
+   * Build CanvasGradient from GradientOverlayEffect settings.
+   */
+  private createEffectGradient(
+    tc: CanvasRenderingContext2D,
+    effect: GradientOverlayEffect,
+    width: number,
+    height: number,
+    offset: { x: number; y: number },
+  ): CanvasGradient {
+    const scaleRatio = Math.max(0.1, Math.min(1.5, effect.scale / 100));
+    const rad = (effect.angle * Math.PI) / 180;
+    const cx = offset.x + width / 2;
+    const cy = offset.y + height / 2;
+
+    let gradient: CanvasGradient;
+    if (effect.gradientType === 'radial') {
+      const radius = Math.max(1, (Math.max(width, height) / 2) * scaleRatio);
+      gradient = tc.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    } else {
+      const half = Math.max(width, height) * scaleRatio * 0.5;
+      const x0 = cx - Math.cos(rad) * half;
+      const y0 = cy + Math.sin(rad) * half;
+      const x1 = cx + Math.cos(rad) * half;
+      const y1 = cy - Math.sin(rad) * half;
+      gradient = tc.createLinearGradient(x0, y0, x1, y1);
+    }
+
+    const normalizedStops = effect.stops
+      .map((s) => ({
+        position: Math.max(0, Math.min(1, s.position)),
+        color: s.color,
+      }))
+      .sort((a, b) => a.position - b.position);
+
+    const stops = effect.reverse
+      ? normalizedStops.map((s) => ({ ...s, position: 1 - s.position })).sort((a, b) => a.position - b.position)
+      : normalizedStops;
+
+    if (stops.length === 0) {
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
+      return gradient;
+    }
+
+    for (const stop of stops) {
+      gradient.addColorStop(
+        stop.position,
+        `rgba(${Math.round(stop.color.r)}, ${Math.round(stop.color.g)}, ${Math.round(stop.color.b)}, ${stop.color.a})`,
+      );
+    }
+    return gradient;
+  }
+
+  /**
+   * Render layer alpha silhouette into an offscreen context at the specified offset.
+   */
+  private renderLayerMask(
+    targetCtx: CanvasContext2DLike,
+    layer: RasterLayer | TextLayer,
+    offset: number,
+    width: number,
+    height: number,
+  ): boolean {
+    targetCtx.clearRect(0, 0, width, height);
+    if (layer.type === 'raster') {
+      if (!layer.imageData) return false;
+      targetCtx.putImageData(layer.imageData, offset, offset);
+      return true;
+    }
+
+    const localTextLayer: TextLayer = {
+      ...layer,
+      position: { x: offset, y: offset },
+    };
+    this.renderTextContent(targetCtx, localTextLayer, {
+      fillStyle: 'rgba(255, 255, 255, 1)',
+    });
+    return true;
+  }
+
+  /**
+   * Build inside-facing edge mask: base - shifted(base).
+   */
+  private composeInnerEdge(
+    targetCtx: CanvasContext2DLike,
+    baseMask: CanvasLike,
+    shiftedMask: CanvasLike,
+    width: number,
+    height: number,
+  ): void {
+    targetCtx.clearRect(0, 0, width, height);
+    targetCtx.drawImage(baseMask, 0, 0);
+    targetCtx.globalCompositeOperation = 'destination-out';
+    targetCtx.drawImage(shiftedMask, 0, 0);
+    targetCtx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * Build outside-facing edge mask: shifted(base) - base.
+   */
+  private composeOuterEdge(
+    targetCtx: CanvasContext2DLike,
+    shiftedMask: CanvasLike,
+    baseMask: CanvasLike,
+    width: number,
+    height: number,
+  ): void {
+    targetCtx.clearRect(0, 0, width, height);
+    targetCtx.drawImage(shiftedMask, 0, 0);
+    targetCtx.globalCompositeOperation = 'destination-out';
+    targetCtx.drawImage(baseMask, 0, 0);
+    targetCtx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * Tint an alpha mask canvas with a solid RGBA color.
+   */
+  private tintEdgeMask(
+    targetCtx: CanvasContext2DLike,
+    sourceMask: CanvasLike,
+    color: { r: number; g: number; b: number; a: number },
+    width: number,
+    height: number,
+  ): void {
+    targetCtx.clearRect(0, 0, width, height);
+    targetCtx.drawImage(sourceMask, 0, 0);
+    targetCtx.globalCompositeOperation = 'source-in';
+    targetCtx.fillStyle = `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${color.a})`;
+    targetCtx.fillRect(0, 0, width, height);
+    targetCtx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * Render color overlay effect.
+   * - text: redraw text with overlay color
+   * - raster: tint raster alpha silhouette with overlay color
    */
   private renderColorOverlay(
     ctx: CanvasContext2DLike,
     layer: RasterLayer | TextLayer,
     effect: ColorOverlayEffect,
   ): void {
-    if (layer.type !== 'text') return;
-
     const { color, opacity } = effect;
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    this.renderTextContent(ctx, layer, {
-      fillStyle: `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`,
-    });
-    ctx.restore();
+    const overlayColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+
+    if (layer.type === 'text') {
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      this.renderTextContent(ctx, layer, {
+        fillStyle: overlayColor,
+      });
+      ctx.restore();
+      return;
+    }
+
+    if (!layer.imageData) return;
+    const width = Math.max(0, Math.floor(layer.bounds.width));
+    const height = Math.max(0, Math.floor(layer.bounds.height));
+    if (width <= 0 || height <= 0) return;
+
+    const tintCanvas = this.pool.acquire(width, height);
+    const tintCtx = tintCanvas.getContext('2d');
+    if (!tintCtx) return;
+
+    try {
+      tintCtx.clearRect(0, 0, width, height);
+      tintCtx.putImageData(layer.imageData, 0, 0);
+      tintCtx.globalCompositeOperation = 'source-in';
+      tintCtx.fillStyle = overlayColor;
+      tintCtx.fillRect(0, 0, width, height);
+      tintCtx.globalCompositeOperation = 'source-over';
+
+      if (layer.mask?.enabled && layer.mask.data.length > 0) {
+        this.applyMask(tintCtx, layer);
+      }
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(tintCanvas, layer.position.x, layer.position.y);
+      ctx.restore();
+    } finally {
+      this.pool.release(tintCanvas);
+    }
   }
 
   private findLayer(group: LayerGroup, layerId: string): Layer | null {
