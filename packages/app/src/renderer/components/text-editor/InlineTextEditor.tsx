@@ -37,7 +37,12 @@ function contrastShadow(c: { r: number; g: number; b: number }): string {
  * Handles browser-inserted line breaks and trims the trailing editor newline.
  */
 function extractText(el: HTMLElement): string {
-  return (el.innerText ?? '').replace(/\n$/, '');
+  const inner = el.innerText ?? '';
+  const raw = inner.length > 0 ? inner : (el.textContent ?? '');
+  return raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\n$/, '');
 }
 
 /** Put the text caret at the end of a contentEditable element. */
@@ -81,11 +86,65 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const stopEditingText = useAppStore((s) => s.stopEditingText);
   const editorRef = useRef<HTMLDivElement>(null);
   const isComposing = useRef(false);
+  const lastEditingLayerIdRef = useRef<string | null>(null);
+
+  const commitEditorState = useCallback(
+    (layerId: string, el: HTMLDivElement): void => {
+      const vp = getViewport();
+      const docWidth = el.offsetWidth / vp.zoom;
+      const docHeight = el.offsetHeight / vp.zoom;
+      const currentText = extractText(el);
+
+      const state = useAppStore.getState();
+      const doc = state.document;
+      if (!doc) return;
+
+      const layer = findLayerById(doc.rootGroup, layerId);
+      if (!layer || layer.type !== 'text') return;
+
+      const tl = layer as TextLayer;
+
+      // Keep latest visible editor text even if the final input/composition
+      // event did not fire before focus loss or layer switch.
+      if (tl.text !== currentText) {
+        setTextProperty(layerId, 'text', currentText);
+      }
+
+      const nextBounds = {
+        x: tl.position.x,
+        y: tl.position.y,
+        width: docWidth,
+        height: docHeight,
+      };
+      const prevBounds = tl.textBounds;
+      const boundsChanged = !prevBounds
+        || prevBounds.x !== nextBounds.x
+        || prevBounds.y !== nextBounds.y
+        || prevBounds.width !== nextBounds.width
+        || prevBounds.height !== nextBounds.height;
+      if (boundsChanged) {
+        setTextProperty(layerId, 'textBounds', nextBounds);
+      }
+    },
+    [setTextProperty],
+  );
 
   useEffect(() => {
-    if (!editingTextLayerId) return;
+    const prevLayerId = lastEditingLayerIdRef.current;
     const el = editorRef.current;
-    if (!el) return;
+    // If editing target changed while the editor stayed mounted, commit
+    // previous layer text before replacing the editor contents.
+    if (prevLayerId && prevLayerId !== editingTextLayerId && el) {
+      commitEditorState(prevLayerId, el);
+    }
+    lastEditingLayerIdRef.current = editingTextLayerId ?? null;
+
+    if (!editingTextLayerId) return;
+    const nextEl = editorRef.current;
+    const currentEl = nextEl ?? el;
+    if (!currentEl) return;
+
+    const targetEl = currentEl;
 
     const currentDoc = useAppStore.getState().document;
     if (!currentDoc) return;
@@ -93,10 +152,29 @@ export function InlineTextEditor(): React.JSX.Element | null {
     const layer = findLayerById(currentDoc.rootGroup, editingTextLayerId);
     if (!layer || layer.type !== 'text') return;
 
-    el.textContent = layer.text;
-    el.focus();
-    placeCaretAtEnd(el);
-  }, [editingTextLayerId]);
+    targetEl.textContent = layer.text;
+    const rafId = window.requestAnimationFrame(() => {
+      // Delay focus until after the click/up sequence finishes.
+      targetEl.focus();
+      placeCaretAtEnd(targetEl);
+    });
+
+    return (): void => window.cancelAnimationFrame(rafId);
+  }, [editingTextLayerId, commitEditorState]);
+
+  useEffect(() => {
+    if (!editingTextLayerId) return;
+
+    const handleWindowBlur = (): void => {
+      const el = editorRef.current;
+      if (!el) return;
+      commitEditorState(editingTextLayerId, el);
+      stopEditingText(editingTextLayerId);
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+    return (): void => window.removeEventListener('blur', handleWindowBlur);
+  }, [editingTextLayerId, commitEditorState, stopEditingText]);
 
   const handleCompositionStart = useCallback((): void => {
     isComposing.current = true;
@@ -139,7 +217,10 @@ export function InlineTextEditor(): React.JSX.Element | null {
     (e: React.KeyboardEvent): void => {
       // Allow all keys during IME composition
       if (e.nativeEvent.isComposing) return;
+      // Never bubble text-edit key events to global shortcut handlers.
+      e.stopPropagation();
       if (e.key === 'Escape') {
+        e.preventDefault();
         e.stopPropagation();
         stopEditingText(editingTextLayerId ?? undefined);
       }
@@ -152,30 +233,12 @@ export function InlineTextEditor(): React.JSX.Element | null {
   );
 
   const handleBlur = useCallback((): void => {
-    // Commit the resized dimensions as textBounds before stopping edit
+    // Commit current text and resized dimensions before stopping edit.
     if (editingTextLayerId && editorRef.current) {
-      const el = editorRef.current;
-      const vp = getViewport();
-      const docWidth = el.offsetWidth / vp.zoom;
-      const docHeight = el.offsetHeight / vp.zoom;
-
-      const state = useAppStore.getState();
-      const doc = state.document;
-      if (doc) {
-        const layer = findLayerById(doc.rootGroup, editingTextLayerId);
-        if (layer && layer.type === 'text') {
-          const tl = layer as TextLayer;
-          setTextProperty(editingTextLayerId, 'textBounds', {
-            x: tl.position.x,
-            y: tl.position.y,
-            width: docWidth,
-            height: docHeight,
-          });
-        }
-      }
+      commitEditorState(editingTextLayerId, editorRef.current);
     }
     stopEditingText(editingTextLayerId);
-  }, [editingTextLayerId, setTextProperty, stopEditingText]);
+  }, [editingTextLayerId, commitEditorState, stopEditingText]);
 
   if (!editingTextLayerId || !document) return null;
 
@@ -211,6 +274,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
       className="inline-text-editor"
       contentEditable
       suppressContentEditableWarning
+      tabIndex={0}
       role="textbox"
       aria-multiline
       onInput={handleInput}

@@ -33,6 +33,21 @@ import type {
 import type { CanvasContext2DLike, CanvasLike } from './canvas-pool';
 import { CanvasPool, createBrowserCanvas, type CanvasFactory } from './canvas-pool';
 
+/** Font fallback stack to keep JP/EN glyph rendering consistent in Electron. */
+const CANVAS_TEXT_FALLBACK_FONTS =
+  '"Yu Gothic UI", "Yu Gothic", Meiryo, "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", sans-serif';
+
+/** Build font-family list with robust CJK fallback for Canvas2D text rendering. */
+function withCanvasTextFallback(fontFamily: string): string {
+  const base = fontFamily.trim();
+  if (!base) return CANVAS_TEXT_FALLBACK_FONTS;
+  // Avoid duplicating the stack if already present.
+  if (base.includes('Yu Gothic') || base.includes('Meiryo') || base.includes('Noto Sans CJK JP')) {
+    return base;
+  }
+  return `${base}, ${CANVAS_TEXT_FALLBACK_FONTS}`;
+}
+
 /**
  * Canvas 2D renderer implementation.
  *
@@ -370,7 +385,7 @@ export class Canvas2DRenderer implements Renderer {
     // Build font string
     const fontStyle = layer.italic ? 'italic' : 'normal';
     const fontWeight = layer.bold ? 'bold' : 'normal';
-    tc.font = `${fontStyle} ${fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
+    tc.font = `${fontStyle} ${fontWeight} ${layer.fontSize}px ${withCanvasTextFallback(layer.fontFamily)}`;
 
     // Color -> CSS rgba (use override if provided)
     if (overrides?.fillStyle) {

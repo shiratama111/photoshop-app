@@ -53,6 +53,7 @@ export function CanvasView(): React.JSX.Element {
   const panOffset = useAppStore((s) => s.panOffset);
   const activeTool = useAppStore((s) => s.activeTool);
   const brushSize = useAppStore((s) => s.brushSize);
+  const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const renderToCanvas = useAppStore((s) => s.renderToCanvas);
   const setPanOffset = useAppStore((s) => s.setPanOffset);
   const fitToWindow = useAppStore((s) => s.fitToWindow);
@@ -132,7 +133,14 @@ export function CanvasView(): React.JSX.Element {
   // Re-render when document or revision changes
   useEffect(() => {
     scheduleRender();
-  }, [scheduleRender, revision, zoom, panOffset.x, panOffset.y]);
+  }, [scheduleRender, revision, zoom, panOffset.x, panOffset.y, editingTextLayerId]);
+
+  // Force an immediate repaint when text edit mode toggles.
+  // Electron can throttle rAF around window deactivation, which may leave
+  // stale pixels after the inline editor unmounts.
+  useEffect(() => {
+    doRender();
+  }, [doRender, editingTextLayerId]);
 
   // Fit to window on first mount and when document changes
   useEffect(() => {
@@ -178,6 +186,25 @@ export function CanvasView(): React.JSX.Element {
     observer.observe(container);
     return (): void => observer.disconnect();
   }, [fitToWindow, scheduleRender]);
+
+  // Ensure canvas is repainted after app/window focus changes.
+  useEffect(() => {
+    const handleFocus = (): void => {
+      doRender();
+    };
+    const handleVisibility = (): void => {
+      if (globalThis.document.visibilityState === 'visible') {
+        doRender();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    globalThis.document.addEventListener('visibilitychange', handleVisibility);
+    return (): void => {
+      window.removeEventListener('focus', handleFocus);
+      globalThis.document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [doRender]);
 
   // Space-key listener for temporary pan mode (PS-PAN-001)
   useEffect(() => {

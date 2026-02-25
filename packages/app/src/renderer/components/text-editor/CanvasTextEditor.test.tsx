@@ -91,6 +91,24 @@ describe('CanvasTextEditor (PS-TEXT-005)', () => {
       const source = fs.readFileSync(path.resolve(__dirname, '../../App.tsx'), 'utf8');
       expect(source).toContain('target.isContentEditable');
     });
+
+    it('commits latest editor text on blur as a fallback path', () => {
+      const source = fs.readFileSync(path.resolve(__dirname, 'InlineTextEditor.tsx'), 'utf8');
+      expect(source).toContain("setTextProperty(layerId, 'text', currentText)");
+    });
+
+    it('commits and exits text editing when window loses focus', () => {
+      const source = fs.readFileSync(path.resolve(__dirname, 'InlineTextEditor.tsx'), 'utf8');
+      expect(source).toContain("window.addEventListener('blur', handleWindowBlur)");
+    });
+
+    it('forces canvas refresh when editing session toggles', () => {
+      const source = fs.readFileSync(path.resolve(__dirname, '../canvas/CanvasView.tsx'), 'utf8');
+      expect(source).toContain('const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);');
+      expect(source).toContain('editingTextLayerId');
+      expect(source).toContain('doRender();');
+      expect(source).toContain("window.addEventListener('focus', handleFocus)");
+    });
   });
 });
 
