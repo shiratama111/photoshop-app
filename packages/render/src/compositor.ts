@@ -80,6 +80,7 @@ export class Canvas2DRenderer implements Renderer {
 
     const { width, height } = canvas;
     const docSize = options.documentSize;
+    const hiddenLayerIds = options.hiddenLayerIds ? new Set(options.hiddenLayerIds) : null;
 
     if (docSize) {
       // Pasteboard/artboard mode: dark pasteboard, then white artboard inside viewport
@@ -107,7 +108,7 @@ export class Canvas2DRenderer implements Renderer {
       ctx.fillRect(0, 0, docSize.width, docSize.height);
 
       // 4. Render layer tree bottom-to-top
-      this.renderGroup(ctx, document.rootGroup, options);
+      this.renderGroup(ctx, document.rootGroup, options, hiddenLayerIds);
 
       ctx.restore();
     } else {
@@ -127,7 +128,7 @@ export class Canvas2DRenderer implements Renderer {
         vp.offset.y * pixelRatio,
       );
 
-      this.renderGroup(ctx, document.rootGroup, options);
+      this.renderGroup(ctx, document.rootGroup, options, hiddenLayerIds);
 
       ctx.restore();
     }
@@ -257,12 +258,14 @@ export class Canvas2DRenderer implements Renderer {
     ctx: CanvasContext2DLike,
     group: LayerGroup,
     options: RenderOptions,
+    hiddenLayerIds: ReadonlySet<string> | null,
   ): void {
     for (const layer of group.children) {
       if (!layer.visible) continue;
+      if (hiddenLayerIds?.has(layer.id)) continue;
 
       if (layer.type === 'group') {
-        this.renderGroupAsComposite(ctx, layer, options);
+        this.renderGroupAsComposite(ctx, layer, options, hiddenLayerIds);
       } else {
         this.renderLayer(ctx, layer, options);
       }
@@ -276,6 +279,7 @@ export class Canvas2DRenderer implements Renderer {
     ctx: CanvasContext2DLike,
     group: LayerGroup,
     options: RenderOptions,
+    hiddenLayerIds: ReadonlySet<string> | null,
   ): void {
     const { width, height } = ctx.canvas;
     const tempCanvas = this.pool.acquire(width, height);
@@ -285,7 +289,7 @@ export class Canvas2DRenderer implements Renderer {
     tempCtx.clearRect(0, 0, width, height);
 
     // Render children to temp canvas
-    this.renderGroup(tempCtx, group, options);
+    this.renderGroup(tempCtx, group, options, hiddenLayerIds);
 
     // Composite to parent with group opacity/blend
     ctx.save();
@@ -658,6 +662,12 @@ export class Canvas2DRenderer implements Renderer {
       }
 
       const words = line.split(' ');
+      // No-space languages (e.g., Japanese) and long unbroken tokens
+      // need character-level wrapping to match inline contentEditable behavior.
+      if (words.length <= 1) {
+        wrapped.push(...this.wrapTextByCharacter(ctx, line, maxWidth));
+        continue;
+      }
       let current = '';
 
       for (const word of words) {
@@ -665,9 +675,21 @@ export class Canvas2DRenderer implements Renderer {
         const metrics = ctx.measureText(test);
         if (metrics.width > maxWidth && current) {
           wrapped.push(current);
-          current = word;
+          if (ctx.measureText(word).width > maxWidth) {
+            const parts = this.wrapTextByCharacter(ctx, word, maxWidth);
+            wrapped.push(...parts.slice(0, -1));
+            current = parts[parts.length - 1] ?? '';
+          } else {
+            current = word;
+          }
         } else {
-          current = test;
+          if (metrics.width > maxWidth) {
+            const parts = this.wrapTextByCharacter(ctx, word, maxWidth);
+            wrapped.push(...parts.slice(0, -1));
+            current = parts[parts.length - 1] ?? '';
+          } else {
+            current = test;
+          }
         }
       }
 
@@ -677,6 +699,36 @@ export class Canvas2DRenderer implements Renderer {
     }
 
     return wrapped;
+  }
+
+  /**
+   * Wrap a string at character boundaries so CJK text without spaces
+   * still respects textBounds width.
+   */
+  private wrapTextByCharacter(
+    ctx: CanvasRenderingContext2D | { measureText(text: string): { width: number } },
+    text: string,
+    maxWidth: number,
+  ): string[] {
+    const chars = [...text];
+    const lines: string[] = [];
+    let current = '';
+
+    for (const ch of chars) {
+      const test = `${current}${ch}`;
+      if (ctx.measureText(test).width > maxWidth && current) {
+        lines.push(current);
+        current = ch;
+      } else {
+        current = test;
+      }
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+
+    return lines.length > 0 ? lines : [''];
   }
 
   /**

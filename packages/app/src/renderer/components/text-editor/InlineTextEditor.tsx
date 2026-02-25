@@ -77,11 +77,28 @@ function insertPlainTextAtSelection(el: HTMLElement, text: string): void {
   selection.addRange(range);
 }
 
+/** Auto-size editor box to current content so active/inactive layout stays consistent. */
+function resizeEditorToContent(el: HTMLDivElement): void {
+  const computed = globalThis.getComputedStyle(el);
+  const lineHeight = Number.parseFloat(computed.lineHeight);
+  const minHeight = Number.isFinite(lineHeight) ? Math.max(1, Math.ceil(lineHeight)) : 1;
+
+  el.style.width = 'auto';
+  el.style.height = 'auto';
+
+  const nextWidth = Math.max(1, Math.ceil(el.scrollWidth));
+  const nextHeight = Math.max(minHeight, Math.ceil(el.scrollHeight));
+
+  el.style.width = `${nextWidth}px`;
+  el.style.height = `${nextHeight}px`;
+}
+
 /** InlineTextEditor - fixed-position contentEditable overlay for editing text layers. */
 export function InlineTextEditor(): React.JSX.Element | null {
   const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const document = useAppStore((s) => s.document);
   const zoom = useAppStore((s) => s.zoom);
+  const textTransformPreview = useAppStore((s) => s.textTransformPreview);
   const setTextProperty = useAppStore((s) => s.setTextProperty);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -154,6 +171,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
     targetEl.textContent = layer.text;
     const rafId = window.requestAnimationFrame(() => {
+      resizeEditorToContent(targetEl);
       // Delay focus until after the click/up sequence finishes.
       targetEl.focus();
       placeCaretAtEnd(targetEl);
@@ -183,6 +201,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const handleCompositionEnd = useCallback(
     (e: React.CompositionEvent<HTMLDivElement>): void => {
       isComposing.current = false;
+      resizeEditorToContent(e.currentTarget);
       if (editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
       }
@@ -193,6 +212,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const handleInput = useCallback(
     (e: React.FormEvent<HTMLDivElement>): void => {
       if (isComposing.current) return;
+      resizeEditorToContent(e.currentTarget as HTMLDivElement);
       if (editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
       }
@@ -205,6 +225,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
       e.preventDefault();
       const plainText = e.clipboardData.getData('text/plain').replace(/\r\n/g, '\n');
       insertPlainTextAtSelection(e.currentTarget, plainText);
+      resizeEditorToContent(e.currentTarget);
 
       if (!isComposing.current && editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
@@ -233,6 +254,10 @@ export function InlineTextEditor(): React.JSX.Element | null {
   );
 
   const handleBlur = useCallback((): void => {
+    // Keep inline edit session alive while dragging transform handles.
+    if (useAppStore.getState().transformActive) {
+      return;
+    }
     // Commit current text and resized dimensions before stopping edit.
     if (editingTextLayerId && editorRef.current) {
       commitEditorState(editingTextLayerId, editorRef.current);
@@ -247,10 +272,13 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   const textLayer = layer as TextLayer;
   const writingMode = textLayer.writingMode ?? 'horizontal-tb';
+  const activePreview = textTransformPreview?.layerId === textLayer.id
+    ? textTransformPreview.bounds
+    : null;
   const vp = getViewport();
   const screenPos = vp.documentToScreen({
-    x: textLayer.position.x,
-    y: textLayer.position.y,
+    x: activePreview?.x ?? textLayer.position.x,
+    y: activePreview?.y ?? textLayer.position.y,
   });
 
   // Account for the canvas-area element offset
@@ -263,9 +291,9 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   // If textBounds exists, set initial size in screen coordinates
   const sizeStyle: React.CSSProperties = {};
-  if (textLayer.textBounds) {
-    sizeStyle.width = `${textLayer.textBounds.width * zoom}px`;
-    sizeStyle.height = `${textLayer.textBounds.height * zoom}px`;
+  if (activePreview) {
+    sizeStyle.width = `${activePreview.width * zoom}px`;
+    sizeStyle.height = `${activePreview.height * zoom}px`;
   }
 
   return (
