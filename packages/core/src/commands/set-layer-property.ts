@@ -20,6 +20,9 @@ const PROPERTY_LABELS: Record<string, string> = {
   fontFamily: 'フォント',
   text: 'テキスト',
   writingMode: '文字方向',
+  underline: '下線',
+  strikethrough: '取り消し線',
+  alignment: '文字揃え',
 };
 
 /**

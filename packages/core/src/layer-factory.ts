@@ -6,7 +6,7 @@
  * @see CORE-001: Layer creation factories
  */
 
-import type { RasterLayer, TextLayer, LayerGroup, Color, WritingMode } from '@photoshop-app/types';
+import type { RasterLayer, TextLayer, LayerGroup, Color, WritingMode, TextAlignment } from '@photoshop-app/types';
 import { BlendMode } from '@photoshop-app/types';
 import { generateId } from './uuid';
 
@@ -42,10 +42,12 @@ export interface CreateTextLayerOptions {
   color?: Color;
   bold?: boolean;
   italic?: boolean;
-  alignment?: 'left' | 'center' | 'right';
+  alignment?: TextAlignment;
   lineHeight?: number;
   letterSpacing?: number;
   writingMode?: WritingMode;
+  underline?: boolean;
+  strikethrough?: boolean;
 }
 
 /**
@@ -83,6 +85,8 @@ export function createTextLayer(
     letterSpacing: options?.letterSpacing ?? 0,
     textBounds: null,
     writingMode: options?.writingMode ?? 'horizontal-tb',
+    underline: options?.underline ?? false,
+    strikethrough: options?.strikethrough ?? false,
   };
 }
 

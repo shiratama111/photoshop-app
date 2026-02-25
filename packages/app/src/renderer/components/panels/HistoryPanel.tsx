@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 
 export function HistoryPanel(): React.JSX.Element | null {
   const activeDocument = useAppStore((state) => state.document);
@@ -31,7 +32,7 @@ export function HistoryPanel(): React.JSX.Element | null {
   return (
     <div className="history-panel">
       <div className="sidebar-header">
-        <span>History</span>
+        <span>{t('history.title')}</span>
       </div>
 
       <div className="history-list">
@@ -52,17 +53,17 @@ export function HistoryPanel(): React.JSX.Element | null {
           className="layer-action-btn"
           onClick={undo}
           disabled={!canUndo}
-          title="Undo"
+          title={t('history.undo')}
         >
-          ↶ Undo
+          ↶ {t('history.undo')}
         </button>
         <button
           className="layer-action-btn"
           onClick={redo}
           disabled={!canRedo}
-          title="Redo"
+          title={t('history.redo')}
         >
-          ↷ Redo
+          ↷ {t('history.redo')}
         </button>
       </div>
     </div>

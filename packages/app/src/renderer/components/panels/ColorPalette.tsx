@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 import { rgbToHex } from './color-utils';
 
 /** 40 preset colors: Row 1 = pure, Row 2 = light, Row 3 = dark, Row 4 = greys. */
@@ -79,25 +80,25 @@ export function ColorPalette(): React.JSX.Element {
           <div
             className="color-palette__swatch color-palette__swatch--fg"
             style={{ background: fgHex }}
-            title="Foreground"
+            title={t('colorPalette.foreground')}
           />
           <div
             className="color-palette__swatch color-palette__swatch--bg"
             style={{ background: bgHex }}
-            title="Background"
+            title={t('colorPalette.background')}
           />
         </div>
         <button
           className="color-palette__btn"
           onClick={swapColors}
-          title="Swap colors (X)"
+          title={t('colorPalette.swap')}
         >
           &#x21C4;
         </button>
         <button
           className="color-palette__btn"
           onClick={resetColors}
-          title="Reset colors (D)"
+          title={t('colorPalette.reset')}
         >
           &#x25A3;
         </button>

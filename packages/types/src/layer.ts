@@ -61,7 +61,7 @@ export interface RasterLayer extends BaseLayer {
 }
 
 /** Text alignment options. */
-export type TextAlignment = 'left' | 'center' | 'right';
+export type TextAlignment = 'left' | 'center' | 'right' | 'justify';
 
 /** Writing direction for text layout. */
 export type WritingMode = 'horizontal-tb' | 'vertical-rl';
@@ -91,6 +91,10 @@ export interface TextLayer extends BaseLayer {
   textBounds: Rect | null;
   /** Writing direction: horizontal (default) or vertical. */
   writingMode: WritingMode;
+  /** Whether the text has an underline. */
+  underline: boolean;
+  /** Whether the text has a strikethrough. */
+  strikethrough: boolean;
 }
 
 /** A group that contains child layers. */

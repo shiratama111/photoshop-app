@@ -261,6 +261,8 @@ function mapTextLayer(
     letterSpacing: style?.tracking ? style.tracking / 1000 : 0,
     textBounds: null,
     writingMode: 'horizontal-tb',
+    underline: style?.underline ?? false,
+    strikethrough: style?.strikethrough ?? false,
   };
 }
 
@@ -269,12 +271,17 @@ function mapBlendMode(mode: string | undefined): BlendMode {
   return BLEND_MODE_MAP[mode] ?? ('normal' as BlendMode);
 }
 
-function mapAlignment(justification: string | undefined): 'left' | 'center' | 'right' {
+function mapAlignment(justification: string | undefined): 'left' | 'center' | 'right' | 'justify' {
   switch (justification) {
     case 'center':
       return 'center';
     case 'right':
       return 'right';
+    case 'justifyAll':
+    case 'justifyLeft':
+    case 'justifyCenter':
+    case 'justifyRight':
+      return 'justify';
     default:
       return 'left';
   }

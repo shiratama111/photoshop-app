@@ -56,6 +56,7 @@ import {
 } from '@photoshop-app/core';
 import { importPsd, exportPsd } from '@photoshop-app/adapter-psd';
 import { Canvas2DRenderer, ViewportImpl } from '@photoshop-app/render';
+import { t } from './i18n';
 
 /** Active tool in the toolbar. */
 export type Tool =
@@ -591,7 +592,7 @@ async function openImageAsDocument(
     const offscreen = new OffscreenCanvas(width, height);
     const ctx = offscreen.getContext('2d');
     if (!ctx) {
-      set({ statusMessage: 'Failed to create canvas context' });
+      set({ statusMessage: t('status.failedCreateCanvasContext') });
       bitmap.close();
       return;
     }
@@ -656,11 +657,11 @@ async function openImageAsDocument(
       revision: 0,
       historyEntries: ['Original'],
       historyIndex: 0,
-      statusMessage: `Opened: ${name} (${width} x ${height})`,
+      statusMessage: `${t('status.opened')}: ${name} (${width} x ${height})`,
     });
     eventBus.emit('document:changed');
   } catch {
-    set({ statusMessage: `Failed to open image: ${getBaseName(filePath)}` });
+    set({ statusMessage: `${t('status.failedOpenImage')}: ${getBaseName(filePath)}` });
   }
 }
 
@@ -683,7 +684,7 @@ function openPsdFromData(
   }
 
   if (ext !== 'psd') {
-    set({ statusMessage: `Unsupported file format: .${ext}` });
+    set({ statusMessage: `${t('status.unsupportedFileFormat')}: .${ext}` });
     return;
   }
   const { document: doc, report } = importPsd(new Uint8Array(data), getBaseName(filePath));
@@ -700,7 +701,7 @@ function openPsdFromData(
       revision: 0,
       historyEntries: ['Original'],
       historyIndex: 0,
-      statusMessage: `Opened: ${getBaseName(filePath)}`,
+      statusMessage: `${t('status.opened')}: ${getBaseName(filePath)}`,
     });
     eventBus.emit('document:changed');
   }
@@ -713,7 +714,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   activeTool: 'select',
   zoom: 1,
   panOffset: { x: 0, y: 0 },
-  statusMessage: 'Ready',
+  statusMessage: t('status.ready'),
   showAbout: false,
   selectedLayerId: null,
   canUndo: false,
@@ -812,7 +813,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       revision: 0,
       historyEntries: ['Original'],
       historyIndex: 0,
-      statusMessage: `Created: ${name} (${width}x${height})`,
+      statusMessage: `${t('status.created')}: ${name} (${width}x${height})`,
     });
     eventBus.emit('document:changed');
     get().updateTitleBar();
@@ -842,7 +843,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }
     const cmd = new AddLayerCommand(doc.rootGroup, layer);
     executeCommand(cmd, set);
-    set({ selectedLayerId: layer.id, statusMessage: `Added: ${layerName}` });
+    set({ selectedLayerId: layer.id, statusMessage: `${t('status.added')}: ${layerName}` });
     doc.selectedLayerId = layer.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
@@ -856,7 +857,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const group = createLayerGroup(groupName);
     const cmd = new AddLayerCommand(doc.rootGroup, group);
     executeCommand(cmd, set);
-    set({ selectedLayerId: group.id, statusMessage: `Added group: ${groupName}` });
+    set({ selectedLayerId: group.id, statusMessage: `${t('status.addedGroup')}: ${groupName}` });
     doc.selectedLayerId = group.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer: group, parentId: doc.rootGroup.id });
@@ -877,7 +878,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       doc.selectedLayerId = null;
     }
     doc.dirty = true;
-    set({ statusMessage: `Removed: ${layer.name}` });
+    set({ statusMessage: `${t('status.removed')}: ${layer.name}` });
     eventBus.emit('layer:removed', { layerId, parentId: parent.id });
     get().updateTitleBar();
   },
@@ -893,7 +894,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const idx = parent.children.indexOf(layer);
     const cmd = new AddLayerCommand(parent, cloned, idx + 1);
     executeCommand(cmd, set);
-    set({ selectedLayerId: cloned.id, statusMessage: `Duplicated: ${layer.name}` });
+    set({ selectedLayerId: cloned.id, statusMessage: `${t('status.duplicated')}: ${layer.name}` });
     doc.selectedLayerId = cloned.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer: cloned, parentId: parent.id });
@@ -999,7 +1000,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const layer = createTextLayer(layerName, text ?? 'New Text');
     const cmd = new AddLayerCommand(doc.rootGroup, layer);
     executeCommand(cmd, set);
-    set({ selectedLayerId: layer.id, statusMessage: `Added: ${layerName}` });
+    set({ selectedLayerId: layer.id, statusMessage: `${t('status.added')}: ${layerName}` });
     doc.selectedLayerId = layer.id;
     doc.dirty = true;
     eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
@@ -1011,9 +1012,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!doc) return;
     const layer = findLayerById(doc.rootGroup, layerId);
     if (!layer || layer.type !== 'text') return;
+    const textLayer = layer as Layer & { underline?: boolean; strikethrough?: boolean };
     if (key === 'writingMode' && layer.writingMode === undefined) {
       // Backward compatibility: old documents may lack writingMode.
       layer.writingMode = 'horizontal-tb';
+    }
+    if (key === 'underline' && textLayer.underline === undefined) {
+      // Backward compatibility: old documents may lack underline flag.
+      textLayer.underline = false;
+    }
+    if (key === 'strikethrough' && textLayer.strikethrough === undefined) {
+      // Backward compatibility: old documents may lack strikethrough flag.
+      textLayer.strikethrough = false;
     }
     const cmd = new SetLayerPropertyCommand(
       layer,
@@ -1133,8 +1143,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         documentSize: { width: doc.canvas.size.width, height: doc.canvas.size.height },
       });
     } catch {
-      if (get().statusMessage !== 'Render failed') {
-        set({ statusMessage: 'Render failed' });
+      const renderFailedMessage = t('status.renderFailed');
+      if (get().statusMessage !== renderFailedMessage) {
+        set({ statusMessage: renderFailedMessage });
       }
     }
   },
@@ -1186,7 +1197,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       if (saved) {
         doc.dirty = false;
         doc.modifiedAt = new Date().toISOString();
-        set({ statusMessage: `Saved: ${getBaseName(saved)}` });
+        set({ statusMessage: `${t('status.saved')}: ${getBaseName(saved)}` });
         get().updateTitleBar();
         // Clear auto-save after successful save
         await api.autoSaveClear(doc.id);
@@ -1208,7 +1219,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       doc.filePath = saved;
       doc.dirty = false;
       doc.modifiedAt = new Date().toISOString();
-      set({ statusMessage: `Saved: ${getBaseName(saved)}` });
+      set({ statusMessage: `${t('status.saved')}: ${getBaseName(saved)}` });
       get().updateTitleBar();
       // Clear auto-save after successful save
       await api.autoSaveClear(doc.id);
@@ -1218,7 +1229,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   exportAsImage: async (format): Promise<void> => {
     const { document: doc } = get();
     if (!doc) {
-      set({ statusMessage: 'No document to export' });
+      set({ statusMessage: t('status.noDocumentToExport') });
       return;
     }
 
@@ -1227,7 +1238,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const offscreen = new OffscreenCanvas(width, height);
       const ctx = offscreen.getContext('2d');
       if (!ctx) {
-        set({ statusMessage: 'Failed to create export canvas' });
+        set({ statusMessage: t('status.failedCreateExportCanvas') });
         return;
       }
 
@@ -1256,10 +1267,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const defaultName = `${doc.name || 'Untitled'}.${ext}`;
       const saved = await api.exportFile(new Uint8Array(arrayBuffer).buffer, defaultName);
       if (saved) {
-        set({ statusMessage: `Exported: ${getBaseName(saved)}` });
+        set({ statusMessage: `${t('status.exported')}: ${getBaseName(saved)}` });
       }
     } catch {
-      set({ statusMessage: 'Export failed' });
+      set({ statusMessage: t('status.exportFailed') });
     }
   },
 
@@ -1277,7 +1288,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       revision: 0,
       historyEntries: ['Original'],
       historyIndex: 0,
-      statusMessage: `Opened: ${doc.name}`,
+      statusMessage: `${t('status.opened')}: ${doc.name}`,
     });
     eventBus.emit('document:changed');
     get().updateTitleBar();
@@ -1285,7 +1296,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   cancelPsdImport: (): void => {
-    set({ pendingPsdImport: null, statusMessage: 'Import cancelled' });
+    set({ pendingPsdImport: null, statusMessage: t('status.importCancelled') });
   },
 
   loadRecentFiles: async (): Promise<void> => {
@@ -1326,7 +1337,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const api = getElectronAPI();
       const psdData = exportPsd(doc);
       await api.autoSaveWrite(doc.id, doc.name, doc.filePath, psdData);
-      set({ statusMessage: 'Auto-saved' });
+      set({ statusMessage: t('status.autoSaved') });
     } catch {
       // Silently ignore auto-save failures
     }
@@ -1365,7 +1376,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const api = getElectronAPI();
       const result = await api.readRecoveryFile(documentId);
       if (!result) {
-        set({ statusMessage: 'Recovery failed: file not found' });
+        set({ statusMessage: t('status.recoveryFileNotFound') });
         return;
       }
       const entry = get().recoveryEntries.find((e) => e.documentId === documentId);
@@ -1390,7 +1401,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           revision: 0,
           historyEntries: ['Original'],
           historyIndex: 0,
-          statusMessage: `Recovered: ${name}`,
+          statusMessage: `${t('status.recovered')}: ${name}`,
         });
         eventBus.emit('document:changed');
       }
@@ -1399,7 +1410,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       get().updateTitleBar();
       get().startAutoSave();
     } catch {
-      set({ statusMessage: 'Recovery failed' });
+      set({ statusMessage: t('status.recoveryFailed') });
     }
   },
 
@@ -1418,14 +1429,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const api = getElectronAPI();
       const result = await api.readFileByPath(filePath);
       if (!result) {
-        set({ statusMessage: `Could not read: ${getBaseName(filePath)}` });
+        set({ statusMessage: `${t('status.couldNotRead')}: ${getBaseName(filePath)}` });
         return;
       }
       openPsdFromData(result.data, result.filePath, set);
       get().updateTitleBar();
       get().startAutoSave();
     } catch {
-      set({ statusMessage: `Failed to open: ${getBaseName(filePath)}` });
+      set({ statusMessage: `${t('status.failedOpen')}: ${getBaseName(filePath)}` });
     }
   },
 
@@ -1530,10 +1541,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       });
       eventBus.emit('document:changed');
       doc.dirty = true;
-      set({ statusMessage: `Resized layer: ${newWidth} x ${newHeight}` });
+      set({ statusMessage: `${t('status.resizedLayer')}: ${newWidth} x ${newHeight}` });
       get().updateTitleBar();
     } catch {
-      set({ statusMessage: 'Resize failed' });
+      set({ statusMessage: t('status.resizeFailed') });
     }
   },
 
@@ -1585,12 +1596,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setSelection: (rect): void => {
     set({ selection: rect });
     if (rect) {
-      set({ statusMessage: `Selection: ${Math.round(rect.width)} x ${Math.round(rect.height)}` });
+      set({ statusMessage: `${t('status.selection')}: ${Math.round(rect.width)} x ${Math.round(rect.height)}` });
     }
   },
 
   clearSelection: (): void => {
-    set({ selection: null, statusMessage: 'Selection cleared' });
+    set({ selection: null, statusMessage: t('status.selectionCleared') });
   },
 
   selectAll: (): void => {
@@ -1599,7 +1610,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { width, height } = doc.canvas.size;
     set({
       selection: { x: 0, y: 0, width, height },
-      statusMessage: `Selected all: ${width} x ${height}`,
+      statusMessage: `${t('status.selectedAll')}: ${width} x ${height}`,
     });
   },
 
@@ -1610,7 +1621,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   cropToSelection: (): void => {
     const { document: doc, selection } = get();
     if (!doc || !selection) {
-      set({ statusMessage: 'No selection to crop' });
+      set({ statusMessage: t('status.noSelectionToCrop') });
       return;
     }
     const sx = Math.max(0, Math.round(selection.x));
@@ -1639,7 +1650,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     doc.canvas.size = { width: sw, height: sh };
     set({
       selection: null,
-      statusMessage: `Cropped to ${sw} x ${sh}`,
+      statusMessage: `${t('status.cropped')}: ${sw} x ${sh}`,
       revision: get().revision + 1,
     });
     doc.dirty = true;
@@ -1667,12 +1678,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   applyFilter: (filterFn): void => {
     const { document: doc, selectedLayerId } = get();
     if (!doc || !selectedLayerId) {
-      set({ statusMessage: 'Select a raster layer first' });
+      set({ statusMessage: t('status.selectRasterLayerFirst') });
       return;
     }
     const layer = findLayerById(doc.rootGroup, selectedLayerId);
     if (!layer || layer.type !== 'raster') {
-      set({ statusMessage: 'Filter can only be applied to raster layers' });
+      set({ statusMessage: t('status.filterRasterOnly') });
       return;
     }
     const raster = layer as RasterLayer;
@@ -1692,7 +1703,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     );
     executeCommand(cmd, set);
     doc.dirty = true;
-    set({ statusMessage: 'Filter applied' });
+    set({ statusMessage: t('status.filterApplied') });
     get().updateTitleBar();
   },
 
@@ -1709,7 +1720,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { document: doc, selection } = get();
     if (!doc) return;
     if (newWidth < 1 || newHeight < 1 || newWidth > 16384 || newHeight > 16384) {
-      set({ statusMessage: 'Invalid document size' });
+      set({ statusMessage: t('status.invalidDocumentSize') });
       return;
     }
 
@@ -1795,8 +1806,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       selection: nextSelection,
       revision: get().revision + 1,
       statusMessage: mode === 'canvas'
-        ? `Canvas resized to ${newWidth} x ${newHeight}`
-        : `Image resized to ${newWidth} x ${newHeight}`,
+        ? `${t('status.canvasResized')}: ${newWidth} x ${newHeight}`
+        : `${t('status.imageResized')}: ${newWidth} x ${newHeight}`,
     });
     eventBus.emit('document:changed');
     get().updateTitleBar();
@@ -1906,7 +1917,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({
       selection: nextSelection,
       revision: get().revision + 1,
-      statusMessage: `Canvas rotated ${direction}`,
+      statusMessage: `${t('status.canvasRotated')}: ${direction}`,
     });
     eventBus.emit('document:changed');
     get().updateTitleBar();
@@ -1963,7 +1974,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({
       selection: nextSelection,
       revision: get().revision + 1,
-      statusMessage: `Canvas flipped ${direction}`,
+      statusMessage: `${t('status.canvasFlipped')}: ${direction}`,
     });
     eventBus.emit('document:changed');
     get().updateTitleBar();

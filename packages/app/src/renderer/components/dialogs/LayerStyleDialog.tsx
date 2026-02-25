@@ -11,6 +11,7 @@
 import React, { useCallback, useState } from 'react';
 import type {
   Color,
+  ColorOverlayEffect,
   LayerEffect,
   StrokeEffect,
   DropShadowEffect,
@@ -19,8 +20,23 @@ import type {
 } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 
-type TabId = 'stroke' | 'drop-shadow' | 'outer-glow';
+type TabId = 'stroke' | 'drop-shadow' | 'outer-glow' | 'color-overlay';
+
+const TAB_LABEL_KEYS: Record<TabId, string> = {
+  stroke: 'layerStyle.tab.stroke',
+  'drop-shadow': 'layerStyle.tab.dropShadow',
+  'outer-glow': 'layerStyle.tab.outerGlow',
+  'color-overlay': 'layerStyle.tab.colorOverlay',
+};
+
+const ENABLE_LABEL_KEYS: Record<TabId, string> = {
+  stroke: 'layerStyle.enable.stroke',
+  'drop-shadow': 'layerStyle.enable.dropShadow',
+  'outer-glow': 'layerStyle.enable.outerGlow',
+  'color-overlay': 'layerStyle.enable.colorOverlay',
+};
 
 /** Convert 0-1 Color to hex string. */
 function colorToHex(c: Color): string {
@@ -72,6 +88,13 @@ const DEFAULT_OUTER_GLOW: OuterGlowEffect = {
   spread: 0,
 };
 
+const DEFAULT_COLOR_OVERLAY: ColorOverlayEffect = {
+  type: 'color-overlay',
+  enabled: true,
+  color: { r: 1, g: 0, b: 0, a: 1 },
+  opacity: 1,
+};
+
 /** Stroke effect controls. */
 function StrokeControls({
   effect,
@@ -83,7 +106,7 @@ function StrokeControls({
   return (
     <>
       <div className="layer-style-dialog__row">
-        <span>Color</span>
+        <span>{t('layerStyle.color')}</span>
         <input
           type="color"
           value={colorToHex(effect.color)}
@@ -91,7 +114,7 @@ function StrokeControls({
         />
       </div>
       <div className="layer-style-dialog__row">
-        <span>Size</span>
+        <span>{t('layerStyle.size')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -103,7 +126,7 @@ function StrokeControls({
         <span className="effect-slider-value">{effect.size}px</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Position</span>
+        <span>{t('layerStyle.position')}</span>
         {(['inside', 'center', 'outside'] as StrokePosition[]).map((pos) => (
           <label key={pos} className="layer-style-dialog__radio-label">
             <input
@@ -112,12 +135,12 @@ function StrokeControls({
               checked={effect.position === pos}
               onChange={(): void => onChange({ ...effect, position: pos })}
             />
-            {pos}
+            {t(`layerStyle.position.${pos}`)}
           </label>
         ))}
       </div>
       <div className="layer-style-dialog__row">
-        <span>Opacity</span>
+        <span>{t('layerStyle.opacity')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -143,7 +166,7 @@ function DropShadowControls({
   return (
     <>
       <div className="layer-style-dialog__row">
-        <span>Color</span>
+        <span>{t('layerStyle.color')}</span>
         <input
           type="color"
           value={colorToHex(effect.color)}
@@ -151,7 +174,7 @@ function DropShadowControls({
         />
       </div>
       <div className="layer-style-dialog__row">
-        <span>Opacity</span>
+        <span>{t('layerStyle.opacity')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -163,7 +186,7 @@ function DropShadowControls({
         <span className="effect-slider-value">{Math.round(effect.opacity * 100)}%</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Angle</span>
+        <span>{t('layerStyle.angle')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -175,7 +198,7 @@ function DropShadowControls({
         <span className="effect-slider-value">{effect.angle}&deg;</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Distance</span>
+        <span>{t('layerStyle.distance')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -187,7 +210,7 @@ function DropShadowControls({
         <span className="effect-slider-value">{effect.distance}px</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Blur</span>
+        <span>{t('layerStyle.blur')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -199,7 +222,7 @@ function DropShadowControls({
         <span className="effect-slider-value">{effect.blur}px</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Spread</span>
+        <span>{t('layerStyle.spread')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -225,7 +248,7 @@ function OuterGlowControls({
   return (
     <>
       <div className="layer-style-dialog__row">
-        <span>Color</span>
+        <span>{t('layerStyle.color')}</span>
         <input
           type="color"
           value={colorToHex(effect.color)}
@@ -233,7 +256,7 @@ function OuterGlowControls({
         />
       </div>
       <div className="layer-style-dialog__row">
-        <span>Opacity</span>
+        <span>{t('layerStyle.opacity')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -245,7 +268,7 @@ function OuterGlowControls({
         <span className="effect-slider-value">{Math.round(effect.opacity * 100)}%</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Size</span>
+        <span>{t('layerStyle.size')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -257,7 +280,7 @@ function OuterGlowControls({
         <span className="effect-slider-value">{effect.size}px</span>
       </div>
       <div className="layer-style-dialog__row">
-        <span>Spread</span>
+        <span>{t('layerStyle.spread')}</span>
         <input
           type="range"
           className="effect-slider"
@@ -272,7 +295,41 @@ function OuterGlowControls({
   );
 }
 
-/** Layer style dialog — modal with Stroke/DropShadow/OuterGlow tabs. */
+/** Color overlay controls. */
+function ColorOverlayControls({
+  effect,
+  onChange,
+}: {
+  effect: ColorOverlayEffect;
+  onChange: (e: ColorOverlayEffect) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <div className="layer-style-dialog__row">
+        <span>{t('layerStyle.color')}</span>
+        <input
+          type="color"
+          value={colorToHex(effect.color)}
+          onChange={(e): void => onChange({ ...effect, color: hexToColor(e.target.value) })}
+        />
+      </div>
+      <div className="layer-style-dialog__row">
+        <span>{t('layerStyle.opacity')}</span>
+        <input
+          type="range"
+          className="effect-slider"
+          min="0"
+          max="100"
+          value={Math.round(effect.opacity * 100)}
+          onChange={(e): void => onChange({ ...effect, opacity: Number(e.target.value) / 100 })}
+        />
+        <span className="effect-slider-value">{Math.round(effect.opacity * 100)}%</span>
+      </div>
+    </>
+  );
+}
+
+/** Layer style dialog — modal with Stroke/DropShadow/OuterGlow/ColorOverlay tabs. */
 export function LayerStyleDialog(): React.JSX.Element | null {
   const layerStyleDialog = useAppStore((s) => s.layerStyleDialog);
   const document = useAppStore((s) => s.document);
@@ -301,10 +358,12 @@ export function LayerStyleDialog(): React.JSX.Element | null {
   const strokeIdx = findEffectIndex(effects, 'stroke');
   const dropShadowIdx = findEffectIndex(effects, 'drop-shadow');
   const outerGlowIdx = findEffectIndex(effects, 'outer-glow');
+  const colorOverlayIdx = findEffectIndex(effects, 'color-overlay');
 
   const stroke = strokeIdx >= 0 ? (effects[strokeIdx] as StrokeEffect) : null;
   const dropShadow = dropShadowIdx >= 0 ? (effects[dropShadowIdx] as DropShadowEffect) : null;
   const outerGlow = outerGlowIdx >= 0 ? (effects[outerGlowIdx] as OuterGlowEffect) : null;
+  const colorOverlay = colorOverlayIdx >= 0 ? (effects[colorOverlayIdx] as ColorOverlayEffect) : null;
 
   const handleToggleEffect = (type: TabId): void => {
     const idx = findEffectIndex(effects, type);
@@ -315,6 +374,7 @@ export function LayerStyleDialog(): React.JSX.Element | null {
         stroke: { ...DEFAULT_STROKE },
         'drop-shadow': { ...DEFAULT_DROP_SHADOW },
         'outer-glow': { ...DEFAULT_OUTER_GLOW },
+        'color-overlay': { ...DEFAULT_COLOR_OVERLAY },
       };
       addLayerEffect(layerId, defaults[type]);
     }
@@ -327,16 +387,16 @@ export function LayerStyleDialog(): React.JSX.Element | null {
   return (
     <div className="dialog-overlay" onClick={handleClose}>
       <div className="dialog layer-style-dialog" onClick={(e): void => e.stopPropagation()}>
-        <div className="dialog-header">Layer Style</div>
+        <div className="dialog-header">{t('layerStyle.title')}</div>
 
         <div className="layer-style-dialog__tabs">
-          {(['stroke', 'drop-shadow', 'outer-glow'] as TabId[]).map((tab) => (
+          {(['stroke', 'drop-shadow', 'outer-glow', 'color-overlay'] as TabId[]).map((tab) => (
             <button
               key={tab}
               className={`layer-style-dialog__tab ${activeTab === tab ? 'layer-style-dialog__tab--active' : ''}`}
               onClick={(): void => setActiveTab(tab)}
             >
-              {tab === 'stroke' ? 'Stroke' : tab === 'drop-shadow' ? 'Drop Shadow' : 'Outer Glow'}
+              {t(TAB_LABEL_KEYS[tab])}
             </button>
           ))}
         </div>
@@ -348,7 +408,7 @@ export function LayerStyleDialog(): React.JSX.Element | null {
               checked={findEffectIndex(effects, activeTab) >= 0}
               onChange={(): void => handleToggleEffect(activeTab)}
             />
-            Enable {activeTab === 'stroke' ? 'Stroke' : activeTab === 'drop-shadow' ? 'Drop Shadow' : 'Outer Glow'}
+            {t(ENABLE_LABEL_KEYS[activeTab])}
           </label>
 
           {activeTab === 'stroke' && stroke && (
@@ -372,19 +432,26 @@ export function LayerStyleDialog(): React.JSX.Element | null {
             />
           )}
 
+          {activeTab === 'color-overlay' && colorOverlay && (
+            <ColorOverlayControls
+              effect={colorOverlay}
+              onChange={(e): void => handleUpdateEffect(colorOverlayIdx, e)}
+            />
+          )}
+
           {findEffectIndex(effects, activeTab) < 0 && (
             <div className="layer-style-dialog__empty">
-              Enable to configure.
+              {t('layerStyle.empty')}
             </div>
           )}
         </div>
 
         <div className="dialog-footer">
           <button className="dialog-btn" onClick={handleClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button className="dialog-btn dialog-btn--primary" onClick={handleClose}>
-            OK
+            {t('common.ok')}
           </button>
         </div>
       </div>

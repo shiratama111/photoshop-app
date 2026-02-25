@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { RasterLayer } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 
 // Mock OffscreenCanvas for Node.js test environment
 const mockGetImageData = vi.fn(() => ({
@@ -52,7 +53,7 @@ function resetStore(): void {
     activeTool: 'select',
     zoom: 1,
     panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
+    statusMessage: t('status.ready'),
     showAbout: false,
     selectedLayerId: null,
     canUndo: false,
@@ -121,13 +122,13 @@ describe('APP-012: Layer Resize', () => {
     giveLayerPixels(layer.id, 100, 100);
     store.resizeLayer(layer.id, 200, 150);
     const state = useAppStore.getState();
-    expect(state.statusMessage).toContain('Resized');
+    expect(state.statusMessage).toContain(t('status.resizedLayer'));
     expect(state.canUndo).toBe(true);
   });
 
   it('should not resize when no document is open', () => {
     useAppStore.getState().resizeLayer('nonexistent', 100, 100);
-    expect(useAppStore.getState().statusMessage).toBe('Ready');
+    expect(useAppStore.getState().statusMessage).toBe(t('status.ready'));
   });
 
   it('should not resize a layer without imageData', () => {

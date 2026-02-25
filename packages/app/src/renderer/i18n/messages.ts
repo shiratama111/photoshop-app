@@ -1,22 +1,13 @@
 /**
  * @module i18n/messages
- * Locale message definitions for the application.
- *
- * Each locale is a flat Record<string, string> keyed by dot-delimited
- * message IDs.  Adding a new language only requires a new entry here
- * and registering it in {@link ./index.ts}.
- *
- * Vocabulary follows Adobe Photoshop Japanese UI conventions.
+ * Locale message definitions for the renderer/main shared i18n runtime.
  */
 
-/** Message catalog type – every locale must satisfy this shape. */
 export type MessageCatalog = Record<string, string>;
 
-/** Japanese (ja) message catalog. */
 export const ja: MessageCatalog = {
+  // Menu
   'menu.app.name': 'Photoshop App',
-
-  // ── File menu ──────────────────────────────────────
   'menu.file': 'ファイル',
   'menu.file.new': '新規',
   'menu.file.open': '開く...',
@@ -24,20 +15,14 @@ export const ja: MessageCatalog = {
   'menu.file.saveAs': '別名で保存...',
   'menu.file.export': '書き出し...',
   'menu.file.quit': '終了',
-
-  // ── Edit menu ──────────────────────────────────────
   'menu.edit': '編集',
   'menu.edit.undo': '取り消し',
   'menu.edit.redo': 'やり直し',
   'menu.edit.fill': '塗りつぶし...',
-
-  // ── Select menu ────────────────────────────────────
   'menu.select': '選択範囲',
   'menu.select.all': 'すべてを選択',
   'menu.select.deselect': '選択を解除',
   'menu.select.crop': '切り抜き',
-
-  // ── Image menu ─────────────────────────────────────
   'menu.image': 'イメージ',
   'menu.image.adjustments': '色調補正',
   'menu.image.adjustments.brightnessContrast': '明るさ・コントラスト...',
@@ -49,14 +34,12 @@ export const ja: MessageCatalog = {
   'menu.image.adjustments.desaturate': '彩度を下げる',
   'menu.image.imageSize': '画像解像度...',
   'menu.image.canvasSize': 'カンバスサイズ...',
-  'menu.image.rotation': 'カンバスの回転',
-  'menu.image.rotation.180': '180°',
-  'menu.image.rotation.90cw': '90°（時計回り）',
-  'menu.image.rotation.90ccw': '90°（反時計回り）',
-  'menu.image.rotation.flipHorizontal': 'カンバスを左右に反転',
-  'menu.image.rotation.flipVertical': 'カンバスを上下に反転',
-
-  // ── Filter menu ────────────────────────────────────
+  'menu.image.rotation': '画像の回転',
+  'menu.image.rotation.180': '180度',
+  'menu.image.rotation.90cw': '90度（時計回り）',
+  'menu.image.rotation.90ccw': '90度（反時計回り）',
+  'menu.image.rotation.flipHorizontal': 'カンバスを水平方向に反転',
+  'menu.image.rotation.flipVertical': 'カンバスを垂直方向に反転',
   'menu.filter': 'フィルター',
   'menu.filter.blur': 'ぼかし',
   'menu.filter.blur.gaussian': 'ぼかし（ガウス）...',
@@ -70,24 +53,209 @@ export const ja: MessageCatalog = {
   'menu.filter.sepia': 'セピア',
   'menu.filter.posterize': 'ポスタリゼーション...',
   'menu.filter.threshold': '2階調化...',
-
-  // ── View menu ──────────────────────────────────────
   'menu.view': '表示',
   'menu.view.zoomIn': 'ズームイン',
   'menu.view.zoomOut': 'ズームアウト',
   'menu.view.fitToWindow': 'ウィンドウサイズに合わせる',
   'menu.view.actualSize': '100%表示',
-
-  // ── Help menu ──────────────────────────────────────
   'menu.help': 'ヘルプ',
   'menu.help.about': 'Photoshop App について',
+
+  // App chrome
+  'toolbar.select': '選択',
+  'toolbar.move': '移動',
+  'toolbar.brush': 'ブラシ',
+  'toolbar.eraser': '消しゴム',
+  'toolbar.gradient': 'グラデーション',
+  'toolbar.fill': '塗りつぶし',
+  'toolbar.eyedropper': 'スポイト',
+  'toolbar.clone': 'コピースタンプ',
+  'toolbar.dodge': '覆い焼き',
+  'toolbar.shape': 'シェイプ',
+  'toolbar.text': '文字',
+  'toolbar.crop': '切り抜き',
+  'toolbar.segment': 'AI切り抜き',
+  'sidebar.layers': 'レイヤー',
+  'sidebar.assets': 'アセット',
+  'statusbar.undoHint': 'Ctrl+Z 取り消し',
+  'statusbar.redoHint': 'Ctrl+Y やり直し',
+  'statusbar.fit': '合わせる',
+  'statusbar.fitTitle': 'ウィンドウに合わせる',
+  'statusbar.actualSizeTitle': '100%表示',
+  'statusbar.zoomOutTitle': '縮小',
+  'statusbar.zoomInTitle': '拡大',
+  'app.dragDropToOpen': 'ファイルをドロップして開く',
+
+  // Layer panel / context menu
+  'layerPanel.title': 'レイヤー',
+  'layerPanel.fxTitle': 'レイヤースタイル',
+  'layerPanel.empty': 'レイヤーはありません',
+  'layerPanel.noDocument': 'ドキュメントが開かれていません',
+  'layerPanel.addLayer': 'レイヤーを追加',
+  'layerPanel.addText': 'テキストを追加',
+  'layerPanel.addGroup': 'グループを追加',
+  'layerPanel.delete': '削除',
+  'layerContext.duplicateLayer': 'レイヤーを複製',
+  'layerContext.addLayerAbove': '上にレイヤーを追加',
+  'layerContext.addGroup': 'グループを追加',
+  'layerContext.deleteLayer': 'レイヤーを削除',
+
+  // Brush / tool options
+  'brush.mode': 'モード',
+  'brush.tolerance': '許容値',
+  'brush.cropToSelection': '選択範囲で切り抜き',
+  'brush.type': '種類',
+  'brush.opacity': '不透明度',
+  'brush.shape': '形状',
+  'brush.size': 'サイズ',
+  'brush.hardness': '硬さ',
+  'brush.colorPickerToggle': 'カラーピッカーを切替',
+  'brush.select.rect': '長方形',
+  'brush.select.ellipse': '楕円',
+  'brush.select.wand': '自動選択',
+  'brush.gradient.linear': '線形',
+  'brush.gradient.radial': '円形',
+  'brush.gradient.angle': '角度',
+  'brush.gradient.diamond': 'ダイヤモンド',
+  'brush.shape.rectangle': '長方形',
+  'brush.shape.ellipse': '楕円',
+  'brush.shape.line': '線',
+
+  // History panel
+  'history.title': 'ヒストリー',
+  'history.undo': '取り消し',
+  'history.redo': 'やり直し',
+
+  // Text properties
+  'text.title': 'テキスト',
+  'text.font': 'フォント',
+  'text.size': 'サイズ',
+  'text.color': 'カラー',
+  'text.style': 'スタイル',
+  'text.align': '配置',
+  'text.align.left': '左揃え',
+  'text.align.center': '中央揃え',
+  'text.align.right': '右揃え',
+  'text.direction': '文字方向',
+  'text.horizontal': '横書き',
+  'text.vertical': '縦書き',
+  'text.height': '行間',
+  'text.spacing': '文字間隔',
+  'text.bold': '太字',
+  'text.italic': '斜体',
+  'text.underline': '下線',
+  'text.strikethrough': '取り消し線',
+  'text.align.justify': '均等割付',
+
+  // Layer style dialog
+  'layerStyle.title': 'レイヤースタイル',
+  'layerStyle.tab.stroke': '境界線',
+  'layerStyle.tab.dropShadow': 'ドロップシャドウ',
+  'layerStyle.tab.outerGlow': '光彩（外側）',
+  'layerStyle.tab.colorOverlay': 'カラーオーバーレイ',
+  'layerStyle.enable.stroke': '境界線を有効化',
+  'layerStyle.enable.dropShadow': 'ドロップシャドウを有効化',
+  'layerStyle.enable.outerGlow': '光彩（外側）を有効化',
+  'layerStyle.enable.colorOverlay': 'カラーオーバーレイを有効化',
+  'layerStyle.empty': '設定するには有効化してください。',
+  'layerStyle.color': 'カラー',
+  'layerStyle.size': 'サイズ',
+  'layerStyle.position': '位置',
+  'layerStyle.opacity': '不透明度',
+  'layerStyle.angle': '角度',
+  'layerStyle.distance': '距離',
+  'layerStyle.blur': 'ぼかし',
+  'layerStyle.spread': '広がり',
+  'layerStyle.position.inside': '内側',
+  'layerStyle.position.center': '中央',
+  'layerStyle.position.outside': '外側',
+
+  // Color palette
+  'colorPalette.foreground': '前景色',
+  'colorPalette.background': '背景色',
+  'colorPalette.swap': '前景色と背景色を入れ替え (X)',
+  'colorPalette.reset': '前景色/背景色を初期化 (D)',
+
+  // Canvas empty state
+  'canvas.noDocumentOpen': 'ドキュメントが開かれていません',
+  'canvas.newDocument': '新規ドキュメント',
+
+  // Common
+  'common.cancel': 'キャンセル',
+  'common.ok': 'OK',
+
+  // Status messages
+  'status.ready': '準備完了',
+  'status.failedCreateCanvasContext': 'キャンバスコンテキストの作成に失敗',
+  'status.opened': '開きました',
+  'status.failedOpenImage': '画像を開けませんでした',
+  'status.unsupportedFileFormat': '非対応のファイル形式',
+  'status.created': '作成しました',
+  'status.added': '追加しました',
+  'status.addedGroup': 'グループを追加しました',
+  'status.removed': '削除しました',
+  'status.duplicated': '複製しました',
+  'status.renderFailed': '描画に失敗',
+  'status.saved': '保存しました',
+  'status.noDocumentToExport': '書き出すドキュメントがありません',
+  'status.failedCreateExportCanvas': '書き出し用キャンバスの作成に失敗',
+  'status.exported': '書き出しました',
+  'status.exportFailed': '書き出しに失敗',
+  'status.importCancelled': '読み込みをキャンセルしました',
+  'status.autoSaved': '自動保存しました',
+  'status.recoveryFileNotFound': '復旧ファイルが見つかりません',
+  'status.recovered': '復旧しました',
+  'status.recoveryFailed': '復旧に失敗',
+  'status.couldNotRead': '読み込めませんでした',
+  'status.failedOpen': '開けませんでした',
+  'status.resizedLayer': 'レイヤーサイズを変更しました',
+  'status.resizeFailed': 'リサイズに失敗',
+  'status.selection': '選択範囲',
+  'status.selectionCleared': '選択範囲を解除しました',
+  'status.selectedAll': '全選択',
+  'status.noSelectionToCrop': '切り抜く選択範囲がありません',
+  'status.cropped': '切り抜きました',
+  'status.selectRasterLayerFirst': '先にラスターレイヤーを選択してください',
+  'status.filterRasterOnly': 'フィルターはラスターレイヤーにのみ適用できます',
+  'status.filterApplied': 'フィルターを適用しました',
+  'status.invalidDocumentSize': 'ドキュメントサイズが不正です',
+  'status.canvasResized': 'キャンバスサイズを変更しました',
+  'status.imageResized': '画像サイズを変更しました',
+  'status.canvasRotated': 'キャンバスを回転しました',
+  'status.canvasFlipped': 'キャンバスを反転しました',
+  'status.unsupportedFilter': '非対応のフィルター',
+  'status.fillToolSelected': '塗りつぶしツールを選択しました',
+  'status.dropUnsupportedFormat': 'PSDまたは画像ファイルをドロップしてください',
+  'status.cutoutSelectLayerFirst': 'レイヤーを選択してください',
+  'status.cutoutStarted': 'AI切り抜き: 点を置いてください',
+  'status.cutoutSelectRasterPixels': 'ピクセルを持つラスターレイヤーを選択してください',
+  'status.cutoutAddPromptInside': '選択レイヤー内に点を追加してください',
+  'status.cutoutInferenceFailed': 'AI推論に失敗しました',
+  'status.cutoutApplied': 'マスクを適用しました',
+  'status.cutoutSelectRasterToCut': '切り抜くラスターレイヤーを選択してください',
+  'status.cutoutCutToNewLayer': '新規レイヤーへ切り抜きました',
+
+  // Cutout UI
+  'cutout.title': 'AI切り抜き',
+  'cutout.closeTitle': 'キャンセル (Esc)',
+  'cutout.mode': 'モード',
+  'cutout.prompt': 'プロンプト',
+  'cutout.brush': 'ブラシ',
+  'cutout.positive': '正',
+  'cutout.negative': '負',
+  'cutout.brushSize': 'ブラシサイズ',
+  'cutout.boundary': '境界',
+  'cutout.feather': 'ぼかし',
+  'cutout.processing': '処理中...',
+  'cutout.confidence': '信頼度',
+  'cutout.applyMask': 'マスクを適用',
+  'cutout.cutToNewLayer': '新規レイヤーへ切り抜き',
+  'cutout.cancel': 'キャンセル',
 };
 
-/** English (en) message catalog — used as fallback. */
 export const en: MessageCatalog = {
+  // Menu
   'menu.app.name': 'Photoshop App',
-
-  // ── File menu ──────────────────────────────────────
   'menu.file': 'File',
   'menu.file.new': 'New',
   'menu.file.open': 'Open...',
@@ -95,20 +263,14 @@ export const en: MessageCatalog = {
   'menu.file.saveAs': 'Save As...',
   'menu.file.export': 'Export...',
   'menu.file.quit': 'Quit',
-
-  // ── Edit menu ──────────────────────────────────────
   'menu.edit': 'Edit',
   'menu.edit.undo': 'Undo',
   'menu.edit.redo': 'Redo',
   'menu.edit.fill': 'Fill...',
-
-  // ── Select menu ────────────────────────────────────
   'menu.select': 'Select',
   'menu.select.all': 'All',
   'menu.select.deselect': 'Deselect',
   'menu.select.crop': 'Crop',
-
-  // ── Image menu ─────────────────────────────────────
   'menu.image': 'Image',
   'menu.image.adjustments': 'Adjustments',
   'menu.image.adjustments.brightnessContrast': 'Brightness/Contrast...',
@@ -126,8 +288,6 @@ export const en: MessageCatalog = {
   'menu.image.rotation.90ccw': '90 Degrees Counter-Clockwise',
   'menu.image.rotation.flipHorizontal': 'Flip Canvas Horizontal',
   'menu.image.rotation.flipVertical': 'Flip Canvas Vertical',
-
-  // ── Filter menu ────────────────────────────────────
   'menu.filter': 'Filter',
   'menu.filter.blur': 'Blur',
   'menu.filter.blur.gaussian': 'Gaussian Blur...',
@@ -141,18 +301,204 @@ export const en: MessageCatalog = {
   'menu.filter.sepia': 'Sepia',
   'menu.filter.posterize': 'Posterize...',
   'menu.filter.threshold': 'Threshold...',
-
-  // ── View menu ──────────────────────────────────────
   'menu.view': 'View',
   'menu.view.zoomIn': 'Zoom In',
   'menu.view.zoomOut': 'Zoom Out',
   'menu.view.fitToWindow': 'Fit to Window',
   'menu.view.actualSize': 'Actual Size',
-
-  // ── Help menu ──────────────────────────────────────
   'menu.help': 'Help',
   'menu.help.about': 'About Photoshop App',
+
+  // App chrome
+  'toolbar.select': 'Select',
+  'toolbar.move': 'Move',
+  'toolbar.brush': 'Brush',
+  'toolbar.eraser': 'Eraser',
+  'toolbar.gradient': 'Gradient',
+  'toolbar.fill': 'Fill',
+  'toolbar.eyedropper': 'Eyedropper',
+  'toolbar.clone': 'Clone Stamp',
+  'toolbar.dodge': 'Dodge',
+  'toolbar.shape': 'Shape',
+  'toolbar.text': 'Text',
+  'toolbar.crop': 'Crop',
+  'toolbar.segment': 'AI Cutout',
+  'sidebar.layers': 'Layers',
+  'sidebar.assets': 'Assets',
+  'statusbar.undoHint': 'Ctrl+Z undo',
+  'statusbar.redoHint': 'Ctrl+Y redo',
+  'statusbar.fit': 'Fit',
+  'statusbar.fitTitle': 'Fit to window',
+  'statusbar.actualSizeTitle': 'Zoom to 100%',
+  'statusbar.zoomOutTitle': 'Zoom out',
+  'statusbar.zoomInTitle': 'Zoom in',
+  'app.dragDropToOpen': 'Drop file to open',
+
+  // Layer panel / context menu
+  'layerPanel.title': 'Layers',
+  'layerPanel.fxTitle': 'Layer styles',
+  'layerPanel.empty': 'No layers',
+  'layerPanel.noDocument': 'No document open',
+  'layerPanel.addLayer': 'Add Layer',
+  'layerPanel.addText': 'Add Text',
+  'layerPanel.addGroup': 'Add Group',
+  'layerPanel.delete': 'Delete',
+  'layerContext.duplicateLayer': 'Duplicate Layer',
+  'layerContext.addLayerAbove': 'Add Layer Above',
+  'layerContext.addGroup': 'Add Group',
+  'layerContext.deleteLayer': 'Delete Layer',
+
+  // Brush / tool options
+  'brush.mode': 'Mode',
+  'brush.tolerance': 'Tolerance',
+  'brush.cropToSelection': 'Crop to Selection',
+  'brush.type': 'Type',
+  'brush.opacity': 'Opacity',
+  'brush.shape': 'Shape',
+  'brush.size': 'Size',
+  'brush.hardness': 'Hardness',
+  'brush.colorPickerToggle': 'Toggle color picker',
+  'brush.select.rect': 'Rect',
+  'brush.select.ellipse': 'Ellipse',
+  'brush.select.wand': 'Wand',
+  'brush.gradient.linear': 'Linear',
+  'brush.gradient.radial': 'Radial',
+  'brush.gradient.angle': 'Angle',
+  'brush.gradient.diamond': 'Diamond',
+  'brush.shape.rectangle': 'Rectangle',
+  'brush.shape.ellipse': 'Ellipse',
+  'brush.shape.line': 'Line',
+
+  // History panel
+  'history.title': 'History',
+  'history.undo': 'Undo',
+  'history.redo': 'Redo',
+
+  // Text properties
+  'text.title': 'Text',
+  'text.font': 'Font',
+  'text.size': 'Size',
+  'text.color': 'Color',
+  'text.style': 'Style',
+  'text.align': 'Align',
+  'text.align.left': 'Align left',
+  'text.align.center': 'Align center',
+  'text.align.right': 'Align right',
+  'text.direction': 'Direction',
+  'text.horizontal': 'Horizontal',
+  'text.vertical': 'Vertical',
+  'text.height': 'Height',
+  'text.spacing': 'Spacing',
+  'text.bold': 'Bold',
+  'text.italic': 'Italic',
+  'text.underline': 'Underline',
+  'text.strikethrough': 'Strikethrough',
+  'text.align.justify': 'Justify',
+
+  // Layer style dialog
+  'layerStyle.title': 'Layer Style',
+  'layerStyle.tab.stroke': 'Stroke',
+  'layerStyle.tab.dropShadow': 'Drop Shadow',
+  'layerStyle.tab.outerGlow': 'Outer Glow',
+  'layerStyle.tab.colorOverlay': 'Color Overlay',
+  'layerStyle.enable.stroke': 'Enable Stroke',
+  'layerStyle.enable.dropShadow': 'Enable Drop Shadow',
+  'layerStyle.enable.outerGlow': 'Enable Outer Glow',
+  'layerStyle.enable.colorOverlay': 'Enable Color Overlay',
+  'layerStyle.empty': 'Enable to configure.',
+  'layerStyle.color': 'Color',
+  'layerStyle.size': 'Size',
+  'layerStyle.position': 'Position',
+  'layerStyle.opacity': 'Opacity',
+  'layerStyle.angle': 'Angle',
+  'layerStyle.distance': 'Distance',
+  'layerStyle.blur': 'Blur',
+  'layerStyle.spread': 'Spread',
+  'layerStyle.position.inside': 'inside',
+  'layerStyle.position.center': 'center',
+  'layerStyle.position.outside': 'outside',
+
+  // Color palette
+  'colorPalette.foreground': 'Foreground',
+  'colorPalette.background': 'Background',
+  'colorPalette.swap': 'Swap colors (X)',
+  'colorPalette.reset': 'Reset colors (D)',
+
+  // Canvas empty state
+  'canvas.noDocumentOpen': 'No document open',
+  'canvas.newDocument': 'New Document',
+
+  // Common
+  'common.cancel': 'Cancel',
+  'common.ok': 'OK',
+
+  // Status messages
+  'status.ready': 'Ready',
+  'status.failedCreateCanvasContext': 'Failed to create canvas context',
+  'status.opened': 'Opened',
+  'status.failedOpenImage': 'Failed to open image',
+  'status.unsupportedFileFormat': 'Unsupported file format',
+  'status.created': 'Created',
+  'status.added': 'Added',
+  'status.addedGroup': 'Added group',
+  'status.removed': 'Removed',
+  'status.duplicated': 'Duplicated',
+  'status.renderFailed': 'Render failed',
+  'status.saved': 'Saved',
+  'status.noDocumentToExport': 'No document to export',
+  'status.failedCreateExportCanvas': 'Failed to create export canvas',
+  'status.exported': 'Exported',
+  'status.exportFailed': 'Export failed',
+  'status.importCancelled': 'Import cancelled',
+  'status.autoSaved': 'Auto-saved',
+  'status.recoveryFileNotFound': 'Recovery failed: file not found',
+  'status.recovered': 'Recovered',
+  'status.recoveryFailed': 'Recovery failed',
+  'status.couldNotRead': 'Could not read',
+  'status.failedOpen': 'Failed to open',
+  'status.resizedLayer': 'Resized layer',
+  'status.resizeFailed': 'Resize failed',
+  'status.selection': 'Selection',
+  'status.selectionCleared': 'Selection cleared',
+  'status.selectedAll': 'Selected all',
+  'status.noSelectionToCrop': 'No selection to crop',
+  'status.cropped': 'Cropped',
+  'status.selectRasterLayerFirst': 'Select a raster layer first',
+  'status.filterRasterOnly': 'Filter can only be applied to raster layers',
+  'status.filterApplied': 'Filter applied',
+  'status.invalidDocumentSize': 'Invalid document size',
+  'status.canvasResized': 'Canvas resized',
+  'status.imageResized': 'Image resized',
+  'status.canvasRotated': 'Canvas rotated',
+  'status.canvasFlipped': 'Canvas flipped',
+  'status.unsupportedFilter': 'Unsupported filter',
+  'status.fillToolSelected': 'Fill tool selected',
+  'status.dropUnsupportedFormat': 'Drop a PSD or image file',
+  'status.cutoutSelectLayerFirst': 'Select a layer first',
+  'status.cutoutStarted': 'AI Cutout: click to place points',
+  'status.cutoutSelectRasterPixels': 'Select a raster layer with pixels',
+  'status.cutoutAddPromptInside': 'Add prompts inside the selected layer',
+  'status.cutoutInferenceFailed': 'AI inference failed',
+  'status.cutoutApplied': 'Applied mask',
+  'status.cutoutSelectRasterToCut': 'Select a raster layer to cut',
+  'status.cutoutCutToNewLayer': 'Cut to new layer',
+
+  // Cutout UI
+  'cutout.title': 'AI Cutout',
+  'cutout.closeTitle': 'Cancel (Esc)',
+  'cutout.mode': 'Mode',
+  'cutout.prompt': 'Prompt',
+  'cutout.brush': 'Brush',
+  'cutout.positive': 'Positive',
+  'cutout.negative': 'Negative',
+  'cutout.brushSize': 'Brush Size',
+  'cutout.boundary': 'Boundary',
+  'cutout.feather': 'Feather',
+  'cutout.processing': 'Processing...',
+  'cutout.confidence': 'Confidence',
+  'cutout.applyMask': 'Apply Mask',
+  'cutout.cutToNewLayer': 'Cut to New Layer',
+  'cutout.cancel': 'Cancel',
 };
 
-/** All available locale catalogs, keyed by BCP-47 tag. */
 export const localeCatalogs: Record<string, MessageCatalog> = { ja, en };

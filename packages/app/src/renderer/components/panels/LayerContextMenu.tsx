@@ -17,6 +17,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 
 /** Context menu item definition. */
 interface MenuItem {
@@ -76,28 +77,28 @@ export function LayerContextMenu(): React.JSX.Element | null {
 
   const items: MenuItem[] = [
     {
-      label: 'Duplicate Layer',
+      label: t('layerContext.duplicateLayer'),
       action: (): void => {
         duplicateLayer(layerId);
         hideContextMenu();
       },
     },
     {
-      label: 'Add Layer Above',
+      label: t('layerContext.addLayerAbove'),
       action: (): void => {
         addRasterLayer();
         hideContextMenu();
       },
     },
     {
-      label: 'Add Group',
+      label: t('layerContext.addGroup'),
       action: (): void => {
         addLayerGroup();
         hideContextMenu();
       },
     },
     {
-      label: 'Delete Layer',
+      label: t('layerContext.deleteLayer'),
       action: (): void => {
         removeLayer(layerId);
         hideContextMenu();

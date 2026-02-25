@@ -71,6 +71,8 @@ function exportTextLayer(layer: TextLayer, options: PsdExportOptions): AgLayer {
         fillColor: { r: layer.color.r, g: layer.color.g, b: layer.color.b },
         fauxBold: layer.bold,
         fauxItalic: layer.italic,
+        underline: layer.underline,
+        strikethrough: layer.strikethrough,
       },
       paragraphStyle: {
         justification: layer.alignment,

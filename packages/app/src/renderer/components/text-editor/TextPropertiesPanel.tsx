@@ -1,19 +1,14 @@
 /**
  * @module components/text-editor/TextPropertiesPanel
  * Text property controls panel shown in sidebar when a TextLayer is selected.
- *
- * Controls: font family, font size, color, bold, italic, alignment,
- * line height, letter spacing.
- *
- * @see APP-005: Text editing UI
  */
 
 import React, { useCallback } from 'react';
 import type { TextLayer, Color, TextAlignment, WritingMode } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 
-/** Web-safe font options. */
 const FONTS = [
   'Arial',
   'Helvetica',
@@ -24,7 +19,6 @@ const FONTS = [
   'Impact',
 ];
 
-/** Convert 0-1 Color to hex string. */
 function colorToHex(c: Color): string {
   const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
   const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
@@ -32,7 +26,6 @@ function colorToHex(c: Color): string {
   return `#${r}${g}${b}`;
 }
 
-/** Convert hex string to 0-1 Color. */
 function hexToColor(hex: string): Color {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -40,7 +33,6 @@ function hexToColor(hex: string): Color {
   return { r, g, b, a: 1 };
 }
 
-/** Inner panel component. */
 function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): React.JSX.Element {
   const setTextProperty = useAppStore((s) => s.setTextProperty);
   const id = textLayer.id;
@@ -98,6 +90,14 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
     [id, setTextProperty],
   );
 
+  const onUnderlineToggle = useCallback((): void => {
+    setTextProperty(id, 'underline', !textLayer.underline);
+  }, [id, textLayer.underline, setTextProperty]);
+
+  const onStrikethroughToggle = useCallback((): void => {
+    setTextProperty(id, 'strikethrough', !textLayer.strikethrough);
+  }, [id, textLayer.strikethrough, setTextProperty]);
+
   const onWritingModeChange = useCallback(
     (mode: WritingMode): void => {
       setTextProperty(id, 'writingMode', mode);
@@ -107,10 +107,10 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
 
   return (
     <div className="text-properties">
-      <div className="sidebar-header">Text</div>
+      <div className="sidebar-header">{t('text.title')}</div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Font</span>
+        <span className="text-property-label">{t('text.font')}</span>
         <select
           className="text-property-select"
           value={textLayer.fontFamily}
@@ -123,7 +123,7 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Size</span>
+        <span className="text-property-label">{t('text.size')}</span>
         <input
           className="text-property-input"
           type="number"
@@ -136,7 +136,7 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Color</span>
+        <span className="text-property-label">{t('text.color')}</span>
         <input
           type="color"
           value={colorToHex(textLayer.color)}
@@ -145,68 +145,89 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Style</span>
+        <span className="text-property-label">{t('text.style')}</span>
         <button
           className={`text-property-btn ${textLayer.bold ? 'text-property-btn--active' : ''}`}
           onClick={onBoldToggle}
-          title="Bold"
+          title={t('text.bold')}
         >
           B
         </button>
         <button
           className={`text-property-btn ${textLayer.italic ? 'text-property-btn--active' : ''}`}
           onClick={onItalicToggle}
-          title="Italic"
+          title={t('text.italic')}
         >
           <em>I</em>
+        </button>
+        <button
+          className={`text-property-btn ${textLayer.underline ? 'text-property-btn--active' : ''}`}
+          onClick={onUnderlineToggle}
+          title={t('text.underline')}
+        >
+          <u>U</u>
+        </button>
+        <button
+          className={`text-property-btn ${textLayer.strikethrough ? 'text-property-btn--active' : ''}`}
+          onClick={onStrikethroughToggle}
+          title={t('text.strikethrough')}
+        >
+          <s>S</s>
         </button>
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Align</span>
+        <span className="text-property-label">{t('text.align')}</span>
         <button
           className={`text-property-btn ${textLayer.alignment === 'left' ? 'text-property-btn--active' : ''}`}
           onClick={(): void => onAlignChange('left')}
-          title="Align left"
+          title={t('text.align.left')}
         >
           &lt;
         </button>
         <button
           className={`text-property-btn ${textLayer.alignment === 'center' ? 'text-property-btn--active' : ''}`}
           onClick={(): void => onAlignChange('center')}
-          title="Align center"
+          title={t('text.align.center')}
         >
           =
         </button>
         <button
           className={`text-property-btn ${textLayer.alignment === 'right' ? 'text-property-btn--active' : ''}`}
           onClick={(): void => onAlignChange('right')}
-          title="Align right"
+          title={t('text.align.right')}
         >
           &gt;
+        </button>
+        <button
+          className={`text-property-btn ${textLayer.alignment === 'justify' ? 'text-property-btn--active' : ''}`}
+          onClick={(): void => onAlignChange('justify')}
+          title={t('text.align.justify')}
+        >
+          &#8801;
         </button>
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">文字方向</span>
+        <span className="text-property-label">{t('text.direction')}</span>
         <button
           className={`text-property-btn ${writingMode === 'horizontal-tb' ? 'text-property-btn--active' : ''}`}
           onClick={(): void => onWritingModeChange('horizontal-tb')}
-          title="横書き"
+          title={t('text.horizontal')}
         >
-          横書き
+          {t('text.horizontal')}
         </button>
         <button
           className={`text-property-btn ${writingMode === 'vertical-rl' ? 'text-property-btn--active' : ''}`}
           onClick={(): void => onWritingModeChange('vertical-rl')}
-          title="縦書き"
+          title={t('text.vertical')}
         >
-          縦書き
+          {t('text.vertical')}
         </button>
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Height</span>
+        <span className="text-property-label">{t('text.height')}</span>
         <input
           className="text-property-input"
           type="number"
@@ -219,7 +240,7 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
       </div>
 
       <div className="text-property-row">
-        <span className="text-property-label">Spacing</span>
+        <span className="text-property-label">{t('text.spacing')}</span>
         <input
           className="text-property-input"
           type="number"
@@ -235,7 +256,6 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
   );
 }
 
-/** Text properties panel — renders only when selected layer is a TextLayer. */
 export function TextPropertiesPanel(): React.JSX.Element | null {
   const document = useAppStore((s) => s.document);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);

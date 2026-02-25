@@ -197,5 +197,42 @@ describe('TextPropertiesPanel store actions', () => {
       // Revision should not change — nothing happened
       expect(useAppStore.getState().revision).toBe(revBefore);
     });
+
+    it('should toggle underline and undo', () => {
+      createTestDocument();
+      const id = addTextAndSelect();
+      useAppStore.getState().setTextProperty(id, 'underline', true);
+      const doc = useAppStore.getState().document!;
+      const layer = doc.rootGroup.children[BG] as { underline: boolean };
+      expect(layer.underline).toBe(true);
+
+      useAppStore.getState().undo();
+      const docAfter = useAppStore.getState().document!;
+      const layerAfter = docAfter.rootGroup.children[BG] as { underline: boolean };
+      expect(layerAfter.underline).toBe(false);
+    });
+
+    it('should toggle strikethrough and undo', () => {
+      createTestDocument();
+      const id = addTextAndSelect();
+      useAppStore.getState().setTextProperty(id, 'strikethrough', true);
+      const doc = useAppStore.getState().document!;
+      const layer = doc.rootGroup.children[BG] as { strikethrough: boolean };
+      expect(layer.strikethrough).toBe(true);
+
+      useAppStore.getState().undo();
+      const docAfter = useAppStore.getState().document!;
+      const layerAfter = docAfter.rootGroup.children[BG] as { strikethrough: boolean };
+      expect(layerAfter.strikethrough).toBe(false);
+    });
+
+    it('should change alignment to justify', () => {
+      createTestDocument();
+      const id = addTextAndSelect();
+      useAppStore.getState().setTextProperty(id, 'alignment', 'justify');
+      const doc = useAppStore.getState().document!;
+      const layer = doc.rootGroup.children[BG] as { alignment: string };
+      expect(layer.alignment).toBe('justify');
+    });
   });
 });

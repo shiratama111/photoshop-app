@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store';
 import { BRUSH_VARIANTS } from '../../brush-engine';
 import type { BrushVariantId } from '../../brush-engine';
+import { t } from '../../i18n';
 import { ColorPicker } from './ColorPicker';
 
 /** All variant IDs for the selector. */
@@ -59,7 +60,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
     return (
       <div className="brush-options-panel" data-testid="select-options">
         <div className="brush-option">
-          <label className="brush-option__label">Mode</label>
+          <label className="brush-option__label">{t('brush.mode')}</label>
           <div className="shape-type-selector">
             {subTools.map((st) => (
               <button
@@ -67,14 +68,14 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
                 className={`shape-type-btn ${selectionSubTool === st ? 'shape-type-btn--active' : ''}`}
                 onClick={(): void => setSelectionSubTool(st)}
               >
-                {st === 'rect' ? 'Rect' : st === 'ellipse' ? 'Ellipse' : 'Wand'}
+                {st === 'rect' ? t('brush.select.rect') : st === 'ellipse' ? t('brush.select.ellipse') : t('brush.select.wand')}
               </button>
             ))}
           </div>
         </div>
         {selectionSubTool === 'wand' && (
           <div className="brush-option">
-            <label className="brush-option__label">Tolerance</label>
+            <label className="brush-option__label">{t('brush.tolerance')}</label>
             <input
               type="range"
               min="0"
@@ -100,7 +101,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
             onClick={cropToSelection}
             disabled={!selection}
           >
-            Crop to Selection
+            {t('brush.cropToSelection')}
           </button>
         </div>
       </div>
@@ -113,21 +114,21 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
     return (
       <div className="brush-options-panel" data-testid="gradient-options">
         <div className="brush-option">
-          <label className="brush-option__label">Type</label>
+          <label className="brush-option__label">{t('brush.type')}</label>
           <div className="gradient-type-selector">
-            {types.map((t) => (
+            {types.map((gradientTypeKey) => (
               <button
-                key={t}
-                className={`gradient-type-btn ${gradientType === t ? 'gradient-type-btn--active' : ''}`}
-                onClick={(): void => setGradientType(t)}
+                key={gradientTypeKey}
+                className={`gradient-type-btn ${gradientType === gradientTypeKey ? 'gradient-type-btn--active' : ''}`}
+                onClick={(): void => setGradientType(gradientTypeKey)}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t(`brush.gradient.${gradientTypeKey}`)}
               </button>
             ))}
           </div>
         </div>
         <div className="brush-option">
-          <label className="brush-option__label">Opacity</label>
+          <label className="brush-option__label">{t('brush.opacity')}</label>
           <input
             type="range"
             min="1"
@@ -147,7 +148,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
     return (
       <div className="brush-options-panel" data-testid="fill-options">
         <div className="brush-option">
-          <label className="brush-option__label">Tolerance</label>
+          <label className="brush-option__label">{t('brush.tolerance')}</label>
           <input
             type="range"
             min="0"
@@ -159,7 +160,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
           <span className="brush-option__value">{fillTolerance}</span>
         </div>
         <div className="brush-option">
-          <label className="brush-option__label">Opacity</label>
+          <label className="brush-option__label">{t('brush.opacity')}</label>
           <input
             type="range"
             min="1"
@@ -180,21 +181,21 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
     return (
       <div className="brush-options-panel" data-testid="shape-options">
         <div className="brush-option">
-          <label className="brush-option__label">Shape</label>
+          <label className="brush-option__label">{t('brush.shape')}</label>
           <div className="shape-type-selector">
-            {shapes.map((s) => (
+            {shapes.map((shapeKey) => (
               <button
-                key={s}
-                className={`shape-type-btn ${shapeType === s ? 'shape-type-btn--active' : ''}`}
-                onClick={(): void => setShapeType(s)}
+                key={shapeKey}
+                className={`shape-type-btn ${shapeType === shapeKey ? 'shape-type-btn--active' : ''}`}
+                onClick={(): void => setShapeType(shapeKey)}
               >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+                {t(`brush.shape.${shapeKey}`)}
               </button>
             ))}
           </div>
         </div>
         <div className="brush-option">
-          <label className="brush-option__label">Size</label>
+          <label className="brush-option__label">{t('brush.size')}</label>
           <input
             type="range"
             min="1"
@@ -219,7 +220,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
     <div className="brush-options-panel" data-testid="brush-options">
       {/* Variant selector */}
       <div className="brush-option">
-        <label className="brush-option__label">Type</label>
+        <label className="brush-option__label">{t('brush.type')}</label>
         <div className="brush-variant-selector">
           {VARIANT_IDS.map((vid) => (
             <button
@@ -236,7 +237,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
 
       {/* Size slider */}
       <div className="brush-option">
-        <label className="brush-option__label">Size</label>
+        <label className="brush-option__label">{t('brush.size')}</label>
         <input
           type="range"
           min="1"
@@ -251,7 +252,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
       {/* Hardness slider (disabled for pencil/marker) */}
       <div className="brush-option">
         <label className={`brush-option__label ${hardnessDisabled ? 'brush-option__label--disabled' : ''}`}>
-          Hardness
+          {t('brush.hardness')}
         </label>
         <input
           type="range"
@@ -269,7 +270,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
 
       {/* Opacity slider */}
       <div className="brush-option">
-        <label className="brush-option__label">Opacity</label>
+        <label className="brush-option__label">{t('brush.opacity')}</label>
         <input
           type="range"
           min="1"
@@ -290,7 +291,7 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
               background: `rgb(${brushColor.r},${brushColor.g},${brushColor.b})`,
             }}
             onClick={(): void => setShowPicker(!showPicker)}
-            title="Toggle color picker"
+            title={t('brush.colorPickerToggle')}
           />
           {showPicker && (
             <div className="brush-option__picker-popover">

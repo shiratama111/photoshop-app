@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { Mask, PointPrompt } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 import { useCutoutStore } from './cutout-store';
 
 function resetStores(): void {
@@ -16,7 +17,7 @@ function resetStores(): void {
     activeTool: 'select',
     zoom: 1,
     panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
+    statusMessage: t('status.ready'),
     showAbout: false,
     selectedLayerId: null,
     canUndo: false,
@@ -87,7 +88,7 @@ describe('cutout store actions', () => {
 
       expect(useCutoutStore.getState().cutout).toBeNull();
       expect(useAppStore.getState().activeTool).toBe('select');
-      expect(useAppStore.getState().statusMessage).toBe('Select a layer first');
+      expect(useAppStore.getState().statusMessage).toBe(t('status.cutoutSelectLayerFirst'));
     });
 
     it('should not start if no document is open', () => {
@@ -111,7 +112,7 @@ describe('cutout store actions', () => {
 
       expect(useCutoutStore.getState().cutout).toBeNull();
       expect(useAppStore.getState().activeTool).toBe('select');
-      expect(useAppStore.getState().statusMessage).toBe('Ready');
+      expect(useAppStore.getState().statusMessage).toBe(t('status.ready'));
     });
   });
 
@@ -369,7 +370,7 @@ describe('cutout store actions', () => {
       useCutoutStore.getState().cutToNewLayer();
 
       expect(useAppStore.getState().document!.rootGroup.children).toHaveLength(countBefore);
-      expect(useAppStore.getState().statusMessage).toBe('Select a raster layer to cut');
+      expect(useAppStore.getState().statusMessage).toBe(t('status.cutoutSelectRasterToCut'));
     });
   });
 });

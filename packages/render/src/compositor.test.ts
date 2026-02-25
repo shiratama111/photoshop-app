@@ -63,12 +63,24 @@ function createMockContext(width: number, height: number): CanvasContext2DLike {
     setTransform: vi.fn(),
     fillRect: vi.fn(),
     fillText: vi.fn(),
+    strokeText: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    strokeRect: vi.fn(),
+    strokeStyle: '',
+    lineWidth: 1,
     measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
     createPattern: vi.fn(),
     font: '',
     textAlign: 'start' as CanvasTextAlign,
     textBaseline: 'alphabetic' as CanvasTextBaseline,
     letterSpacing: '0px',
+    shadowColor: '',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
   };
 }
 
@@ -116,6 +128,8 @@ function makeTextLayer(name: string, text: string): TextLayer {
     letterSpacing: 0,
     textBounds: null,
     writingMode: 'horizontal-tb',
+    underline: false,
+    strikethrough: false,
   };
 }
 
@@ -653,6 +667,182 @@ describe('Canvas2DRenderer', () => {
       expect(ctx.fillText.mock.calls.length).toBe(2);
       expect(ctx.fillText.mock.calls[0][2]).toBe(0);
       expect(ctx.fillText.mock.calls[1][2]).toBe(30);
+    });
+  });
+
+  describe('PS-TEXT-002: Text Layer Effects', () => {
+    it('should render text + drop shadow with fillText called multiple times', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Shadow', 'Hello');
+      layer.effects = [{
+        type: 'drop-shadow',
+        enabled: true,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        opacity: 0.5,
+        angle: 135,
+        distance: 5,
+        blur: 4,
+        spread: 0,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // fillText called for shadow + normal text = at least 2 calls
+      expect(ctx.fillText.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should render text + stroke with strokeText called', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Stroked', 'Hello');
+      layer.effects = [{
+        type: 'stroke',
+        enabled: true,
+        color: { r: 1, g: 0, b: 0, a: 1 },
+        size: 3,
+        position: 'outside',
+        opacity: 1,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.strokeText).toHaveBeenCalled();
+      // Text fill should be drawn once by base text rendering (no duplicate fill from stroke effect).
+      expect(ctx.fillText.mock.calls.length).toBe(1);
+    });
+
+    it('should render text + outer glow with blur filter and fillText', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Glowing', 'Hello');
+      layer.effects = [{
+        type: 'outer-glow',
+        enabled: true,
+        color: { r: 1, g: 1, b: 0, a: 1 },
+        opacity: 0.75,
+        size: 10,
+        spread: 0,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // fillText called for glow + normal text
+      expect(ctx.fillText.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should render text + color overlay with overlay color fillText', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Overlay', 'Hello');
+      layer.effects = [{
+        type: 'color-overlay',
+        enabled: true,
+        color: { r: 1, g: 0, b: 0, a: 1 },
+        opacity: 1,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // fillText called for normal text + overlay
+      expect(ctx.fillText.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should render raster + drop shadow with fillRect (regression)', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const layer = makeRasterLayer('RasterShadow', {
+        effects: [{
+          type: 'drop-shadow',
+          enabled: true,
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          opacity: 0.5,
+          angle: 135,
+          distance: 5,
+          blur: 4,
+          spread: 0,
+        }],
+      });
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillRect).toHaveBeenCalled();
+    });
+
+    it('should skip disabled text effects', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Disabled', 'Hello');
+      layer.effects = [{
+        type: 'drop-shadow',
+        enabled: false,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        opacity: 0.5,
+        angle: 135,
+        distance: 5,
+        blur: 4,
+        spread: 0,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Only normal text fillText, no shadow fillText
+      expect(ctx.fillText.mock.calls.length).toBe(1);
+    });
+  });
+
+  describe('Text Decorations', () => {
+    it('should draw underline when underline=true', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Underlined', 'Hello');
+      layer.underline = true;
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.beginPath).toHaveBeenCalled();
+      expect(ctx.stroke).toHaveBeenCalled();
+    });
+
+    it('should draw strikethrough when strikethrough=true', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Struck', 'Hello');
+      layer.strikethrough = true;
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.beginPath).toHaveBeenCalled();
+      expect(ctx.stroke).toHaveBeenCalled();
+    });
+
+    it('should not draw decorations when both are false', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Plain', 'Hello');
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.beginPath).not.toHaveBeenCalled();
+      expect(ctx.stroke).not.toHaveBeenCalled();
     });
   });
 

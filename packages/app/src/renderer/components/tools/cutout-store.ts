@@ -22,6 +22,7 @@ import {
   AddLayerCommand,
 } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 
 /** Brush mode for cutout refinement. */
 export type CutoutBrushMode = 'add' | 'remove';
@@ -92,7 +93,7 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
     }
     if (!selectedLayerId) {
       useAppStore.getState().setActiveTool('select');
-      useAppStore.getState().setStatusMessage('Select a layer first');
+      useAppStore.getState().setStatusMessage(t('status.cutoutSelectLayerFirst'));
       return;
     }
     set({
@@ -108,13 +109,13 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
       },
     });
     useAppStore.getState().setActiveTool('segment');
-    useAppStore.getState().setStatusMessage('AI Cutout: click to place points');
+    useAppStore.getState().setStatusMessage(t('status.cutoutStarted'));
   },
 
   cancelCutout: (): void => {
     set({ cutout: null });
     useAppStore.getState().setActiveTool('select');
-    useAppStore.getState().setStatusMessage('Ready');
+    useAppStore.getState().setStatusMessage(t('status.ready'));
   },
 
   addCutoutPrompt: (prompt): void => {
@@ -210,7 +211,7 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
     set({ cutout: null });
     useAppStore.getState().setActiveTool('select');
     useAppStore.setState({ revision: useAppStore.getState().revision + 1 });
-    useAppStore.getState().setStatusMessage(`Applied mask to: ${layer.name}`);
+    useAppStore.getState().setStatusMessage(`${t('status.cutoutApplied')}: ${layer.name}`);
   },
 
   cutToNewLayer: (): void => {
@@ -219,7 +220,7 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
     if (!doc || !selectedLayerId || !cutout || !cutout.currentMask) return;
     const layer = findLayerById(doc.rootGroup, selectedLayerId);
     if (!layer || layer.type !== 'raster') {
-      useAppStore.getState().setStatusMessage('Select a raster layer to cut');
+      useAppStore.getState().setStatusMessage(t('status.cutoutSelectRasterToCut'));
       return;
     }
 
@@ -255,6 +256,6 @@ export const useCutoutStore = create<CutoutStoreState & CutoutStoreActions>((set
       selectedLayerId: newLayer.id,
       revision: useAppStore.getState().revision + 1,
     });
-    useAppStore.getState().setStatusMessage(`Cut to new layer: ${newLayer.name}`);
+    useAppStore.getState().setStatusMessage(`${t('status.cutoutCutToNewLayer')}: ${newLayer.name}`);
   },
 }));

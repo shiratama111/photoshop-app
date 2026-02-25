@@ -7,6 +7,10 @@ describe('renderer i18n', () => {
     setLocale('ja');
   });
 
+  it('keeps ja and en keysets in sync', () => {
+    expect(Object.keys(ja).sort()).toEqual(Object.keys(en).sort());
+  });
+
   it('uses Japanese locale by default', () => {
     expect(getLocale()).toBe('ja');
     expect(t('menu.file')).toBe('ファイル');

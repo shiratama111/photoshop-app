@@ -26,6 +26,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore, getViewport } from './store';
 import type { Tool } from './store';
+import { t } from './i18n';
 import {
   invert as invertFilter,
   desaturate as desaturateFilter,
@@ -91,20 +92,20 @@ interface ElectronMenuAPI {
 let startupChecksInitialized = false;
 
 /** Available tools with display labels. */
-const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
-  { id: 'select', label: 'Select', shortcut: 'V' },
-  { id: 'move', label: 'Move', shortcut: 'M' },
-  { id: 'brush', label: 'Brush', shortcut: 'B' },
-  { id: 'eraser', label: 'Eraser', shortcut: 'E' },
-  { id: 'gradient', label: 'Gradient', shortcut: 'G' },
-  { id: 'fill', label: 'Fill', shortcut: 'K' },
-  { id: 'eyedropper', label: 'Eyedropper', shortcut: 'I' },
-  { id: 'clone', label: 'Clone', shortcut: 'S' },
-  { id: 'dodge', label: 'Dodge', shortcut: 'O' },
-  { id: 'shape', label: 'Shape', shortcut: 'U' },
-  { id: 'text', label: 'Text', shortcut: 'T' },
-  { id: 'crop', label: 'Crop', shortcut: 'C' },
-  { id: 'segment', label: 'AI Cutout', shortcut: 'W' },
+const TOOLS: Array<{ id: Tool; labelKey: string; shortcut: string }> = [
+  { id: 'select', labelKey: 'toolbar.select', shortcut: 'V' },
+  { id: 'move', labelKey: 'toolbar.move', shortcut: 'M' },
+  { id: 'brush', labelKey: 'toolbar.brush', shortcut: 'B' },
+  { id: 'eraser', labelKey: 'toolbar.eraser', shortcut: 'E' },
+  { id: 'gradient', labelKey: 'toolbar.gradient', shortcut: 'G' },
+  { id: 'fill', labelKey: 'toolbar.fill', shortcut: 'K' },
+  { id: 'eyedropper', labelKey: 'toolbar.eyedropper', shortcut: 'I' },
+  { id: 'clone', labelKey: 'toolbar.clone', shortcut: 'S' },
+  { id: 'dodge', labelKey: 'toolbar.dodge', shortcut: 'O' },
+  { id: 'shape', labelKey: 'toolbar.shape', shortcut: 'U' },
+  { id: 'text', labelKey: 'toolbar.text', shortcut: 'T' },
+  { id: 'crop', labelKey: 'toolbar.crop', shortcut: 'C' },
+  { id: 'segment', labelKey: 'toolbar.segment', shortcut: 'W' },
 ];
 
 /** Tool shortcut key map. */
@@ -134,9 +135,9 @@ function Toolbar(): React.JSX.Element {
           key={tool.id}
           className={`toolbar-btn ${activeTool === tool.id ? 'active' : ''}`}
           onClick={(): void => setActiveTool(tool.id)}
-          title={`${tool.label} (${tool.shortcut})`}
+          title={`${t(tool.labelKey)} (${tool.shortcut})`}
         >
-          {tool.label}
+          {t(tool.labelKey)}
         </button>
       ))}
     </div>
@@ -189,8 +190,8 @@ function StatusBar(): React.JSX.Element {
     <div className="statusbar">
       <span className="status-message">{statusMessage}</span>
       <span className="status-right">
-        {canUndo && <span className="status-hint">Ctrl+Z undo</span>}
-        {canRedo && <span className="status-hint">Ctrl+Y redo</span>}
+        {canUndo && <span className="status-hint">{t('statusbar.undoHint')}</span>}
+        {canRedo && <span className="status-hint">{t('statusbar.redoHint')}</span>}
         {document && (
           <>
             <span className="status-sep">|</span>
@@ -201,11 +202,11 @@ function StatusBar(): React.JSX.Element {
         )}
         <span className="status-sep">|</span>
         <span className="zoom-controls">
-          <button onClick={handleFitToWindow} disabled={!document} title="Fit to window">Fit</button>
-          <button onClick={handleZoomToActual} disabled={!document} title="Zoom to 100%">100%</button>
-          <button onClick={handleZoomOut} disabled={!document} title="Zoom out">&minus;</button>
+          <button onClick={handleFitToWindow} disabled={!document} title={t('statusbar.fitTitle')}>{t('statusbar.fit')}</button>
+          <button onClick={handleZoomToActual} disabled={!document} title={t('statusbar.actualSizeTitle')}>100%</button>
+          <button onClick={handleZoomOut} disabled={!document} title={t('statusbar.zoomOutTitle')}>&minus;</button>
           <span className="zoom-percentage">{Math.round(zoom * 100)}%</span>
-          <button onClick={handleZoomIn} disabled={!document} title="Zoom in">+</button>
+          <button onClick={handleZoomIn} disabled={!document} title={t('statusbar.zoomInTitle')}>+</button>
         </span>
       </span>
     </div>
@@ -226,13 +227,13 @@ function SidebarWrapper(): React.JSX.Element {
           className={`sidebar-tab ${activePanel === 'layers' ? 'sidebar-tab--active' : ''}`}
           onClick={(): void => setActivePanel('layers')}
         >
-          Layers
+          {t('sidebar.layers')}
         </button>
         <button
           className={`sidebar-tab ${activePanel === 'assets' ? 'sidebar-tab--active' : ''}`}
           onClick={(): void => setActivePanel('assets')}
         >
-          Assets
+          {t('sidebar.assets')}
         </button>
       </div>
       <div className="sidebar-content">
@@ -508,14 +509,14 @@ export function App(): React.JSX.Element {
       if (directFilters[type]) {
         directFilters[type]();
       } else {
-        s.setStatusMessage(`Unsupported filter: ${type}`);
+        s.setStatusMessage(`${t('status.unsupportedFilter')}: ${type}`);
       }
     });
 
     register(api.onMenuFill, () => {
       const s = useAppStore.getState();
       s.setActiveTool('fill');
-      s.setStatusMessage('Fill tool selected');
+      s.setStatusMessage(t('status.fillToolSelected'));
     });
     register(api.onMenuImageSize, () => useAppStore.getState().openImageSizeDialog());
     register(api.onMenuCanvasSize, () => useAppStore.getState().openCanvasSizeDialog());
@@ -624,7 +625,7 @@ export function App(): React.JSX.Element {
         }
       }
 
-      useAppStore.getState().setStatusMessage('Unsupported file format. Drop a PSD or image file.');
+      useAppStore.getState().setStatusMessage(t('status.dropUnsupportedFormat'));
     },
     [openFileByPath, setDragOverActive],
   );
@@ -655,7 +656,7 @@ export function App(): React.JSX.Element {
       {dragOverActive && (
         <div className="drag-overlay">
           <div className="drag-overlay__content">
-            <p className="drag-overlay__text">Drop file to open</p>
+            <p className="drag-overlay__text">{t('app.dragDropToOpen')}</p>
           </div>
         </div>
       )}

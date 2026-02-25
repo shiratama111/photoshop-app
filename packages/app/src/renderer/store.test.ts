@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BlendMode } from '@photoshop-app/types';
 import { useAppStore } from './store';
+import { t } from './i18n';
 
 function resetStore(): void {
   useAppStore.setState({
@@ -14,7 +15,7 @@ function resetStore(): void {
     activeTool: 'select',
     zoom: 1,
     panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
+    statusMessage: t('status.ready'),
     showAbout: false,
     selectedLayerId: null,
     canUndo: false,
@@ -50,7 +51,7 @@ describe('useAppStore', () => {
     });
 
     it('should show Ready status', () => {
-      expect(useAppStore.getState().statusMessage).toBe('Ready');
+      expect(useAppStore.getState().statusMessage).toBe(t('status.ready'));
     });
 
     it('should have no selected layer', () => {
@@ -120,7 +121,7 @@ describe('useAppStore', () => {
 
     it('should update status message', () => {
       createTestDocument();
-      expect(useAppStore.getState().statusMessage).toContain('Created');
+      expect(useAppStore.getState().statusMessage).toContain(t('status.created'));
       expect(useAppStore.getState().statusMessage).toContain('800x600');
     });
 

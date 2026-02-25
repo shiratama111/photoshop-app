@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from './store';
+import { t } from './i18n';
 
 // Mock OffscreenCanvas for Node.js test environment
 const mockBlob = {
@@ -62,7 +63,7 @@ function resetStore(): void {
     activeTool: 'select',
     zoom: 1,
     panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
+    statusMessage: t('status.ready'),
     showAbout: false,
     selectedLayerId: null,
     canUndo: false,
@@ -91,7 +92,7 @@ describe('APP-010: Image Export', () => {
 
     expect(mockExportFile).toHaveBeenCalled();
     const state = useAppStore.getState();
-    expect(state.statusMessage).toContain('Exported');
+    expect(state.statusMessage).toContain(t('status.exported'));
   });
 
   it('should export as JPEG when specified', async () => {
@@ -111,7 +112,7 @@ describe('APP-010: Image Export', () => {
     await useAppStore.getState().exportAsImage();
 
     const state = useAppStore.getState();
-    expect(state.statusMessage).toContain('No document');
+    expect(state.statusMessage).toContain(t('status.noDocumentToExport'));
   });
 
   it('should handle export cancellation gracefully', async () => {
@@ -122,7 +123,7 @@ describe('APP-010: Image Export', () => {
 
     // No crash, status message should not say "Exported"
     const state = useAppStore.getState();
-    expect(state.statusMessage).not.toContain('Exported');
+    expect(state.statusMessage).not.toContain(t('status.exported'));
   });
 
   it('should support WebP export', async () => {

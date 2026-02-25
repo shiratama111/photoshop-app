@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from './store';
+import { t } from './i18n';
 
 function resetStore(): void {
   useAppStore.setState({
@@ -12,7 +13,7 @@ function resetStore(): void {
     activeTool: 'select',
     zoom: 1,
     panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
+    statusMessage: t('status.ready'),
     showAbout: false,
     selectedLayerId: null,
     canUndo: false,
@@ -52,7 +53,7 @@ describe('APP-015: Selection Tools', () => {
     useAppStore.getState().setSelection({ x: 0, y: 0, width: 100, height: 100 });
     useAppStore.getState().clearSelection();
     expect(useAppStore.getState().selection).toBeNull();
-    expect(useAppStore.getState().statusMessage).toContain('cleared');
+    expect(useAppStore.getState().statusMessage).toContain(t('status.selectionCleared'));
   });
 
   it('should select all', () => {

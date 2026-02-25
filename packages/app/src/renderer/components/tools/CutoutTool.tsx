@@ -19,6 +19,7 @@ import { useAppStore } from '../../store';
 import { useCutoutStore } from './cutout-store';
 import type { PointPrompt, SegmentationProvider } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
+import { t } from '../../i18n';
 import { MaskOverlay } from '../overlays/MaskOverlay';
 import {
   paintBrush,
@@ -154,14 +155,14 @@ export function CutoutTool(): React.JSX.Element | null {
       const layer = findLayerById(doc.rootGroup, selectedLayerId);
       if (!layer || layer.type !== 'raster' || !layer.imageData) {
         setCutoutProcessing(false);
-        useAppStore.getState().setStatusMessage('Select a raster layer with pixels');
+        useAppStore.getState().setStatusMessage(t('status.cutoutSelectRasterPixels'));
         return;
       }
       const raster = layer;
       const rasterImage = raster.imageData;
       if (!rasterImage) {
         setCutoutProcessing(false);
-        useAppStore.getState().setStatusMessage('Select a raster layer with pixels');
+        useAppStore.getState().setStatusMessage(t('status.cutoutSelectRasterPixels'));
         return;
       }
 
@@ -186,7 +187,7 @@ export function CutoutTool(): React.JSX.Element | null {
 
       if (localPrompts.length === 0) {
         setCutoutProcessing(false);
-        useAppStore.getState().setStatusMessage('Add prompts inside the selected layer');
+        useAppStore.getState().setStatusMessage(t('status.cutoutAddPromptInside'));
         return;
       }
 
@@ -214,7 +215,7 @@ export function CutoutTool(): React.JSX.Element | null {
       setCutoutMask({ ...mask, data: finalData });
     } catch {
       setCutoutProcessing(false);
-      useAppStore.getState().setStatusMessage('AI inference failed');
+      useAppStore.getState().setStatusMessage(t('status.cutoutInferenceFailed'));
     } finally {
       provider?.dispose();
     }
@@ -272,11 +273,11 @@ export function CutoutTool(): React.JSX.Element | null {
       {/* Options panel */}
       <div className="cutout-tool-panel">
         <div className="cutout-tool-header">
-          <span>AI Cutout</span>
+          <span>{t('cutout.title')}</span>
           <button
             className="cutout-tool-close"
             onClick={cancelCutout}
-            title="Cancel (Esc)"
+            title={t('cutout.closeTitle')}
           >
             x
           </button>
@@ -284,20 +285,20 @@ export function CutoutTool(): React.JSX.Element | null {
 
         {/* Mode toggle */}
         <div className="cutout-tool-section">
-          <span className="cutout-tool-label">Mode</span>
+          <span className="cutout-tool-label">{t('cutout.mode')}</span>
           <div className="cutout-tool-toggle">
             <button
               className={`cutout-toggle-btn ${mode === 'prompt' ? 'cutout-toggle-btn--active' : ''}`}
               onClick={(): void => setMode('prompt')}
             >
-              Prompt
+              {t('cutout.prompt')}
             </button>
             <button
               className={`cutout-toggle-btn ${mode === 'brush' ? 'cutout-toggle-btn--active' : ''}`}
               onClick={(): void => setMode('brush')}
               disabled={!hasMask}
             >
-              Brush
+              {t('cutout.brush')}
             </button>
           </div>
 
@@ -307,13 +308,13 @@ export function CutoutTool(): React.JSX.Element | null {
                 className={`cutout-toggle-btn ${cutout.brushMode === 'add' ? 'cutout-toggle-btn--active' : ''}`}
                 onClick={(): void => setCutoutBrushMode('add')}
               >
-                + Positive
+                + {t('cutout.positive')}
               </button>
               <button
                 className={`cutout-toggle-btn ${cutout.brushMode === 'remove' ? 'cutout-toggle-btn--active' : ''}`}
                 onClick={(): void => setCutoutBrushMode('remove')}
               >
-                - Negative
+                - {t('cutout.negative')}
               </button>
             </div>
           )}
@@ -322,7 +323,7 @@ export function CutoutTool(): React.JSX.Element | null {
         {/* Brush size (shown in brush mode) */}
         {mode === 'brush' && (
           <div className="cutout-tool-section">
-            <span className="cutout-tool-label">Brush Size</span>
+            <span className="cutout-tool-label">{t('cutout.brushSize')}</span>
             <input
               type="range"
               className="cutout-tool-slider"
@@ -337,7 +338,7 @@ export function CutoutTool(): React.JSX.Element | null {
 
         {/* Boundary adjustment */}
         <div className="cutout-tool-section">
-          <span className="cutout-tool-label">Boundary</span>
+          <span className="cutout-tool-label">{t('cutout.boundary')}</span>
           <input
             type="range"
             className="cutout-tool-slider"
@@ -352,7 +353,7 @@ export function CutoutTool(): React.JSX.Element | null {
 
         {/* Feather */}
         <div className="cutout-tool-section">
-          <span className="cutout-tool-label">Feather</span>
+          <span className="cutout-tool-label">{t('cutout.feather')}</span>
           <input
             type="range"
             className="cutout-tool-slider"
@@ -367,11 +368,11 @@ export function CutoutTool(): React.JSX.Element | null {
 
         {/* Status */}
         {cutout.isProcessing && (
-          <div className="cutout-processing">Processing...</div>
+          <div className="cutout-processing">{t('cutout.processing')}</div>
         )}
         {hasMask && !cutout.isProcessing && (
           <div className="cutout-confidence">
-            Confidence: {Math.round(cutout.confidence * 100)}%
+            {t('cutout.confidence')}: {Math.round(cutout.confidence * 100)}%
           </div>
         )}
 
@@ -382,20 +383,20 @@ export function CutoutTool(): React.JSX.Element | null {
             onClick={applyCutoutAsMask}
             disabled={!hasMask}
           >
-            Apply Mask
+            {t('cutout.applyMask')}
           </button>
           <button
             className="cutout-action-btn"
             onClick={cutToNewLayer}
             disabled={!hasMask}
           >
-            Cut to New Layer
+            {t('cutout.cutToNewLayer')}
           </button>
           <button
             className="cutout-action-btn"
             onClick={cancelCutout}
           >
-            Cancel
+            {t('cutout.cancel')}
           </button>
         </div>
       </div>

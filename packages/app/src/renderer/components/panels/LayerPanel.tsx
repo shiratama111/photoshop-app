@@ -13,6 +13,7 @@
 
 import React, { useCallback, useRef } from 'react';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
 import { LayerItem } from './LayerItem';
 
 /** LayerPanel displays and manages the document's layer tree. */
@@ -78,7 +79,7 @@ export function LayerPanel(): React.JSX.Element {
 
   return (
     <div className="sidebar">
-      <div className="sidebar-header">Layers</div>
+      <div className="sidebar-header">{t('layerPanel.title')}</div>
 
       {document ? (
         <>
@@ -100,14 +101,14 @@ export function LayerPanel(): React.JSX.Element {
                       e.stopPropagation();
                       openLayerStyleDialog(layer.id);
                     }}
-                    title="Layer styles"
+                    title={t('layerPanel.fxTitle')}
                   >
                     fx
                   </button>
                 )}
               </div>
             ))}
-            {layers.length === 0 && <div className="layer-empty">No layers</div>}
+            {layers.length === 0 && <div className="layer-empty">{t('layerPanel.empty')}</div>}
           </div>
 
           {/* Layer action buttons */}
@@ -115,36 +116,36 @@ export function LayerPanel(): React.JSX.Element {
             <button
               className="layer-action-btn"
               onClick={(): void => addRasterLayer()}
-              title="Add new layer"
+              title={t('layerPanel.addLayer')}
             >
-              + Layer
+              + {t('layerPanel.addLayer')}
             </button>
             <button
               className="layer-action-btn"
               onClick={(): void => addTextLayer()}
-              title="Add new text layer"
+              title={t('layerPanel.addText')}
             >
-              + Text
+              + {t('layerPanel.addText')}
             </button>
             <button
               className="layer-action-btn"
               onClick={(): void => addLayerGroup()}
-              title="Add new group"
+              title={t('layerPanel.addGroup')}
             >
-              + Group
+              + {t('layerPanel.addGroup')}
             </button>
             <button
               className="layer-action-btn layer-action-btn--danger"
               onClick={handleDeleteSelected}
               disabled={!selectedLayerId}
-              title="Delete selected layer"
+              title={t('layerPanel.delete')}
             >
-              Delete
+              {t('layerPanel.delete')}
             </button>
           </div>
         </>
       ) : (
-        <div className="layer-empty">No document open</div>
+        <div className="layer-empty">{t('layerPanel.noDocument')}</div>
       )}
     </div>
   );

@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from './store';
+import { t } from './i18n';
 
 // Mock createImageBitmap and OffscreenCanvas for Node.js test environment
 const mockImageData = {
@@ -56,7 +57,7 @@ function resetStore(): void {
     activeTool: 'select',
     zoom: 1,
     panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
+    statusMessage: t('status.ready'),
     showAbout: false,
     selectedLayerId: null,
     canUndo: false,
@@ -128,7 +129,7 @@ describe('APP-009: Image Import', () => {
     
     const state = useAppStore.getState();
     expect(state.document).toBeNull();
-    expect(state.statusMessage).toContain('Unsupported');
+    expect(state.statusMessage).toContain(t('status.unsupportedFileFormat'));
   });
 
   it('should set document dimensions from the image', async () => {
@@ -183,6 +184,6 @@ describe('APP-009: Image Import', () => {
     
     const state = useAppStore.getState();
     expect(state.document).toBeNull();
-    expect(state.statusMessage).toContain('Failed');
+    expect(state.statusMessage).toContain(t('status.failedOpenImage'));
   });
 });

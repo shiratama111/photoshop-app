@@ -31,6 +31,7 @@ import {
 import type { CloneSession, GradientType } from '@photoshop-app/core';
 import { BrushEngine, BRUSH_VARIANTS } from '../../brush-engine';
 import { useAppStore, getViewport } from '../../store';
+import { t } from '../../i18n';
 import { TransformHandles } from './TransformHandles';
 import { SelectionOverlay } from './SelectionOverlay';
 import { CutoutTool } from '../tools/CutoutTool';
@@ -754,12 +755,12 @@ export function CanvasView(): React.JSX.Element {
         </>
       ) : (
         <div className="canvas-empty">
-          <p>No document open</p>
+          <p>{t('canvas.noDocumentOpen')}</p>
           <button
             className="canvas-empty__new-btn"
             onClick={(): void => useAppStore.getState().openNewDocumentDialog()}
           >
-            New Document
+            {t('canvas.newDocument')}
           </button>
         </div>
       )}
