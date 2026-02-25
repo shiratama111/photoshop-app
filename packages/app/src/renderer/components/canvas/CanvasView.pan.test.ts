@@ -11,7 +11,7 @@
  * @see docs/agent-briefs/PS-PAN-001.md
  */
 
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // DOM / global mocks for Node.js test environment

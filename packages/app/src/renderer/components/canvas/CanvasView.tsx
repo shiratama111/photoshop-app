@@ -183,12 +183,13 @@ export function CanvasView(): React.JSX.Element {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.code !== 'Space' || e.repeat) return;
       // Skip if an input element is focused (text editing, etc.)
-      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const active = globalThis.document.activeElement as HTMLElement | null;
+      const tag = active?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if ((document.activeElement as HTMLElement | null)?.isContentEditable) return;
+      if (active?.isContentEditable) return;
       e.preventDefault();
       isSpacePressed.current = true;
-      setPanCursor('grab');
+      setPanCursor(isPanning.current ? 'grabbing' : 'grab');
     };
 
     const handleKeyUp = (e: KeyboardEvent): void => {
@@ -201,11 +202,21 @@ export function CanvasView(): React.JSX.Element {
       setPanCursor(null);
     };
 
+    const handleWindowBlur = (): void => {
+      // Prevent sticky Space-pan state if keyup is missed on focus loss.
+      isSpacePressed.current = false;
+      if (!isPanning.current) {
+        setPanCursor(null);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
     return (): void => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, []);
 
