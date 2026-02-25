@@ -1,12 +1,12 @@
 /**
  * @module components/text-editor/InlineTextEditor
- * Canvas overlay textarea for inline text editing.
+ * Custom overlay for inline text editing that avoids native textarea UI.
  *
- * Positioned over the canvas at the text layer's screen coordinates.
- * Matches the layer's font styling for WYSIWYG preview.
- * Supports resize via CSS `resize: both`; on blur the new dimensions
- * are committed to the layer's `textBounds` property (APP-011).
+ * Uses a contentEditable div positioned over the canvas at the text layer's
+ * screen coordinates. Text is handled as plain text to avoid HTML injection
+ * and to keep caret behavior stable while typing.
  *
+ * @see PS-TEXT-005: Custom text editing overlay
  * @see APP-005: Text editing UI
  * @see APP-011: Text box resize with textBounds commit on blur
  */
@@ -32,18 +32,70 @@ function contrastShadow(c: { r: number; g: number; b: number }): string {
   return shadow;
 }
 
-/** InlineTextEditor — fixed-position textarea for editing text layers. */
+/**
+ * Extract plain text from a contentEditable element.
+ * Handles browser-inserted line breaks and trims the trailing editor newline.
+ */
+function extractText(el: HTMLElement): string {
+  return (el.innerText ?? '').replace(/\n$/, '');
+}
+
+/** Put the text caret at the end of a contentEditable element. */
+function placeCaretAtEnd(el: HTMLElement): void {
+  const range = globalThis.document.createRange();
+  const selection = globalThis.document.getSelection();
+  if (!selection) return;
+  range.selectNodeContents(el);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/** Insert plain text at current selection inside a contentEditable element. */
+function insertPlainTextAtSelection(el: HTMLElement, text: string): void {
+  const selection = globalThis.document.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    el.textContent = `${el.textContent ?? ''}${text}`;
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+
+  const textNode = globalThis.document.createTextNode(text);
+  range.insertNode(textNode);
+
+  const len = textNode.textContent?.length ?? 0;
+  range.setStart(textNode, len);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/** InlineTextEditor - fixed-position contentEditable overlay for editing text layers. */
 export function InlineTextEditor(): React.JSX.Element | null {
   const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const document = useAppStore((s) => s.document);
   const zoom = useAppStore((s) => s.zoom);
   const setTextProperty = useAppStore((s) => s.setTextProperty);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const isComposing = useRef(false);
 
   useEffect(() => {
-    textareaRef.current?.focus();
+    if (!editingTextLayerId) return;
+    const el = editorRef.current;
+    if (!el) return;
+
+    const currentDoc = useAppStore.getState().document;
+    if (!currentDoc) return;
+
+    const layer = findLayerById(currentDoc.rootGroup, editingTextLayerId);
+    if (!layer || layer.type !== 'text') return;
+
+    el.textContent = layer.text;
+    el.focus();
+    placeCaretAtEnd(el);
   }, [editingTextLayerId]);
 
   const handleCompositionStart = useCallback((): void => {
@@ -51,20 +103,33 @@ export function InlineTextEditor(): React.JSX.Element | null {
   }, []);
 
   const handleCompositionEnd = useCallback(
-    (e: React.CompositionEvent<HTMLTextAreaElement>): void => {
+    (e: React.CompositionEvent<HTMLDivElement>): void => {
       isComposing.current = false;
       if (editingTextLayerId) {
-        setTextProperty(editingTextLayerId, 'text', e.currentTarget.value);
+        setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
       }
     },
     [editingTextLayerId, setTextProperty],
   );
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+  const handleInput = useCallback(
+    (e: React.FormEvent<HTMLDivElement>): void => {
       if (isComposing.current) return;
       if (editingTextLayerId) {
-        setTextProperty(editingTextLayerId, 'text', e.target.value);
+        setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
+      }
+    },
+    [editingTextLayerId, setTextProperty],
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>): void => {
+      e.preventDefault();
+      const plainText = e.clipboardData.getData('text/plain').replace(/\r\n/g, '\n');
+      insertPlainTextAtSelection(e.currentTarget, plainText);
+
+      if (!isComposing.current && editingTextLayerId) {
+        setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
       }
     },
     [editingTextLayerId, setTextProperty],
@@ -72,10 +137,15 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent): void => {
+      // Allow all keys during IME composition
       if (e.nativeEvent.isComposing) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
         stopEditingText(editingTextLayerId ?? undefined);
+      }
+      // Stop propagation for Space so global pan shortcut does not intercept it.
+      if (e.key === ' ') {
+        e.stopPropagation();
       }
     },
     [editingTextLayerId, stopEditingText],
@@ -83,8 +153,8 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   const handleBlur = useCallback((): void => {
     // Commit the resized dimensions as textBounds before stopping edit
-    if (editingTextLayerId && textareaRef.current) {
-      const el = textareaRef.current;
+    if (editingTextLayerId && editorRef.current) {
+      const el = editorRef.current;
       const vp = getViewport();
       const docWidth = el.offsetWidth / vp.zoom;
       const docHeight = el.offsetHeight / vp.zoom;
@@ -136,11 +206,15 @@ export function InlineTextEditor(): React.JSX.Element | null {
   }
 
   return (
-    <textarea
-      ref={textareaRef}
+    <div
+      ref={editorRef}
       className="inline-text-editor"
-      value={textLayer.text}
-      onChange={handleChange}
+      contentEditable
+      suppressContentEditableWarning
+      role="textbox"
+      aria-multiline
+      onInput={handleInput}
+      onPaste={handlePaste}
       onKeyDown={handleKeyDown}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}

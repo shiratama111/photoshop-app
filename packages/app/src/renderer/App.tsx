@@ -280,7 +280,8 @@ export function App(): React.JSX.Element {
       if (
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT'
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
       ) {
         return;
       }

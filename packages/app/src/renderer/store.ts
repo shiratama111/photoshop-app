@@ -30,6 +30,7 @@ import type {
   LayerEffect,
   LayerGroup,
   RasterLayer,
+  TextLayer,
 } from '@photoshop-app/types';
 import type { BrushVariantId } from './brush-engine';
 import {
@@ -337,9 +338,11 @@ export interface AppActions {
   /** Export the current document as PNG/JPEG/WebP. */
   exportAsImage: (format?: 'png' | 'jpeg' | 'webp') => Promise<void>;
 
-  // Transform 窶・APP-012
+  // Transform — APP-012 / PS-TEXT-006
   /** Resize a layer to new dimensions (undoable for raster layers). */
   resizeLayer: (layerId: string, newWidth: number, newHeight: number) => void;
+  /** Resize a text layer: update textBounds + fontSize proportionally (undoable). */
+  resizeTextLayer: (layerId: string, newWidth: number, newHeight: number) => void;
   /** Set whether a transform operation is active. */
   setTransformActive: (active: boolean) => void;
 
@@ -1571,6 +1574,69 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     } catch {
       set({ statusMessage: t('status.resizeFailed') });
     }
+  },
+
+  // PS-TEXT-006: Resize text layer — update textBounds + fontSize proportionally
+  resizeTextLayer: (layerId, newWidth, newHeight): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'text') return;
+    const textLayer = layer as TextLayer;
+
+    // Compute old bounds (textBounds or fallback estimate)
+    const oldBounds = textLayer.textBounds ?? {
+      x: textLayer.position.x,
+      y: textLayer.position.y,
+      width: Math.max(1, textLayer.fontSize * 5),
+      height: Math.max(1, textLayer.fontSize * textLayer.lineHeight),
+    };
+
+    const oldW = oldBounds.width;
+    const oldH = oldBounds.height;
+    if (oldW === newWidth && oldH === newHeight) return;
+
+    // Scale factor: arithmetic mean (consistent with document scaling)
+    const scaleX = newWidth / oldW;
+    const scaleY = newHeight / oldH;
+    const scaleFactor = (scaleX + scaleY) / 2;
+
+    const oldFontSize = textLayer.fontSize;
+    const newFontSize = Math.max(1, Math.round(oldFontSize * scaleFactor));
+    const newTextBounds = { x: oldBounds.x, y: oldBounds.y, width: newWidth, height: newHeight };
+    const oldTextBounds = textLayer.textBounds ? { ...textLayer.textBounds } : null;
+
+    // Apply changes
+    textLayer.fontSize = newFontSize;
+    textLayer.textBounds = newTextBounds;
+
+    // Undoable command (batch: fontSize + textBounds)
+    const cmd: Command = {
+      description: `Resize text "${textLayer.name}" to ${newWidth} x ${newHeight}`,
+      execute(): void {
+        textLayer.fontSize = newFontSize;
+        textLayer.textBounds = newTextBounds;
+      },
+      undo(): void {
+        textLayer.fontSize = oldFontSize;
+        textLayer.textBounds = oldTextBounds;
+      },
+    };
+
+    commandHistory.execute(cmd);
+    const curState = useAppStore.getState();
+    const history = getHistorySnapshot(curState, { appendDescription: cmd.description });
+    set({
+      canUndo: commandHistory.canUndo,
+      canRedo: commandHistory.canRedo,
+      revision: curState.revision + 1,
+      ...history,
+    });
+    eventBus.emit('document:changed');
+    eventBus.emit('layer:property-changed', { layerId, property: 'fontSize' });
+    doc.dirty = true;
+    set({ statusMessage: `${t('status.resizedLayer')}: ${newWidth} x ${newHeight}` });
+    get().updateTitleBar();
   },
 
   setTransformActive: (active): void => {
