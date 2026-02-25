@@ -1,6 +1,6 @@
 /**
  * @module CanvasView.text-create.test
- * Store-level tests for text tool click-to-create behavior (PS-TEXT-003, PS-TEXT-004).
+ * Store-level tests for text tool click-to-create behavior (PS-TEXT-003, PS-TEXT-004, PS-TEXT-007).
  *
  * Tests verify:
  * - addTextLayerAt creates a text layer at the specified position
@@ -9,9 +9,11 @@
  * - Single-click new/existing branching consistency
  * - Undo removes the created text layer
  * - Japanese/English mixed text stored correctly
+ * - PS-TEXT-007: Multi-step undo/redo chain regression
  *
  * @see docs/agent-briefs/PS-TEXT-003.md
  * @see docs/agent-briefs/PS-TEXT-004.md
+ * @see docs/agent-briefs/PS-TEXT-007-MANUAL-CHECKLIST.md
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -207,7 +209,7 @@ describe('PS-TEXT-003: Click-to-type text creation', () => {
       useAppStore.getState().addTextLayerAt(0, 0);
       const layerId = useAppStore.getState().selectedLayerId!;
 
-      const mixedText = 'テスト ABC 123';
+      const mixedText = '\u30c6\u30b9\u30c8ABC 123';
       useAppStore.getState().setTextProperty(layerId, 'text', mixedText);
 
       const doc = useAppStore.getState().document!;
@@ -220,7 +222,7 @@ describe('PS-TEXT-003: Click-to-type text creation', () => {
       useAppStore.getState().addTextLayerAt(0, 0);
       const layerId = useAppStore.getState().selectedLayerId!;
 
-      useAppStore.getState().setTextProperty(layerId, 'text', '日本語テスト');
+      useAppStore.getState().setTextProperty(layerId, 'text', '\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8');
       useAppStore.getState().undo();
 
       const doc = useAppStore.getState().document!;
@@ -229,7 +231,7 @@ describe('PS-TEXT-003: Click-to-type text creation', () => {
 
       useAppStore.getState().redo();
       const updated = findLayerById(doc.rootGroup, layerId)! as TextLayer;
-      expect(updated.text).toBe('日本語テスト');
+      expect(updated.text).toBe('\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8');
     });
   });
 });
@@ -305,5 +307,74 @@ describe('PS-TEXT-004: Single-click new/existing branching', () => {
     const doc = useAppStore.getState().document!;
     const layer = findLayerById(doc.rootGroup, layerId)! as TextLayer;
     expect(layer.text).toBe(text);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PS-TEXT-007: Multi-step undo/redo regression
+// ---------------------------------------------------------------------------
+
+describe('PS-TEXT-007: Multi-step undo/redo regression', () => {
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('should undo create→edit→create chain and restore all layers', () => {
+    createTestDocument();
+    const doc = useAppStore.getState().document!;
+    const baseCount = flattenLayers(doc.rootGroup).length;
+
+    // Create layer A and edit text
+    useAppStore.getState().addTextLayerAt(10, 10);
+    const idA = useAppStore.getState().selectedLayerId!;
+    useAppStore.getState().setTextProperty(idA, 'text', 'Layer A');
+
+    // Create layer B
+    useAppStore.getState().addTextLayerAt(200, 200);
+    expect(flattenLayers(doc.rootGroup).length).toBe(baseCount + 2);
+
+    // Undo 3 times: create B → text edit A → create A
+    useAppStore.getState().undo();
+    useAppStore.getState().undo();
+    useAppStore.getState().undo();
+    expect(flattenLayers(doc.rootGroup).length).toBe(baseCount);
+
+    // Redo 3 times: create A → text edit A → create B
+    useAppStore.getState().redo();
+    useAppStore.getState().redo();
+    useAppStore.getState().redo();
+    expect(flattenLayers(doc.rootGroup).length).toBe(baseCount + 2);
+
+    const layerA = findLayerById(doc.rootGroup, idA) as TextLayer;
+    expect(layerA.text).toBe('Layer A');
+  });
+
+  it('should preserve editingTextLayerId=null after undoing text creation', () => {
+    createTestDocument();
+    useAppStore.getState().addTextLayerAt(100, 100);
+    const layerId = useAppStore.getState().editingTextLayerId!;
+    expect(layerId).not.toBeNull();
+
+    useAppStore.getState().stopEditingText(layerId);
+    useAppStore.getState().undo();
+
+    expect(useAppStore.getState().editingTextLayerId).toBeNull();
+  });
+
+  it('should handle rapid create→stop 5 times without layer leaks', () => {
+    createTestDocument();
+    const doc = useAppStore.getState().document!;
+    const baseCount = flattenLayers(doc.rootGroup).length;
+
+    for (let i = 0; i < 5; i++) {
+      useAppStore.getState().addTextLayerAt(i * 50, i * 50);
+      const id = useAppStore.getState().editingTextLayerId!;
+      useAppStore.getState().setTextProperty(id, 'text', `Text ${i}`);
+      useAppStore.getState().stopEditingText(id);
+    }
+
+    const textLayers = flattenLayers(doc.rootGroup).filter((l) => l.type === 'text');
+    expect(textLayers.length).toBe(5);
+    expect(flattenLayers(doc.rootGroup).length).toBe(baseCount + 5);
   });
 });

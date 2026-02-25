@@ -1,6 +1,7 @@
 /**
  * @module components/text-editor/CanvasTextEditor.test
  * Regression checks for PS-TEXT-005 custom text editor behavior.
+ * PS-TEXT-007: IME composition sequence tests.
  */
 
 import fs from 'node:fs';
@@ -45,7 +46,7 @@ describe('CanvasTextEditor (PS-TEXT-005)', () => {
       const layerId = useAppStore.getState().selectedLayerId!;
       store.startEditingText(layerId);
 
-      store.setTextProperty(layerId, 'text', 'Hello 日本語');
+      store.setTextProperty(layerId, 'text', 'Hello \u65e5\u672c\u8a9e');
       expect(useAppStore.getState().editingTextLayerId).toBe(layerId);
     });
 
@@ -56,7 +57,7 @@ describe('CanvasTextEditor (PS-TEXT-005)', () => {
       const layerId = useAppStore.getState().selectedLayerId!;
       store.startEditingText(layerId);
 
-      const nextText = 'initial 日本語 English <tag>';
+      const nextText = 'initial \u65e5\u672c\u8a9e English <tag>';
       store.setTextProperty(layerId, 'text', nextText);
 
       const doc = useAppStore.getState().document!;
@@ -90,5 +91,64 @@ describe('CanvasTextEditor (PS-TEXT-005)', () => {
       const source = fs.readFileSync(path.resolve(__dirname, '../../App.tsx'), 'utf8');
       expect(source).toContain('target.isContentEditable');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PS-TEXT-007: IME composition sequence
+// ---------------------------------------------------------------------------
+
+describe('PS-TEXT-007: IME composition sequence', () => {
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('should preserve text during sequential setTextProperty calls (IME partial input)', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+    store.addTextLayer('IME Test', '');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    store.startEditingText(layerId);
+
+    // Simulate IME partial -> full sequence
+    store.setTextProperty(layerId, 'text', '\u306b');
+    store.setTextProperty(layerId, 'text', '\u306b\u307b');
+    store.setTextProperty(layerId, 'text', '\u306b\u307b\u3093');
+    store.setTextProperty(layerId, 'text', '\u65e5\u672c\u8a9e');
+
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+    expect(layer.text).toBe('\u65e5\u672c\u8a9e');
+  });
+
+  it('should commit final text matching compositionEnd output (finalized JP text)', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+    store.addTextLayer('Commit Test', '');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    store.startEditingText(layerId);
+
+    store.setTextProperty(layerId, 'text', '\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8');
+    store.stopEditingText(layerId);
+
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+    expect(layer.text).toBe('\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8');
+    expect(useAppStore.getState().editingTextLayerId).toBeNull();
+  });
+
+  it('should preserve mixed CJK+Latin text after composition (mixed-width IME)', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+    store.addTextLayer('Mixed CJK', '');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    store.startEditingText(layerId);
+
+    const mixedText = '\u6771\u4eacTower123\u7248';
+    store.setTextProperty(layerId, 'text', mixedText);
+
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+    expect(layer.text).toBe(mixedText);
   });
 });

@@ -807,13 +807,13 @@ describe('Canvas2DRenderer', () => {
     it('should render テスト ABC 123 via fillText', () => {
       const canvas = createMockCanvas(400, 200);
       const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
-      const layer = makeTextLayer('Mixed', 'テスト ABC 123');
+      const layer = makeTextLayer('Mixed', '\u30c6\u30b9\u30c8ABC 123');
       const doc = createTestDocument([layer]);
       const options = createRenderOptions();
 
       renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
 
-      expect(ctx.fillText).toHaveBeenCalledWith('テスト ABC 123', expect.any(Number), expect.any(Number));
+      expect(ctx.fillText).toHaveBeenCalledWith('\u30c6\u30b9\u30c8ABC 123', expect.any(Number), expect.any(Number));
     });
 
     it('should render text with correct rgba fill for black text', () => {
@@ -886,6 +886,78 @@ describe('Canvas2DRenderer', () => {
 
       expect(ctx.beginPath).not.toHaveBeenCalled();
       expect(ctx.stroke).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // PS-TEXT-007: Text visibility regression
+  // ---------------------------------------------------------------------------
+
+  describe('PS-TEXT-007: Text visibility regression', () => {
+    it('should render text layer simulating post-editing state', () => {
+      const canvas = createMockCanvas(400, 200);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Post-Edit', '\u30c6\u30b9\u30c8ABC 123');
+      layer.visible = true;
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.fillText.mock.calls[0][0]).toBe('\u30c6\u30b9\u30c8ABC 123');
+    });
+
+    it('should render multi-line JP-EN text with word wrap', () => {
+      const canvas = createMockCanvas(200, 400);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      // With mock measureText returning char*8px width, and textBounds.width=60,
+      // 'Hello World' (11 chars * 8 = 88px) should wrap
+      const layer = makeTextLayer('Wrap Test', 'Hello World \u30c6\u30b9\u30c8');
+      layer.textBounds = { x: 0, y: 0, width: 60, height: 400 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Should produce more lines than the single explicit line
+      expect(ctx.fillText.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('should render empty text layer without error', () => {
+      const canvas = createMockCanvas(100, 100);
+      const layer = makeTextLayer('Empty Post-Edit', '');
+      layer.visible = true;
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      // Should not throw
+      expect(() => {
+        renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+      }).not.toThrow();
+    });
+
+    it('should render text with effects after edit', () => {
+      const canvas = createMockCanvas(200, 200);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Effect Post-Edit', 'Styled Text');
+      layer.effects = [{
+        type: 'drop-shadow',
+        enabled: true,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        opacity: 0.5,
+        angle: 135,
+        distance: 5,
+        blur: 4,
+        spread: 0,
+      }];
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Shadow fillText + normal fillText = at least 2 calls
+      expect(ctx.fillText.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 
