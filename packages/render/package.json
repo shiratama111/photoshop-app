@@ -13,9 +13,11 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
     "test": "vitest run --passWithNoTests",
+    "bench": "npx tsx --tsconfig benchmarks/tsconfig.json benchmarks/render-benchmark.ts",
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@photoshop-app/core": "workspace:*",
     "@photoshop-app/types": "workspace:*"
   },
   "devDependencies": {

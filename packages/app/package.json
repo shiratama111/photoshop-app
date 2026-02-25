@@ -11,13 +11,14 @@
     "clean": "rimraf dist out"
   },
   "dependencies": {
-    "@photoshop-app/types": "workspace:*",
-    "@photoshop-app/core": "workspace:*",
-    "@photoshop-app/render": "workspace:*",
-    "@photoshop-app/adapter-psd": "workspace:*",
     "@photoshop-app/adapter-abr": "workspace:*",
     "@photoshop-app/adapter-asl": "workspace:*",
+    "@photoshop-app/adapter-psd": "workspace:*",
     "@photoshop-app/ai": "workspace:*",
+    "@photoshop-app/core": "workspace:*",
+    "@photoshop-app/render": "workspace:*",
+    "@photoshop-app/types": "workspace:*",
+    "fflate": "^0.8.2",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zustand": "^4.5.0"

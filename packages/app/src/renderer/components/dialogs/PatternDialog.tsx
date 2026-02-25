@@ -2,10 +2,16 @@
  * @module PatternDialog
  * Dialog for generating pattern overlays and concentration lines.
  *
- * Pattern types: dots, stripes, checker, diagonal-stripes, concentration-lines.
- * Generates raster layers via generatePattern() / generateConcentrationLines().
+ * Pattern types: dots, stripes, checker, diagonal-stripes, concentration-lines
+ * (core patterns), plus procedural overlays: proc-dots, proc-stripes,
+ * proc-checkerboard, proc-hatching (pattern-generator).
+ *
+ * Generates raster layers via generatePattern() / generateConcentrationLines()
+ * for core patterns, and via pattern-generator functions for procedural overlays.
  *
  * @see Phase 1-3: Background & atmosphere tools
+ * @see BG-001: Pattern overlay & background expansion
+ * @see pattern-generator.ts for procedural pattern generation
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,12 +19,32 @@ import { useAppStore } from '../../store';
 import { t } from '../../i18n';
 import { generatePattern, generateConcentrationLines } from '@photoshop-app/core';
 import type { PatternType } from '@photoshop-app/core';
+import {
+  generateDotPattern,
+  generateStripePattern,
+  generateCheckerboardPattern,
+  generateHatchPattern,
+} from './pattern-generator';
+import type { PatternColor } from './pattern-generator';
 
-type PatternMode = PatternType | 'concentration-lines';
+/** All available pattern modes including core and procedural types. */
+type PatternMode =
+  | PatternType
+  | 'concentration-lines'
+  | 'proc-dots'
+  | 'proc-stripes'
+  | 'proc-checkerboard'
+  | 'proc-hatching';
 
 const PREVIEW_WIDTH = 200;
 const PREVIEW_HEIGHT = 112;
 
+/**
+ * Convert a hex color string (#RRGGBB) to an RGBA object.
+ *
+ * @param hex - Hex color string (e.g. "#FF0000")
+ * @returns RGBA object with channels 0-255
+ */
 function hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
   return {
     r: parseInt(hex.slice(1, 3), 16),
@@ -28,17 +54,100 @@ function hexToRgba(hex: string): { r: number; g: number; b: number; a: number } 
   };
 }
 
+/**
+ * Check if a pattern mode is a procedural pattern (from pattern-generator).
+ *
+ * @param mode - Pattern mode to check
+ * @returns True if the mode is a procedural pattern type
+ */
+function isProceduralPattern(mode: PatternMode): mode is 'proc-dots' | 'proc-stripes' | 'proc-checkerboard' | 'proc-hatching' {
+  return mode === 'proc-dots' || mode === 'proc-stripes' || mode === 'proc-checkerboard' || mode === 'proc-hatching';
+}
+
+/**
+ * Generate procedural pattern ImageData based on current settings.
+ *
+ * @param mode - Procedural pattern mode
+ * @param width - Output width in pixels
+ * @param height - Output height in pixels
+ * @param color - Primary color
+ * @param color2 - Secondary color (for checkerboard)
+ * @param opacity - Overall opacity (0-1)
+ * @param spacing - Spacing between elements
+ * @param size - Element size
+ * @param angle - Angle in degrees
+ * @param gap - Gap between elements (for stripes)
+ * @returns Generated ImageData
+ */
+function generateProceduralImageData(
+  mode: 'proc-dots' | 'proc-stripes' | 'proc-checkerboard' | 'proc-hatching',
+  width: number,
+  height: number,
+  color: PatternColor,
+  color2: PatternColor,
+  opacity: number,
+  spacing: number,
+  size: number,
+  angle: number,
+  gap: number,
+): ImageData {
+  switch (mode) {
+    case 'proc-dots':
+      return generateDotPattern({
+        width,
+        height,
+        dotSize: size,
+        spacing,
+        color,
+        opacity,
+      });
+    case 'proc-stripes':
+      return generateStripePattern({
+        width,
+        height,
+        stripeWidth: size,
+        gap,
+        color,
+        angle,
+        opacity,
+      });
+    case 'proc-checkerboard':
+      return generateCheckerboardPattern({
+        width,
+        height,
+        cellSize: size,
+        color1: color,
+        color2,
+        opacity,
+      });
+    case 'proc-hatching':
+      return generateHatchPattern({
+        width,
+        height,
+        lineWidth: size,
+        spacing,
+        angle,
+        color,
+        opacity,
+      });
+  }
+}
+
+/** PatternDialog component for generating pattern overlays. */
 export function PatternDialog(): React.JSX.Element | null {
   const show = useAppStore((s) => s.showPatternDialog);
   const closeDialog = useAppStore((s) => s.closePatternDialog);
   const addProceduralLayer = useAppStore((s) => s.addProceduralLayer);
   const doc = useAppStore((s) => s.document);
 
-  const [mode, setMode] = useState<PatternMode>('dots');
+  const [mode, setMode] = useState<PatternMode>('proc-dots');
   const [colorHex, setColorHex] = useState('#000000');
+  const [color2Hex, setColor2Hex] = useState('#FFFFFF');
   const [opacity, setOpacity] = useState(0.8);
   const [spacing, setSpacing] = useState(20);
   const [size, setSize] = useState(4);
+  const [angle, setAngle] = useState(45);
+  const [gap, setGap] = useState(10);
   // Concentration lines specific
   const [lineCount, setLineCount] = useState(60);
   const [innerRadius, setInnerRadius] = useState(100);
@@ -67,7 +176,21 @@ export function PatternDialog(): React.JSX.Element | null {
     const color = hexToRgba(colorHex);
     let imageData: ImageData;
 
-    if (mode === 'concentration-lines') {
+    if (isProceduralPattern(mode)) {
+      const patColor2 = hexToRgba(color2Hex);
+      imageData = generateProceduralImageData(
+        mode,
+        PREVIEW_WIDTH,
+        PREVIEW_HEIGHT,
+        color,
+        patColor2,
+        opacity,
+        spacing,
+        size,
+        angle,
+        gap,
+      );
+    } else if (mode === 'concentration-lines') {
       imageData = generateConcentrationLines(
         PREVIEW_WIDTH, PREVIEW_HEIGHT,
         PREVIEW_WIDTH / 2, PREVIEW_HEIGHT / 2,
@@ -83,7 +206,7 @@ export function PatternDialog(): React.JSX.Element | null {
     }
 
     ctx.putImageData(imageData, 0, 0);
-  }, [mode, colorHex, opacity, spacing, size, lineCount, innerRadius, lineWidth, doc]);
+  }, [mode, colorHex, color2Hex, opacity, spacing, size, angle, gap, lineCount, innerRadius, lineWidth, doc]);
 
   useEffect(() => {
     if (!show) return;
@@ -92,11 +215,14 @@ export function PatternDialog(): React.JSX.Element | null {
 
   useEffect(() => {
     if (show) {
-      setMode('dots');
+      setMode('proc-dots');
       setColorHex('#000000');
+      setColor2Hex('#FFFFFF');
       setOpacity(0.8);
       setSpacing(20);
       setSize(4);
+      setAngle(45);
+      setGap(10);
       setLineCount(60);
       setInnerRadius(100);
       setLineWidth(3);
@@ -111,7 +237,28 @@ export function PatternDialog(): React.JSX.Element | null {
     let imageData: ImageData;
     let name: string;
 
-    if (mode === 'concentration-lines') {
+    if (isProceduralPattern(mode)) {
+      const patColor2 = hexToRgba(color2Hex);
+      imageData = generateProceduralImageData(
+        mode,
+        width,
+        height,
+        color,
+        patColor2,
+        opacity,
+        spacing,
+        size,
+        angle,
+        gap,
+      );
+      const nameMap: Record<typeof mode, string> = {
+        'proc-dots': 'Dot Pattern',
+        'proc-stripes': 'Stripe Pattern',
+        'proc-checkerboard': 'Checkerboard',
+        'proc-hatching': 'Hatch Pattern',
+      };
+      name = nameMap[mode];
+    } else if (mode === 'concentration-lines') {
       imageData = generateConcentrationLines(
         width, height,
         width / 2, height / 2,
@@ -126,11 +273,15 @@ export function PatternDialog(): React.JSX.Element | null {
 
     addProceduralLayer(name, imageData);
     closeDialog();
-  }, [doc, mode, colorHex, opacity, spacing, size, lineCount, innerRadius, lineWidth, addProceduralLayer, closeDialog]);
+  }, [doc, mode, colorHex, color2Hex, opacity, spacing, size, angle, gap, lineCount, innerRadius, lineWidth, addProceduralLayer, closeDialog]);
 
   if (!show) return null;
 
   const PATTERN_OPTIONS: { value: PatternMode; labelKey: string }[] = [
+    { value: 'proc-dots', labelKey: 'pattern.procDots' },
+    { value: 'proc-stripes', labelKey: 'pattern.procStripes' },
+    { value: 'proc-checkerboard', labelKey: 'pattern.procCheckerboard' },
+    { value: 'proc-hatching', labelKey: 'pattern.procHatching' },
     { value: 'dots', labelKey: 'pattern.dots' },
     { value: 'stripes', labelKey: 'pattern.stripes' },
     { value: 'checker', labelKey: 'pattern.checker' },
@@ -138,18 +289,29 @@ export function PatternDialog(): React.JSX.Element | null {
     { value: 'concentration-lines', labelKey: 'pattern.concentrationLines' },
   ];
 
+  const showProceduralControls = isProceduralPattern(mode);
+  const showCorePatternControls = !isProceduralPattern(mode) && mode !== 'concentration-lines';
+  const showConcentrationControls = mode === 'concentration-lines';
+
   return (
     <div className="dialog-overlay" onClick={closeDialog}>
-      <div className="dialog pattern-dialog" onClick={(e) => e.stopPropagation()} style={{ width: 400 }}>
+      <div className="dialog pattern-dialog" onClick={(e) => e.stopPropagation()} style={{ width: 420 }}>
         <div className="dialog-header">{t('insert.patternTitle')}</div>
         <div className="dialog-body">
           {/* Pattern type */}
           <div className="layer-style-dialog__row">
             <span className="layer-style-dialog__label">{t('pattern.type')}</span>
             <select value={mode} onChange={(e) => setMode(e.target.value as PatternMode)} style={{ flex: 1 }}>
-              {PATTERN_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-              ))}
+              <optgroup label="Procedural Patterns">
+                {PATTERN_OPTIONS.filter((o) => o.value.startsWith('proc-')).map((opt) => (
+                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Classic Patterns">
+                {PATTERN_OPTIONS.filter((o) => !o.value.startsWith('proc-')).map((opt) => (
+                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
@@ -163,6 +325,19 @@ export function PatternDialog(): React.JSX.Element | null {
               style={{ width: 32, height: 24 }}
             />
           </div>
+
+          {/* Secondary color for checkerboard */}
+          {mode === 'proc-checkerboard' && (
+            <div className="layer-style-dialog__row">
+              <span className="layer-style-dialog__label">{t('pattern.color2')}</span>
+              <input
+                type="color"
+                value={color2Hex}
+                onChange={(e) => setColor2Hex(e.target.value)}
+                style={{ width: 32, height: 24 }}
+              />
+            </div>
+          )}
 
           {/* Opacity */}
           <div className="layer-style-dialog__row">
@@ -178,22 +353,9 @@ export function PatternDialog(): React.JSX.Element | null {
             <span className="effect-slider-value">{Math.round(opacity * 100)}%</span>
           </div>
 
-          {mode !== 'concentration-lines' ? (
+          {/* Procedural pattern controls */}
+          {showProceduralControls && (
             <>
-              {/* Spacing */}
-              <div className="layer-style-dialog__row">
-                <span className="layer-style-dialog__label">{t('pattern.spacing')}</span>
-                <input
-                  type="range"
-                  className="effect-slider"
-                  min={2}
-                  max={100}
-                  value={spacing}
-                  onChange={(e) => setSpacing(Number(e.target.value))}
-                />
-                <span className="effect-slider-value">{spacing}px</span>
-              </div>
-
               {/* Size */}
               <div className="layer-style-dialog__row">
                 <span className="layer-style-dialog__label">{t('layerStyle.size')}</span>
@@ -207,10 +369,90 @@ export function PatternDialog(): React.JSX.Element | null {
                 />
                 <span className="effect-slider-value">{size}px</span>
               </div>
+
+              {/* Spacing (dots, hatching) */}
+              {(mode === 'proc-dots' || mode === 'proc-hatching') && (
+                <div className="layer-style-dialog__row">
+                  <span className="layer-style-dialog__label">{t('pattern.spacing')}</span>
+                  <input
+                    type="range"
+                    className="effect-slider"
+                    min={2}
+                    max={100}
+                    value={spacing}
+                    onChange={(e) => setSpacing(Number(e.target.value))}
+                  />
+                  <span className="effect-slider-value">{spacing}px</span>
+                </div>
+              )}
+
+              {/* Gap (stripes) */}
+              {mode === 'proc-stripes' && (
+                <div className="layer-style-dialog__row">
+                  <span className="layer-style-dialog__label">{t('pattern.gap')}</span>
+                  <input
+                    type="range"
+                    className="effect-slider"
+                    min={1}
+                    max={100}
+                    value={gap}
+                    onChange={(e) => setGap(Number(e.target.value))}
+                  />
+                  <span className="effect-slider-value">{gap}px</span>
+                </div>
+              )}
+
+              {/* Angle (stripes, hatching) */}
+              {(mode === 'proc-stripes' || mode === 'proc-hatching') && (
+                <div className="layer-style-dialog__row">
+                  <span className="layer-style-dialog__label">{t('background.angle')}</span>
+                  <input
+                    type="range"
+                    className="effect-slider"
+                    min={0}
+                    max={360}
+                    value={angle}
+                    onChange={(e) => setAngle(Number(e.target.value))}
+                  />
+                  <span className="effect-slider-value">{angle}°</span>
+                </div>
+              )}
             </>
-          ) : (
+          )}
+
+          {/* Core pattern controls */}
+          {showCorePatternControls && (
             <>
-              {/* Line count */}
+              <div className="layer-style-dialog__row">
+                <span className="layer-style-dialog__label">{t('pattern.spacing')}</span>
+                <input
+                  type="range"
+                  className="effect-slider"
+                  min={2}
+                  max={100}
+                  value={spacing}
+                  onChange={(e) => setSpacing(Number(e.target.value))}
+                />
+                <span className="effect-slider-value">{spacing}px</span>
+              </div>
+              <div className="layer-style-dialog__row">
+                <span className="layer-style-dialog__label">{t('layerStyle.size')}</span>
+                <input
+                  type="range"
+                  className="effect-slider"
+                  min={1}
+                  max={50}
+                  value={size}
+                  onChange={(e) => setSize(Number(e.target.value))}
+                />
+                <span className="effect-slider-value">{size}px</span>
+              </div>
+            </>
+          )}
+
+          {/* Concentration lines controls */}
+          {showConcentrationControls && (
+            <>
               <div className="layer-style-dialog__row">
                 <span className="layer-style-dialog__label">{t('pattern.lineCount')}</span>
                 <input
@@ -223,8 +465,6 @@ export function PatternDialog(): React.JSX.Element | null {
                 />
                 <span className="effect-slider-value">{lineCount}</span>
               </div>
-
-              {/* Inner radius */}
               <div className="layer-style-dialog__row">
                 <span className="layer-style-dialog__label">{t('pattern.innerRadius')}</span>
                 <input
@@ -237,8 +477,6 @@ export function PatternDialog(): React.JSX.Element | null {
                 />
                 <span className="effect-slider-value">{innerRadius}px</span>
               </div>
-
-              {/* Line width */}
               <div className="layer-style-dialog__row">
                 <span className="layer-style-dialog__label">{t('pattern.lineWidth')}</span>
                 <input

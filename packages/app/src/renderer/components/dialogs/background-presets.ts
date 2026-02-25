@@ -1,14 +1,17 @@
 /**
  * @module background-presets
- * Gradient background preset definitions for the BackgroundDialog.
+ * Gradient and pattern background preset definitions for the BackgroundDialog.
  *
- * Each preset contains a name, gradient stops, type, and angle.
+ * Each gradient preset contains a name, gradient stops, type, and angle.
+ * Each pattern preset contains a name, pattern type, and pattern-specific configuration.
  * Stops use the GradientStop format (RGBA 0-255).
  *
  * @see Phase 1-3: Background & atmosphere tools
+ * @see BG-001: Pattern overlay & background expansion
  */
 
 import type { GradientStop, GradientType } from '@photoshop-app/core';
+import type { PatternColor } from './pattern-generator';
 
 export interface BackgroundPreset {
   name: string;
@@ -17,6 +20,28 @@ export interface BackgroundPreset {
   type: GradientType;
   angle: number;
 }
+
+/** Supported procedural pattern types for pattern presets. */
+export type PatternPresetType = 'dots' | 'stripes' | 'checkerboard' | 'hatching';
+
+/** Pattern preset definition. */
+export interface PatternPreset {
+  /** Display name. */
+  name: string;
+  /** i18n key for the display name. */
+  nameKey: string;
+  /** Pattern type. */
+  patternType: PatternPresetType;
+  /** Pattern-specific configuration (width/height/opacity are applied at runtime). */
+  config: PatternPresetConfig;
+}
+
+/** Union of pattern-specific configuration parameters (excluding width/height/opacity). */
+export type PatternPresetConfig =
+  | { type: 'dots'; dotSize: number; spacing: number; color: PatternColor }
+  | { type: 'stripes'; stripeWidth: number; gap: number; color: PatternColor; angle: number }
+  | { type: 'checkerboard'; cellSize: number; color1: PatternColor; color2: PatternColor }
+  | { type: 'hatching'; lineWidth: number; spacing: number; angle: number; color: PatternColor };
 
 function hexToStop(hex: string, position: number): GradientStop {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -154,5 +179,101 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
     ],
     type: 'linear',
     angle: 135,
+  },
+];
+
+/** Pattern-based background presets for quick overlay application. */
+export const PATTERN_PRESETS: PatternPreset[] = [
+  {
+    name: 'Dark Dots',
+    nameKey: 'background.preset.darkDots',
+    patternType: 'dots',
+    config: {
+      type: 'dots',
+      dotSize: 4,
+      spacing: 16,
+      color: { r: 255, g: 255, b: 255, a: 255 },
+    },
+  },
+  {
+    name: 'Retro Stripes',
+    nameKey: 'background.preset.retroStripes',
+    patternType: 'stripes',
+    config: {
+      type: 'stripes',
+      stripeWidth: 6,
+      gap: 12,
+      color: { r: 255, g: 200, b: 50, a: 255 },
+      angle: 45,
+    },
+  },
+  {
+    name: 'Tech Grid',
+    nameKey: 'background.preset.techGrid',
+    patternType: 'checkerboard',
+    config: {
+      type: 'checkerboard',
+      cellSize: 20,
+      color1: { r: 30, g: 30, b: 40, a: 255 },
+      color2: { r: 40, g: 40, b: 55, a: 255 },
+    },
+  },
+  {
+    name: 'Blueprint Hatch',
+    nameKey: 'background.preset.blueprintHatch',
+    patternType: 'hatching',
+    config: {
+      type: 'hatching',
+      lineWidth: 1,
+      spacing: 10,
+      angle: 45,
+      color: { r: 100, g: 160, b: 255, a: 255 },
+    },
+  },
+  {
+    name: 'Polka Pop',
+    nameKey: 'background.preset.polkaPop',
+    patternType: 'dots',
+    config: {
+      type: 'dots',
+      dotSize: 8,
+      spacing: 24,
+      color: { r: 255, g: 100, b: 150, a: 255 },
+    },
+  },
+  {
+    name: 'Candy Stripes',
+    nameKey: 'background.preset.candyStripes',
+    patternType: 'stripes',
+    config: {
+      type: 'stripes',
+      stripeWidth: 8,
+      gap: 8,
+      color: { r: 255, g: 50, b: 100, a: 255 },
+      angle: -45,
+    },
+  },
+  {
+    name: 'Cross Hatch',
+    nameKey: 'background.preset.crossHatch',
+    patternType: 'hatching',
+    config: {
+      type: 'hatching',
+      lineWidth: 2,
+      spacing: 8,
+      angle: 135,
+      color: { r: 80, g: 80, b: 80, a: 255 },
+    },
+  },
+  {
+    name: 'Subtle Check',
+    nameKey: 'background.preset.subtleCheck',
+    patternType: 'checkerboard',
+    config: {
+      type: 'checkerboard',
+      cellSize: 12,
+      color1: { r: 240, g: 240, b: 240, a: 255 },
+      color2: { r: 220, g: 220, b: 220, a: 255 },
+    },
   },
 ];

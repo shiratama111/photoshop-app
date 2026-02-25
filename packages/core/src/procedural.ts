@@ -207,42 +207,122 @@ export function generatePattern(
 // ---------------------------------------------------------------------------
 
 /**
- * Generate radial concentration lines (manga-style speed lines).
+ * Configuration for manga-style radial concentration lines.
  *
- * @param width - Canvas width
- * @param height - Canvas height
- * @param centerX - Center X coordinate (pixels)
- * @param centerY - Center Y coordinate (pixels)
- * @param lineCount - Number of radial lines
- * @param color - Line color (RGBA 0-255)
- * @param innerRadius - Radius of the empty center area (pixels)
- * @param lineWidth - Width of each line in degrees (larger = thicker)
+ * @see generateConcentrationLines
+ */
+export interface ConcentrationLinesConfig {
+  /** Center X position in pixels. */
+  centerX: number;
+  /** Center Y position in pixels. */
+  centerY: number;
+  /** Canvas width in pixels. */
+  canvasWidth: number;
+  /** Canvas height in pixels. */
+  canvasHeight: number;
+  /** Number of radial lines (typically 20-100). */
+  lineCount: number;
+  /** Minimum line width in pixels at the outer edge. */
+  lineWidthMin: number;
+  /** Maximum line width in pixels at the outer edge. */
+  lineWidthMax: number;
+  /** Clear center radius as a ratio (0-1) of half the canvas diagonal. */
+  innerRadius: number;
+  /** Line color (RGBA, channels 0-255). */
+  color: ProceduralColor;
+  /** Optional seed for reproducible pseudo-random line width variation. */
+  randomSeed?: number;
+}
+
+/**
+ * Seeded pseudo-random number generator (mulberry32).
+ *
+ * Produces deterministic sequences given the same seed, ensuring reproducible
+ * concentration line patterns across renders.
+ *
+ * @param seed - Integer seed value
+ * @returns A function that returns the next pseudo-random number in [0, 1)
+ */
+function createSeededRandom(seed: number): () => number {
+  let s = seed | 0;
+  return (): number => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Generate radial concentration lines (manga-style speed lines) as ImageData.
+ *
+ * Draws triangular wedges radiating outward from the center point. Each wedge
+ * has a randomly varied width between `lineWidthMin` and `lineWidthMax` (controlled
+ * by `randomSeed` for reproducibility). An inner radius creates a clear circular
+ * area around the center. Lines fade in smoothly from the inner radius boundary.
+ *
+ * @param config - Concentration lines configuration
+ * @returns ImageData with the rendered concentration lines (transparent background)
  */
 export function generateConcentrationLines(
-  width: number,
-  height: number,
-  centerX: number,
-  centerY: number,
-  lineCount: number,
-  color: ProceduralColor,
-  innerRadius: number,
-  lineWidth: number,
+  config: ConcentrationLinesConfig,
 ): ImageData {
-  const imageData = new ImageData(width, height);
-  const data = imageData.data;
-  const outerRadius = Math.sqrt(width * width + height * height);
-  const angleStep = (2 * Math.PI) / lineCount;
-  // lineWidth here is the half-angle of each line wedge in degrees
-  const halfAngle = (lineWidth * Math.PI) / 360;
+  const {
+    centerX,
+    centerY,
+    canvasWidth,
+    canvasHeight,
+    lineCount,
+    lineWidthMin,
+    lineWidthMax,
+    innerRadius,
+    color,
+    randomSeed,
+  } = config;
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+  const imageData = new ImageData(canvasWidth, canvasHeight);
+
+  // Handle edge case: no lines to draw
+  if (lineCount <= 0) return imageData;
+
+  const data = imageData.data;
+  const diagonal = Math.sqrt(canvasWidth * canvasWidth + canvasHeight * canvasHeight);
+  // innerRadius is a 0-1 ratio of half the diagonal
+  const innerRadiusPx = innerRadius * (diagonal / 2);
+  const outerRadius = diagonal;
+
+  // Create seeded PRNG for reproducible width variation
+  const random = createSeededRandom(randomSeed ?? 42);
+
+  // Pre-compute each line's angle and half-angle width
+  const angleStep = (2 * Math.PI) / lineCount;
+  const lineAngles: number[] = [];
+  const lineHalfAngles: number[] = [];
+
+  for (let i = 0; i < lineCount; i++) {
+    lineAngles.push(i * angleStep);
+
+    // Randomize line width between min and max
+    const widthPx = lineWidthMin + random() * (lineWidthMax - lineWidthMin);
+    // Convert pixel width at outer radius to angular half-width
+    // At distance outerRadius, arc length = angle * radius, so angle = width / radius
+    const halfAngle = Math.max(0.001, widthPx / (2 * outerRadius));
+    lineHalfAngles.push(halfAngle);
+  }
+
+  // Fade zone: lines fade in over this distance from the inner radius boundary
+  const fadeZone = innerRadiusPx * 0.5 + 1;
+
+  for (let y = 0; y < canvasHeight; y++) {
+    for (let x = 0; x < canvasWidth; x++) {
       const dx = x - centerX;
       const dy = y - centerY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
 
-      // Skip center area
-      if (dist < innerRadius) continue;
+      // Skip center area (using squared comparison for performance)
+      if (distSq < innerRadiusPx * innerRadiusPx) continue;
+
+      const dist = Math.sqrt(distSq);
       if (dist > outerRadius) continue;
 
       const angle = Math.atan2(dy, dx);
@@ -250,22 +330,25 @@ export function generateConcentrationLines(
       // Check if this pixel falls within any line wedge
       let inLine = false;
       for (let i = 0; i < lineCount; i++) {
-        const lineAngle = i * angleStep;
-        let diff = angle - lineAngle;
+        let diff = angle - lineAngles[i];
         // Normalize to [-PI, PI]
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        else if (diff < -Math.PI) diff += 2 * Math.PI;
 
-        if (Math.abs(diff) < halfAngle) {
+        // Wedge width grows with distance (triangular shape)
+        // Scale the half-angle by (dist / outerRadius) so lines are thinner near center
+        const scaledHalfAngle = lineHalfAngles[i] * (dist / outerRadius);
+
+        if (Math.abs(diff) < scaledHalfAngle) {
           inLine = true;
           break;
         }
       }
 
       if (inLine) {
-        // Fade in from inner radius
-        const fadeIn = Math.min(1, (dist - innerRadius) / (innerRadius * 0.5 + 1));
-        const idx = (y * width + x) * 4;
+        // Smooth fade-in from inner radius boundary
+        const fadeIn = Math.min(1, (dist - innerRadiusPx) / fadeZone);
+        const idx = (y * canvasWidth + x) * 4;
         data[idx] = color.r;
         data[idx + 1] = color.g;
         data[idx + 2] = color.b;

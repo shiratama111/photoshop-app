@@ -28,6 +28,7 @@ import { useAppStore, getViewport } from './store';
 import type { Tool } from './store';
 import type { EditorAction } from './editor-actions/types';
 import { t } from './i18n';
+import { runPhotoshopAutoImport } from './photoshop-auto-import';
 import {
   invert as invertFilter,
   desaturate as desaturateFilter,
@@ -611,6 +612,11 @@ export function App(): React.JSX.Element {
     startupChecksInitialized = true;
     void useAppStore.getState().checkRecovery();
     void useAppStore.getState().loadRecentFiles();
+  }, []);
+
+  // Auto-import Photoshop presets on startup — PRESET-001
+  useEffect(() => {
+    void runPhotoshopAutoImport();
   }, []);
 
   // Listen for close confirmation from main process \u2014 APP-008

@@ -29,6 +29,58 @@ export interface TextStylePreset {
   builtIn: boolean;
 }
 
+/** localStorage key for custom text style presets. */
+const CUSTOM_PRESETS_STORAGE_KEY = 'photoshop-app:customTextStylePresets';
+
+/**
+ * Load custom presets from localStorage.
+ * @returns Array of custom TextStylePreset, or empty array if none exist.
+ */
+export function loadCustomPresets(): TextStylePreset[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as TextStylePreset[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save a new custom preset to localStorage.
+ * Generates a unique ID and persists the full preset list.
+ * @param preset - The preset to save (id and builtIn will be overridden).
+ * @returns The saved preset with a generated ID.
+ */
+export function saveCustomPreset(preset: Omit<TextStylePreset, 'id' | 'builtIn' | 'category'>): TextStylePreset {
+  const existing = loadCustomPresets();
+  const newPreset: TextStylePreset = {
+    ...preset,
+    id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    category: 'custom',
+    builtIn: false,
+  };
+  const updated = [...existing, newPreset];
+  localStorage.setItem(CUSTOM_PRESETS_STORAGE_KEY, JSON.stringify(updated));
+  return newPreset;
+}
+
+/**
+ * Delete a custom preset by ID from localStorage.
+ * Built-in presets cannot be deleted with this function.
+ * @param presetId - The ID of the custom preset to remove.
+ * @returns True if the preset was found and removed, false otherwise.
+ */
+export function deleteCustomPreset(presetId: string): boolean {
+  const existing = loadCustomPresets();
+  const filtered = existing.filter((p) => p.id !== presetId);
+  if (filtered.length === existing.length) return false;
+  localStorage.setItem(CUSTOM_PRESETS_STORAGE_KEY, JSON.stringify(filtered));
+  return true;
+}
+
 /** 8 built-in text style presets. */
 export const BUILT_IN_TEXT_STYLES: TextStylePreset[] = [
   {

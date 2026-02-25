@@ -244,6 +244,10 @@ export interface AssetActions {
   importAbr: (buffer: ArrayBuffer, fileName: string) => void;
   /** Import styles from an ASL file buffer. */
   importAsl: (buffer: ArrayBuffer, fileName: string) => void;
+  /** Import brushes silently (no status messages). Used by auto-import. */
+  batchImportAbr: (buffer: ArrayBuffer, fileName: string) => void;
+  /** Import styles silently (no status messages). Used by auto-import. */
+  batchImportAsl: (buffer: ArrayBuffer, fileName: string) => void;
   /** Select a brush preset by ID. */
   selectBrush: (id: string | null) => void;
   /** Apply a style preset's effects to the currently selected layer. */
@@ -306,6 +310,30 @@ export const useAssetStore = create<AssetState & AssetActions>((set, get) => ({
     useAppStore.getState().setStatusMessage(
       `Imported ${result.styles.length} style${result.styles.length !== 1 ? 's' : ''} from ${fileName}`,
     );
+  },
+
+  batchImportAbr: (buffer, fileName): void => {
+    const result = parseAbr(buffer, fileName);
+    if (result.brushes.length === 0) return;
+
+    const { brushPresets, brushThumbnails } = get();
+    const newThumbnails = { ...brushThumbnails };
+    for (const brush of result.brushes) {
+      newThumbnails[brush.id] = generateBrushThumbnail(brush);
+    }
+
+    const updated = [...brushPresets, ...result.brushes];
+    set({ brushPresets: updated, brushThumbnails: newThumbnails });
+    saveBrushes(updated, newThumbnails);
+  },
+
+  batchImportAsl: (buffer, fileName): void => {
+    const result = parseAsl(buffer, fileName);
+    if (result.styles.length === 0) return;
+
+    const updated = [...get().stylePresets, ...result.styles];
+    set({ stylePresets: updated });
+    saveStyles(updated);
   },
 
   selectBrush: (id): void => {

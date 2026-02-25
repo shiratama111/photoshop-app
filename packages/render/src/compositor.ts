@@ -274,6 +274,11 @@ export class Canvas2DRenderer implements Renderer {
 
   /**
    * Render a layer group by compositing its children.
+   * Detects clipping mask groups (contiguous runs of `clippingMask: true`
+   * layers above a non-clipping base) and renders them as a unit using
+   * `source-atop` so the clipped layers are confined to the base's alpha.
+   *
+   * @see CLIP-001
    */
   private renderGroup(
     ctx: CanvasContext2DLike,
@@ -281,15 +286,181 @@ export class Canvas2DRenderer implements Renderer {
     options: RenderOptions,
     hiddenLayerIds: ReadonlySet<string> | null,
   ): void {
-    for (const layer of group.children) {
-      if (!layer.visible) continue;
-      if (hiddenLayerIds?.has(layer.id)) continue;
+    const children = group.children;
+    let i = 0;
+
+    while (i < children.length) {
+      const layer = children[i];
+
+      // Determine the clipping group starting at this non-clipping layer.
+      // A clipping group = base (non-clipping) + contiguous run of clipping layers above it.
+      if (!this.isClippingLayer(layer)) {
+        const clippedRun = this.collectClippedRun(children, i);
+        if (clippedRun.length > 0) {
+          this.renderClippingGroup(ctx, layer, clippedRun, options, hiddenLayerIds);
+          // Skip past the base + its clipped layers.
+          i += 1 + clippedRun.length;
+          continue;
+        }
+      }
+
+      // Normal (non-clipping) rendering path.
+      if (!layer.visible) { i++; continue; }
+      if (hiddenLayerIds?.has(layer.id)) { i++; continue; }
 
       if (layer.type === 'group') {
         this.renderGroupAsComposite(ctx, layer, options, hiddenLayerIds);
       } else {
         this.renderLayer(ctx, layer, options);
       }
+      i++;
+    }
+  }
+
+  /**
+   * Check whether a layer has the clipping mask flag set.
+   * Works with the `ClippableLayer` type extension from `@photoshop-app/core`.
+   */
+  private isClippingLayer(layer: Layer): boolean {
+    return (layer as unknown as Record<string, unknown>).clippingMask === true;
+  }
+
+  /**
+   * Starting from `baseIndex`, collect the contiguous run of clipping layers
+   * that appear above the base in the children array.
+   *
+   * @returns Array of clipping layers (may be empty if no layers clip to this base).
+   */
+  private collectClippedRun(children: Layer[], baseIndex: number): Layer[] {
+    const run: Layer[] = [];
+    for (let j = baseIndex + 1; j < children.length; j++) {
+      if (this.isClippingLayer(children[j])) {
+        run.push(children[j]);
+      } else {
+        break;
+      }
+    }
+    return run;
+  }
+
+  /**
+   * Render a clipping group: base layer + clipped layers.
+   *
+   * Algorithm:
+   * 1. Render the base layer to a temporary canvas.
+   * 2. For each clipped layer, draw it on top using `source-atop` so it is
+   *    confined to the base layer's opaque area.
+   * 3. Composite the resulting temp canvas onto `ctx` using the base's blend
+   *    mode and opacity.
+   *
+   * Effects on clipped layers are applied *after* clipping (drawn on top of
+   * the clipped result).
+   *
+   * @see CLIP-001
+   */
+  private renderClippingGroup(
+    ctx: CanvasContext2DLike,
+    baseLayer: Layer,
+    clippedLayers: Layer[],
+    options: RenderOptions,
+    hiddenLayerIds: ReadonlySet<string> | null,
+  ): void {
+    // If the base itself is not visible, skip the entire group.
+    if (!baseLayer.visible) return;
+    if (hiddenLayerIds?.has(baseLayer.id)) return;
+
+    const { width, height } = ctx.canvas;
+    const clipCanvas = this.pool.acquire(width, height);
+    const clipCtx = clipCanvas.getContext('2d');
+    if (!clipCtx) return;
+
+    clipCtx.clearRect(0, 0, width, height);
+
+    // Step 1: Render base layer to the clip canvas.
+    if (baseLayer.type === 'group') {
+      this.renderGroup(clipCtx, baseLayer, options, hiddenLayerIds);
+    } else {
+      this.renderLayerDirect(clipCtx, baseLayer, options);
+    }
+
+    // Step 2: Render each clipped layer with source-atop.
+    for (const clipped of clippedLayers) {
+      if (!clipped.visible) continue;
+      if (hiddenLayerIds?.has(clipped.id)) continue;
+
+      // Render the clipped layer's content to a separate temp canvas first,
+      // then composite onto clipCanvas with source-atop.
+      const layerCanvas = this.pool.acquire(width, height);
+      const layerCtx = layerCanvas.getContext('2d');
+      if (!layerCtx) {
+        this.pool.release(layerCanvas);
+        continue;
+      }
+
+      layerCtx.clearRect(0, 0, width, height);
+
+      if (clipped.type === 'group') {
+        this.renderGroup(layerCtx, clipped, options, hiddenLayerIds);
+      } else {
+        this.renderLayerDirect(layerCtx, clipped, options);
+      }
+
+      // Composite onto clip canvas: confine to base alpha.
+      clipCtx.save();
+      clipCtx.globalCompositeOperation = 'source-atop';
+      clipCtx.drawImage(layerCanvas, 0, 0);
+      clipCtx.restore();
+
+      this.pool.release(layerCanvas);
+
+      // Effects are rendered AFTER clipping, directly onto the main context.
+      if (options.renderEffects && clipped.type !== 'group' && clipped.effects.length > 0) {
+        this.renderEffectsInFront(ctx, clipped);
+      }
+    }
+
+    // Step 3: Composite the clipping group onto the main canvas
+    // using the base layer's blend mode and opacity.
+    ctx.save();
+    ctx.globalAlpha = baseLayer.opacity;
+    ctx.globalCompositeOperation = baseLayer.blendMode;
+    ctx.drawImage(clipCanvas, 0, 0);
+    ctx.restore();
+
+    this.pool.release(clipCanvas);
+  }
+
+  /**
+   * Render a single non-group layer without applying its own opacity/blendMode
+   * to the context. Used inside clipping group rendering so that the base's
+   * blend mode governs the final composite.
+   */
+  private renderLayerDirect(
+    ctx: CanvasContext2DLike,
+    layer: RasterLayer | TextLayer,
+    options: RenderOptions,
+  ): void {
+    // Render behind-effects (e.g. drop shadow) — only for base layer in clipping groups.
+    if (options.renderEffects && layer.effects.length > 0) {
+      this.renderEffectsBehind(ctx, layer);
+    }
+
+    ctx.save();
+    ctx.globalAlpha = layer.opacity;
+    ctx.globalCompositeOperation = layer.blendMode;
+
+    if (layer.type === 'raster') {
+      this.drawRasterLayer(ctx, layer);
+    } else {
+      this.drawTextLayer(ctx, layer);
+    }
+
+    ctx.restore();
+
+    // In-front effects are handled by the caller for clipped layers,
+    // but for the base layer they are part of the base rendering.
+    if (options.renderEffects && layer.effects.length > 0) {
+      this.renderEffectsInFront(ctx, layer);
     }
   }
 

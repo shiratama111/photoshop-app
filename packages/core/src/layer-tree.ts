@@ -10,6 +10,121 @@
 import type { Layer, LayerGroup } from '@photoshop-app/types';
 
 /**
+ * Extended layer with clipping mask support.
+ * The `packages/types` package is locked, so we define this local extension
+ * until `clippingMask` is added to the canonical `Layer` type.
+ *
+ * @see CLIP-001: Clipping mask feature
+ */
+export type ClippableLayer = Layer & {
+  /** When true, this layer is clipped to the opaque area of the nearest non-clipping layer below it. */
+  clippingMask?: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Clipping mask utilities — CLIP-001
+// ---------------------------------------------------------------------------
+
+/**
+ * Type guard that checks whether a layer has its clipping mask flag enabled.
+ *
+ * @param layer - The layer to inspect.
+ * @returns `true` if `layer` has `clippingMask === true`.
+ */
+export function isClippingMask(layer: Layer): boolean {
+  return (layer as ClippableLayer).clippingMask === true;
+}
+
+/**
+ * Returns the base layer that the given clipping layer clips to.
+ *
+ * The base is the nearest sibling *below* (lower index) that does **not** have
+ * `clippingMask: true`. If `layer` is not a clipping mask or no valid base
+ * exists, returns `null`.
+ *
+ * @param layer    - The layer whose clipping base to find.
+ * @param siblings - The ordered array of sibling layers (same parent, bottom-to-top).
+ * @returns The base layer, or `null` if none.
+ */
+export function getClippingBase(layer: Layer, siblings: Layer[]): Layer | null {
+  if (!isClippingMask(layer)) return null;
+
+  const idx = siblings.indexOf(layer);
+  if (idx <= 0) return null;
+
+  // Walk downward from the layer's position to find first non-clipping sibling.
+  for (let i = idx - 1; i >= 0; i--) {
+    if (!isClippingMask(siblings[i])) {
+      return siblings[i];
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns all layers that are clipped to the given base layer.
+ *
+ * A clipping run is the contiguous sequence of siblings *above* (higher index)
+ * the base that all have `clippingMask: true`. The run ends at the first
+ * non-clipping sibling or the end of the array.
+ *
+ * @param baseLayer - The prospective base layer.
+ * @param siblings  - The ordered array of sibling layers (same parent, bottom-to-top).
+ * @returns Array of clipped layers (may be empty).
+ */
+export function getClippedLayers(baseLayer: Layer, siblings: Layer[]): Layer[] {
+  if (isClippingMask(baseLayer)) return [];
+
+  const idx = siblings.indexOf(baseLayer);
+  if (idx === -1) return [];
+
+  const result: Layer[] = [];
+  for (let i = idx + 1; i < siblings.length; i++) {
+    if (isClippingMask(siblings[i])) {
+      result.push(siblings[i]);
+    } else {
+      break;
+    }
+  }
+  return result;
+}
+
+/**
+ * Toggles the `clippingMask` flag of the specified layer.
+ *
+ * If the layer is currently a clipping mask it becomes non-clipping, and
+ * vice-versa. The topmost layer (index 0) in a group cannot become a
+ * clipping base target, but it *can* become a clipping mask if there is a
+ * sibling below it — which is logically impossible for index 0, so this
+ * function does nothing in that edge case.
+ *
+ * @param layerId   - ID of the layer to toggle.
+ * @param rootGroup - The root LayerGroup of the document.
+ */
+export function toggleClippingMask(layerId: string, rootGroup: LayerGroup): void {
+  const parent = findParentGroup(rootGroup, layerId);
+  if (!parent) return;
+
+  const idx = parent.children.findIndex((c) => c.id === layerId);
+  if (idx === -1) return;
+
+  const layer = parent.children[idx] as ClippableLayer;
+
+  if (isClippingMask(layer)) {
+    // Turn off
+    layer.clippingMask = false;
+  } else {
+    // Cannot clip the bottom-most layer — there is nothing below it to clip to.
+    if (idx === 0) return;
+    layer.clippingMask = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Original layer tree operations — CORE-001
+// ---------------------------------------------------------------------------
+
+/**
  * Adds a layer to the layer tree.
  *
  * @param rootGroup - The root LayerGroup of the document.

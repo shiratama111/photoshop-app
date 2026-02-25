@@ -72,6 +72,30 @@ const electronAPI = {
   loadCustomFont: (filePath: string): Promise<{ data: ArrayBuffer; name: string } | null> =>
     ipcRenderer.invoke('font:loadCustomFont', filePath),
 
+  // Google Fonts — FONT-001
+  searchGoogleFonts: (
+    query: string,
+    category: string,
+    sort: string,
+    offset: number,
+    limit: number,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke('font:searchGoogleFonts', query, category, sort, offset, limit),
+
+  downloadGoogleFont: (
+    family: string,
+    variant?: string,
+  ): Promise<{ filePath: string; data: ArrayBuffer } | null> =>
+    ipcRenderer.invoke('font:downloadGoogleFont', family, variant),
+
+  getDownloadedGoogleFonts: (): Promise<unknown[]> =>
+    ipcRenderer.invoke('font:getDownloadedGoogleFonts'),
+
+  loadGoogleFontFile: (
+    family: string,
+  ): Promise<{ family: string; data: ArrayBuffer } | null> =>
+    ipcRenderer.invoke('font:loadGoogleFontFile', family),
+
   // Title bar \u2014 APP-008
   setTitle: (title: string): Promise<void> =>
     ipcRenderer.invoke('window:setTitle', title),
@@ -223,6 +247,13 @@ const electronAPI = {
     return (): void => { ipcRenderer.removeListener('menu:loadTemplate', listener); };
   },
 
+  // TMPL-001: Template file I/O (.psxp)
+  saveTemplateFile: (data: ArrayBuffer, defaultName?: string): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:saveTemplateFile', data, defaultName),
+
+  openTemplateFile: (): Promise<{ filePath: string; data: ArrayBuffer } | null> =>
+    ipcRenderer.invoke('dialog:openTemplateFile'),
+
   // Phase 1: Place image file dialog
   openPlaceImageDialog: (): Promise<{ filePath: string; data: ArrayBuffer } | null> =>
     ipcRenderer.invoke('dialog:placeImage'),
@@ -248,6 +279,10 @@ const electronAPI = {
     ipcRenderer.on('menu:gradientMask', listener);
     return (): void => { ipcRenderer.removeListener('menu:gradientMask', listener); };
   },
+
+  // Photoshop preset auto-import — PRESET-001
+  scanPhotoshopPresets: (): Promise<unknown> => ipcRenderer.invoke('psimport:scan'),
+  resetPhotoshopImportManifest: (): Promise<boolean> => ipcRenderer.invoke('psimport:resetManifest'),
 
   // Phase 2-1: Editor Action API IPC
   executeEditorActions: (actions: unknown[]): Promise<unknown[]> =>

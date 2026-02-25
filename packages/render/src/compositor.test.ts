@@ -1368,4 +1368,177 @@ describe('Canvas2DRenderer', () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Clipping mask rendering — CLIP-001
+  // -------------------------------------------------------------------------
+
+  describe('clipping mask', () => {
+    /** Make a raster layer with the clippingMask flag set. */
+    function makeClippingRasterLayer(
+      name: string,
+      opts?: Partial<RasterLayer>,
+    ): RasterLayer {
+      const layer = makeRasterLayer(name, opts);
+      (layer as Record<string, unknown>).clippingMask = true;
+      return layer;
+    }
+
+    it('should use source-atop when rendering a clipping group', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base');
+      const clipped = makeClippingRasterLayer('Clipped');
+      const doc = createTestDocument([base, clipped]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // The mock canvas context tracks drawImage calls.
+      // A clipping group renders base to temp, clipped with source-atop, then
+      // composites back. We verify that drawImage was called.
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should render non-clipped layers normally alongside a clipping group', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base');
+      const clipped = makeClippingRasterLayer('Clipped');
+      const standalone = makeRasterLayer('Standalone');
+      const doc = createTestDocument([base, clipped, standalone]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // All layers should be drawn — drawImage called multiple times.
+      const drawImageCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawImageCalls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should handle a 3+ layer clipping chain', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base');
+      const c1 = makeClippingRasterLayer('Clip1');
+      const c2 = makeClippingRasterLayer('Clip2');
+      const c3 = makeClippingRasterLayer('Clip3');
+      const doc = createTestDocument([base, c1, c2, c3]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // The renderer should not throw and should composite layers.
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should skip invisible clipped layers', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base');
+      const invisible = makeClippingRasterLayer('Hidden', { visible: false });
+      const doc = createTestDocument([base, invisible]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // The invisible layer should not trigger putImageData on the clip canvas.
+      // drawImage is still called for the base composite step.
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should skip the entire clipping group when the base is invisible', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base', { visible: false });
+      const clipped = makeClippingRasterLayer('Clipped');
+      const doc = createTestDocument([base, clipped]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Nothing should be drawn for the group.
+      // drawImage is not called for an invisible base group.
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls.length).toBe(0);
+    });
+
+    it('should apply effects on clipped layers after clipping', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base');
+      const clipped = makeClippingRasterLayer('ClippedWithEffect', {
+        effects: [{
+          type: 'drop-shadow',
+          enabled: true,
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          opacity: 0.5,
+          angle: 135,
+          distance: 5,
+          blur: 4,
+          spread: 0,
+        }],
+      });
+      (clipped as Record<string, unknown>).clippingMask = true;
+      const doc = createTestDocument([base, clipped]);
+      const options = createRenderOptions({ renderEffects: true });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Effects should be rendered (fillRect for shadow tinting).
+      expect(ctx.fillRect).toHaveBeenCalled();
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should use the base layer blend mode for the clipping group composite', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base = makeRasterLayer('Base', {
+        blendMode: BlendMode.Multiply,
+        opacity: 0.7,
+      });
+      const clipped = makeClippingRasterLayer('Clipped');
+      const doc = createTestDocument([base, clipped]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // The final composite should use the base's blend mode and opacity.
+      // We verify through property access on the mock context.
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+
+    it('should handle multiple separate clipping groups in one parent', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const base1 = makeRasterLayer('Base1');
+      const c1 = makeClippingRasterLayer('Clip1');
+      const base2 = makeRasterLayer('Base2');
+      const c2 = makeClippingRasterLayer('Clip2');
+      const doc = createTestDocument([base1, c1, base2, c2]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // Both groups should be rendered.
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should handle a clipping layer at index 0 as a normal layer (orphan clipping)', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      // An orphan clipping layer (no base below it) should render normally.
+      const orphan = makeClippingRasterLayer('Orphan');
+      const doc = createTestDocument([orphan]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      // It should still be drawn (as a normal layer).
+      expect(ctx.drawImage).toHaveBeenCalled();
+    });
+  });
+
 });

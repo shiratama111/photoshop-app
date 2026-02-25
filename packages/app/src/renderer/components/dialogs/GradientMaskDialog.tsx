@@ -2,40 +2,63 @@
  * @module GradientMaskDialog
  * Dialog for applying gradient fade masks to raster layers.
  *
- * Multiplies the alpha channel of the selected raster layer with a directional gradient.
+ * Supports linear (8 preset directions + custom angle) and radial gradient masks
+ * with adjustable start/end positions and reversal. Uses the render package's
+ * gradient-mask module for generation and application.
+ *
  * Only works on raster layers (text layers disabled).
  *
- * @see Phase 1-4: Border & decoration effects
+ * @see GMASK-001 - Gradient mask ticket
+ * @see @photoshop-app/render/gradient-mask - Mask generation/application
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import { t } from '../../i18n';
-import { generateGradientMask, findLayerById } from '@photoshop-app/core';
-import type { MaskDirection } from '@photoshop-app/core';
+import {
+  generateGradientMask as generateMaskRender,
+  applyGradientMask,
+} from '@photoshop-app/render';
+import type { GradientMaskConfig, GradientMaskType } from '@photoshop-app/render';
+import { findLayerById } from '@photoshop-app/core';
 import type { RasterLayer } from '@photoshop-app/types';
 
 const PREVIEW_WIDTH = 200;
 const PREVIEW_HEIGHT = 112;
 
-const DIRECTIONS: { value: MaskDirection; labelKey: string }[] = [
-  { value: 'top', labelKey: 'gradientMask.direction.top' },
-  { value: 'bottom', labelKey: 'gradientMask.direction.bottom' },
-  { value: 'left', labelKey: 'gradientMask.direction.left' },
-  { value: 'right', labelKey: 'gradientMask.direction.right' },
-  { value: 'radial', labelKey: 'gradientMask.direction.radial' },
+/** Preset direction entry with angle and i18n label key. */
+interface DirectionPreset {
+  /** Display label i18n key. */
+  labelKey: string;
+  /** Angle in degrees (0=top-to-bottom). */
+  angle: number;
+}
+
+/** 8 preset directions for linear gradient masks. */
+const DIRECTION_PRESETS: DirectionPreset[] = [
+  { labelKey: 'gradientMask.direction.top', angle: 180 },
+  { labelKey: 'gradientMask.direction.bottom', angle: 0 },
+  { labelKey: 'gradientMask.direction.left', angle: 270 },
+  { labelKey: 'gradientMask.direction.right', angle: 90 },
+  { labelKey: 'gradientMask.direction.topLeft', angle: 225 },
+  { labelKey: 'gradientMask.direction.topRight', angle: 135 },
+  { labelKey: 'gradientMask.direction.bottomLeft', angle: 315 },
+  { labelKey: 'gradientMask.direction.bottomRight', angle: 45 },
 ];
 
 export function GradientMaskDialog(): React.JSX.Element | null {
   const show = useAppStore((s) => s.showGradientMaskDialog);
   const closeDialog = useAppStore((s) => s.closeGradientMaskDialog);
-  const applyGradientMask = useAppStore((s) => s.applyGradientMask);
+  const applyGradientMaskAction = useAppStore((s) => s.applyGradientMask);
   const doc = useAppStore((s) => s.document);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
 
-  const [direction, setDirection] = useState<MaskDirection>('bottom');
+  const [maskType, setMaskType] = useState<GradientMaskType>('linear');
+  const [direction, setDirection] = useState(0);
   const [fadeStart, setFadeStart] = useState(30);
   const [fadeEnd, setFadeEnd] = useState(100);
+  const [reversed, setReversed] = useState(false);
+  const [useCustomAngle, setUseCustomAngle] = useState(false);
   const previewRef = useRef<HTMLCanvasElement>(null);
 
   // Find the selected raster layer
@@ -44,6 +67,16 @@ export function GradientMaskDialog(): React.JSX.Element | null {
     : null;
   const isRaster = selectedLayer?.type === 'raster' && (selectedLayer as RasterLayer).imageData !== null;
 
+  // Build the config from current state
+  const config: GradientMaskConfig = useMemo(() => ({
+    type: maskType,
+    direction,
+    startPosition: fadeStart,
+    endPosition: fadeEnd,
+    reversed,
+  }), [maskType, direction, fadeStart, fadeEnd, reversed]);
+
+  // Real-time preview rendering
   useEffect(() => {
     if (!show) return;
     const canvas = previewRef.current;
@@ -51,9 +84,9 @@ export function GradientMaskDialog(): React.JSX.Element | null {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Generate a preview: a gray rectangle with the mask applied
-    const previewData = new ImageData(PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    const d = previewData.data;
+    // Generate a preview: a colored rectangle with the mask applied
+    const previewSource = new ImageData(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    const d = previewSource.data;
     for (let i = 0; i < d.length; i += 4) {
       d[i] = 128;
       d[i + 1] = 128;
@@ -61,9 +94,10 @@ export function GradientMaskDialog(): React.JSX.Element | null {
       d[i + 3] = 255;
     }
 
-    const masked = generateGradientMask(previewData, direction, fadeStart / 100, fadeEnd / 100);
+    const mask = generateMaskRender(PREVIEW_WIDTH, PREVIEW_HEIGHT, config);
+    const masked = applyGradientMask(previewSource, mask);
 
-    // Draw checkerboard then overlay
+    // Draw checkerboard background then overlay the masked image
     ctx.fillStyle = '#ccc';
     ctx.fillRect(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
     for (let y = 0; y < PREVIEW_HEIGHT; y += 8) {
@@ -75,13 +109,17 @@ export function GradientMaskDialog(): React.JSX.Element | null {
       }
     }
     ctx.putImageData(masked, 0, 0);
-  }, [show, direction, fadeStart, fadeEnd]);
+  }, [show, config]);
 
+  // Reset state when dialog opens
   useEffect(() => {
     if (show) {
-      setDirection('bottom');
+      setMaskType('linear');
+      setDirection(0);
       setFadeStart(30);
       setFadeEnd(100);
+      setReversed(false);
+      setUseCustomAngle(false);
     }
   }, [show]);
 
@@ -90,16 +128,31 @@ export function GradientMaskDialog(): React.JSX.Element | null {
     const raster = selectedLayer as RasterLayer;
     if (!raster.imageData) return;
 
-    const masked = generateGradientMask(raster.imageData, direction, fadeStart / 100, fadeEnd / 100);
-    applyGradientMask(selectedLayerId, masked);
+    const { width, height } = raster.imageData;
+    const mask = generateMaskRender(width, height, config);
+    const masked = applyGradientMask(raster.imageData, mask);
+    applyGradientMaskAction(selectedLayerId, masked);
     closeDialog();
-  }, [isRaster, selectedLayerId, selectedLayer, direction, fadeStart, fadeEnd, applyGradientMask, closeDialog]);
+  }, [isRaster, selectedLayerId, selectedLayer, config, applyGradientMaskAction, closeDialog]);
+
+  /** Handle direction preset button click. */
+  const handlePresetClick = useCallback((angle: number) => {
+    setDirection(angle);
+    setUseCustomAngle(false);
+  }, []);
+
+  /** Handle custom angle input change. */
+  const handleCustomAngleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Number(e.target.value);
+    setDirection(value);
+    setUseCustomAngle(true);
+  }, []);
 
   if (!show) return null;
 
   return (
     <div className="dialog-overlay" onClick={closeDialog}>
-      <div className="dialog gradient-mask-dialog" onClick={(e) => e.stopPropagation()} style={{ width: 380 }}>
+      <div className="dialog gradient-mask-dialog" onClick={(e) => e.stopPropagation()} style={{ width: 420 }}>
         <div className="dialog-header">{t('insert.gradientMaskTitle')}</div>
         <div className="dialog-body">
           {/* Target layer */}
@@ -111,22 +164,62 @@ export function GradientMaskDialog(): React.JSX.Element | null {
             </span>
           </div>
 
-          {/* Direction */}
+          {/* Gradient type toggle (Linear / Radial) */}
           <div className="layer-style-dialog__row">
-            <span className="layer-style-dialog__label">{t('gradientMask.direction')}</span>
+            <span className="layer-style-dialog__label">{t('gradientMask.type')}</span>
             <div style={{ display: 'flex', gap: 4 }}>
-              {DIRECTIONS.map((dir) => (
-                <button
-                  key={dir.value}
-                  className={`dialog-btn ${direction === dir.value ? 'dialog-btn--primary' : ''}`}
-                  onClick={() => setDirection(dir.value)}
-                  style={{ padding: '2px 8px', fontSize: 11 }}
-                >
-                  {t(dir.labelKey)}
-                </button>
-              ))}
+              <button
+                className={`dialog-btn ${maskType === 'linear' ? 'dialog-btn--primary' : ''}`}
+                onClick={() => setMaskType('linear')}
+                style={{ padding: '2px 12px', fontSize: 11 }}
+              >
+                {t('gradientMask.type.linear')}
+              </button>
+              <button
+                className={`dialog-btn ${maskType === 'radial' ? 'dialog-btn--primary' : ''}`}
+                onClick={() => setMaskType('radial')}
+                style={{ padding: '2px 12px', fontSize: 11 }}
+              >
+                {t('gradientMask.type.radial')}
+              </button>
             </div>
           </div>
+
+          {/* Direction presets (only shown for linear) */}
+          {maskType === 'linear' && (
+            <div className="layer-style-dialog__row">
+              <span className="layer-style-dialog__label">{t('gradientMask.direction')}</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 280 }}>
+                {DIRECTION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.angle}
+                    className={`dialog-btn ${!useCustomAngle && direction === preset.angle ? 'dialog-btn--primary' : ''}`}
+                    onClick={() => handlePresetClick(preset.angle)}
+                    style={{ padding: '2px 8px', fontSize: 11 }}
+                  >
+                    {t(preset.labelKey)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Custom angle input (only shown for linear) */}
+          {maskType === 'linear' && (
+            <div className="layer-style-dialog__row">
+              <span className="layer-style-dialog__label">{t('gradientMask.customAngle')}</span>
+              <input
+                type="number"
+                min={0}
+                max={360}
+                step={1}
+                value={direction}
+                onChange={handleCustomAngleChange}
+                style={{ width: 60, fontSize: 12, padding: '2px 4px' }}
+              />
+              <span style={{ fontSize: 11, marginLeft: 4, opacity: 0.7 }}>deg</span>
+            </div>
+          )}
 
           {/* Fade start */}
           <div className="layer-style-dialog__row">
@@ -154,6 +247,18 @@ export function GradientMaskDialog(): React.JSX.Element | null {
               onChange={(e) => setFadeEnd(Number(e.target.value))}
             />
             <span className="effect-slider-value">{fadeEnd}%</span>
+          </div>
+
+          {/* Reverse checkbox */}
+          <div className="layer-style-dialog__row">
+            <span className="layer-style-dialog__label">{t('gradientMask.reversed')}</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={reversed}
+                onChange={(e) => setReversed(e.target.checked)}
+              />
+            </label>
           </div>
 
           {/* Preview */}

@@ -19,3 +19,11 @@ export { WebGLRenderer } from './webgl-compositor';
 export { TexturePool } from './texture-pool';
 export type { RenderTarget } from './texture-pool';
 export { BLEND_MODE_MAP } from './shaders';
+
+// Decorations — DECO-001
+export { renderConcentrationLines } from './decorations';
+export type { ConcentrationLinesRenderOptions } from './decorations';
+
+// Gradient Mask — GMASK-001
+export { generateGradientMask, applyGradientMask } from './gradient-mask';
+export type { GradientMaskConfig, GradientMaskType } from './gradient-mask';

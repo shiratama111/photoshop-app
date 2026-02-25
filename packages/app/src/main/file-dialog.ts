@@ -136,6 +136,38 @@ export function registerFileDialogHandlers(
     return result.filePath;
   });
 
+  // Template file > Export (.psxp)
+  ipcMain.handle('dialog:saveTemplateFile', async (_event, data: ArrayBuffer, defaultName?: string) => {
+    const win = getWindow();
+    if (!win) return null;
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: defaultName ? `${defaultName}.psxp` : undefined,
+      filters: [
+        { name: 'Template Files', extensions: ['psxp'] },
+      ],
+    });
+    if (result.canceled || !result.filePath) return null;
+    fs.writeFileSync(result.filePath, Buffer.from(data));
+    return result.filePath;
+  });
+
+  // Template file > Import (.psxp)
+  ipcMain.handle('dialog:openTemplateFile', async () => {
+    const win = getWindow();
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      filters: [
+        { name: 'Template Files', extensions: ['psxp'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const data = fs.readFileSync(filePath);
+    return { filePath, data: bufferToArrayBuffer(data) };
+  });
+
   // Recent files
   ipcMain.handle('file:getRecent', () => loadRecentFiles());
   ipcMain.handle('file:clearRecent', () => { saveRecentFiles([]); return true; });

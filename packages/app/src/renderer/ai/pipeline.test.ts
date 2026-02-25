@@ -1,0 +1,473 @@
+/**
+ * @module ai/pipeline.test
+ * Tests for the E2E thumbnail generation pipeline (PIPE-001).
+ *
+ * Covers:
+ * - Full pipeline: instruction -> design + actions
+ * - Font recommendation application
+ * - Refinement (iterative modification)
+ * - Edge cases and error handling
+ * - Progress callback invocation
+ *
+ * @see PIPE-001: E2E自動生成パイプライン
+ * @see {@link ./pipeline.ts} — pipeline module under test
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+import {
+  generateThumbnail,
+  refineThumbnail,
+  applyFontRecommendations,
+} from './pipeline';
+import type {
+  PipelineOptions,
+  PipelineProgress,
+  PipelineStage,
+} from './pipeline';
+import type { ThumbnailDesign, TextLayerDesign } from './design-schema';
+
+// ---------------------------------------------------------------------------
+// Test Helpers
+// ---------------------------------------------------------------------------
+
+/** Create a basic pipeline options object for testing. */
+function createTestOptions(overrides?: Partial<PipelineOptions>): PipelineOptions {
+  return {
+    instruction: '衝撃的なニュース系サムネ、タイトル「AIが弁護士を超えた日」',
+    ...overrides,
+  };
+}
+
+/** Find all text layers in a design. */
+function getTextLayers(design: ThumbnailDesign): TextLayerDesign[] {
+  return design.layers.filter((l): l is TextLayerDesign => l.kind === 'text');
+}
+
+// ---------------------------------------------------------------------------
+// Full Pipeline Tests
+// ---------------------------------------------------------------------------
+
+describe('generateThumbnail', () => {
+  it('generates a successful result from a Japanese instruction', () => {
+    const result = generateThumbnail(createTestOptions());
+
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.design).toBeDefined();
+    expect(result.design.canvas.width).toBeGreaterThan(0);
+    expect(result.design.canvas.height).toBeGreaterThan(0);
+    expect(result.actions.length).toBeGreaterThan(0);
+  });
+
+  it('generates a design with the correct canvas dimensions for youtube', () => {
+    const result = generateThumbnail(createTestOptions({ platform: 'youtube' }));
+
+    expect(result.success).toBe(true);
+    expect(result.design.canvas.width).toBe(1280);
+    expect(result.design.canvas.height).toBe(720);
+  });
+
+  it('generates a design with custom canvas size', () => {
+    const result = generateThumbnail(createTestOptions({
+      canvasSize: { width: 1920, height: 1080 },
+    }));
+
+    expect(result.success).toBe(true);
+    expect(result.design.canvas.width).toBe(1920);
+    expect(result.design.canvas.height).toBe(1080);
+  });
+
+  it('generates a design for instagram platform', () => {
+    const result = generateThumbnail(createTestOptions({ platform: 'instagram' }));
+
+    expect(result.success).toBe(true);
+    expect(result.design.canvas.width).toBe(1080);
+    expect(result.design.canvas.height).toBe(1080);
+  });
+
+  it('generates a design for twitter platform', () => {
+    const result = generateThumbnail(createTestOptions({ platform: 'twitter' }));
+
+    expect(result.success).toBe(true);
+    expect(result.design.canvas.width).toBe(1200);
+    expect(result.design.canvas.height).toBe(675);
+  });
+
+  it('applies explicit title text override', () => {
+    const result = generateThumbnail(createTestOptions({
+      title: 'Explicit Title',
+    }));
+
+    expect(result.success).toBe(true);
+    const textLayers = getTextLayers(result.design);
+    const titleLayer = textLayers.find((l) => l.name.toLowerCase().includes('title') && !l.name.toLowerCase().includes('sub'));
+    if (titleLayer) {
+      expect(titleLayer.text).toBe('Explicit Title');
+    }
+  });
+
+  it('applies explicit category override', () => {
+    const result = generateThumbnail(createTestOptions({
+      category: 'howto',
+    }));
+
+    expect(result.success).toBe(true);
+    expect(result.design.metadata.category).toBe('howto');
+  });
+
+  it('includes font recommendations in the result', () => {
+    const result = generateThumbnail(createTestOptions());
+
+    expect(result.success).toBe(true);
+    expect(result.fontRecommendations).toBeDefined();
+    expect(Array.isArray(result.fontRecommendations)).toBe(true);
+
+    // Each text layer should have a font recommendation
+    const textLayers = getTextLayers(result.design);
+    if (textLayers.length > 0) {
+      expect(result.fontRecommendations!.length).toBeGreaterThan(0);
+      for (const rec of result.fontRecommendations!) {
+        expect(rec.layerName).toBeTruthy();
+        expect(rec.fontFamily).toBeTruthy();
+        expect(rec.score).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('generates actions that include background setup', () => {
+    const result = generateThumbnail(createTestOptions());
+
+    expect(result.success).toBe(true);
+    // First action should be a background action (gradient or pattern)
+    const bgAction = result.actions.find(
+      (a) => a.type === 'addGradientBackground' || a.type === 'addPattern',
+    );
+    expect(bgAction).toBeDefined();
+  });
+
+  it('generates actions that include text layer creation', () => {
+    const result = generateThumbnail(createTestOptions());
+
+    expect(result.success).toBe(true);
+    const textActions = result.actions.filter((a) => a.type === 'createTextLayer');
+    expect(textActions.length).toBeGreaterThan(0);
+  });
+
+  it('generates actions with text property settings', () => {
+    const result = generateThumbnail(createTestOptions());
+
+    expect(result.success).toBe(true);
+    const textPropActions = result.actions.filter((a) => a.type === 'setTextProperties');
+    expect(textPropActions.length).toBeGreaterThan(0);
+  });
+
+  it('produces consistent results for the same input', () => {
+    const options = createTestOptions();
+    const result1 = generateThumbnail(options);
+    const result2 = generateThumbnail(options);
+
+    expect(result1.success).toBe(true);
+    expect(result2.success).toBe(true);
+    expect(result1.design.canvas).toEqual(result2.design.canvas);
+    expect(result1.design.metadata).toEqual(result2.design.metadata);
+    expect(result1.actions.length).toBe(result2.actions.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Progress Callback Tests
+// ---------------------------------------------------------------------------
+
+describe('generateThumbnail progress', () => {
+  it('calls progress callback for each stage', () => {
+    const stages: PipelineStage[] = [];
+    const messages: string[] = [];
+    const onProgress: PipelineProgress = (stage, message) => {
+      stages.push(stage);
+      messages.push(message);
+    };
+
+    const result = generateThumbnail(createTestOptions(), onProgress);
+
+    expect(result.success).toBe(true);
+    expect(stages).toContain('design');
+    expect(stages).toContain('fonts');
+    expect(stages).toContain('actions');
+    expect(messages.length).toBe(3);
+    // Each message should be a non-empty string
+    for (const msg of messages) {
+      expect(msg.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not call progress callback on validation error', () => {
+    const onProgress = vi.fn();
+
+    const result = generateThumbnail({ instruction: '' }, onProgress);
+
+    expect(result.success).toBe(false);
+    expect(onProgress).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Error Handling Tests
+// ---------------------------------------------------------------------------
+
+describe('generateThumbnail error handling', () => {
+  it('returns error for empty instruction', () => {
+    const result = generateThumbnail({ instruction: '' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain('Instruction is required');
+    expect(result.actions).toEqual([]);
+  });
+
+  it('returns error for whitespace-only instruction', () => {
+    const result = generateThumbnail({ instruction: '   ' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Instruction is required');
+  });
+
+  it('returns an empty design on error', () => {
+    const result = generateThumbnail({ instruction: '' });
+
+    expect(result.design).toBeDefined();
+    expect(result.design.canvas.width).toBe(1280);
+    expect(result.design.canvas.height).toBe(720);
+    expect(result.design.layers).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Refinement Tests
+// ---------------------------------------------------------------------------
+
+describe('refineThumbnail', () => {
+  /** Helper: generate a base design for refinement. */
+  function generateBaseDesign(): ThumbnailDesign {
+    const result = generateThumbnail(createTestOptions());
+    expect(result.success).toBe(true);
+    return result.design;
+  }
+
+  it('returns a successful result from a refinement instruction', () => {
+    const base = generateBaseDesign();
+    const result = refineThumbnail('もう少し派手にして', base);
+
+    expect(result.success).toBe(true);
+    expect(result.design).toBeDefined();
+    expect(result.actions.length).toBeGreaterThan(0);
+  });
+
+  it('increases font size with "文字を大きく"', () => {
+    const base = generateBaseDesign();
+    const originalTextLayers = getTextLayers(base);
+    const originalSizes = originalTextLayers.map((l) => l.fontSize);
+
+    const result = refineThumbnail('文字を大きくして', base);
+
+    expect(result.success).toBe(true);
+    const refinedTextLayers = getTextLayers(result.design);
+    for (let i = 0; i < refinedTextLayers.length && i < originalSizes.length; i++) {
+      expect(refinedTextLayers[i].fontSize).toBeGreaterThan(originalSizes[i]);
+    }
+  });
+
+  it('decreases font size with "文字を小さく"', () => {
+    const base = generateBaseDesign();
+    const originalTextLayers = getTextLayers(base);
+    const originalSizes = originalTextLayers.map((l) => l.fontSize);
+
+    const result = refineThumbnail('文字を小さくして', base);
+
+    expect(result.success).toBe(true);
+    const refinedTextLayers = getTextLayers(result.design);
+    for (let i = 0; i < refinedTextLayers.length && i < originalSizes.length; i++) {
+      expect(refinedTextLayers[i].fontSize).toBeLessThan(originalSizes[i]);
+    }
+  });
+
+  it('makes text bold with "太字に"', () => {
+    const base = generateBaseDesign();
+    const result = refineThumbnail('太字にして', base);
+
+    expect(result.success).toBe(true);
+    const refinedTextLayers = getTextLayers(result.design);
+    for (const layer of refinedTextLayers) {
+      expect(layer.bold).toBe(true);
+    }
+  });
+
+  it('does not mutate the original design', () => {
+    const base = generateBaseDesign();
+    const originalJSON = JSON.stringify(base);
+
+    refineThumbnail('文字を大きくして', base);
+
+    expect(JSON.stringify(base)).toBe(originalJSON);
+  });
+
+  it('returns error for empty refinement instruction', () => {
+    const base = generateBaseDesign();
+    const result = refineThumbnail('', base);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Refinement instruction is required');
+  });
+
+  it('handles "bigger" in English refinement instruction', () => {
+    const base = generateBaseDesign();
+    const originalTextLayers = getTextLayers(base);
+    const originalSizes = originalTextLayers.map((l) => l.fontSize);
+
+    const result = refineThumbnail('make the text bigger', base);
+
+    expect(result.success).toBe(true);
+    const refinedTextLayers = getTextLayers(result.design);
+    for (let i = 0; i < refinedTextLayers.length && i < originalSizes.length; i++) {
+      expect(refinedTextLayers[i].fontSize).toBeGreaterThan(originalSizes[i]);
+    }
+  });
+
+  it('preserves canvas dimensions after refinement', () => {
+    const base = generateBaseDesign();
+    const result = refineThumbnail('もっと派手にして', base);
+
+    expect(result.success).toBe(true);
+    expect(result.design.canvas).toEqual(base.canvas);
+  });
+
+  it('preserves metadata category after refinement', () => {
+    const base = generateBaseDesign();
+    const result = refineThumbnail('文字を大きくして', base);
+
+    expect(result.success).toBe(true);
+    expect(result.design.metadata.category).toBe(base.metadata.category);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Font Recommendation Application Tests
+// ---------------------------------------------------------------------------
+
+describe('applyFontRecommendations', () => {
+  it('replaces fonts on text layers without mutating the original', () => {
+    const result = generateThumbnail(createTestOptions());
+    expect(result.success).toBe(true);
+
+    const original = result.design;
+    const originalJSON = JSON.stringify(original);
+
+    const enriched = applyFontRecommendations(original);
+
+    // Original should not be mutated
+    expect(JSON.stringify(original)).toBe(originalJSON);
+
+    // Enriched should have fonts set on text layers
+    const textLayers = getTextLayers(enriched);
+    for (const layer of textLayers) {
+      expect(layer.fontFamily).toBeTruthy();
+      expect(typeof layer.fontFamily).toBe('string');
+    }
+  });
+
+  it('returns a design with the same structure', () => {
+    const result = generateThumbnail(createTestOptions());
+    expect(result.success).toBe(true);
+
+    const enriched = applyFontRecommendations(result.design);
+
+    expect(enriched.canvas).toEqual(result.design.canvas);
+    expect(enriched.metadata).toEqual(result.design.metadata);
+    expect(enriched.layers.length).toBe(result.design.layers.length);
+  });
+
+  it('does not modify non-text layers', () => {
+    const result = generateThumbnail(createTestOptions());
+    expect(result.success).toBe(true);
+
+    const original = result.design;
+    const enriched = applyFontRecommendations(original);
+
+    const originalNonText = original.layers.filter((l) => l.kind !== 'text');
+    const enrichedNonText = enriched.layers.filter((l) => l.kind !== 'text');
+
+    expect(enrichedNonText.length).toBe(originalNonText.length);
+    for (let i = 0; i < originalNonText.length; i++) {
+      expect(enrichedNonText[i].kind).toBe(originalNonText[i].kind);
+      expect(enrichedNonText[i].name).toBe(originalNonText[i].name);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration Tests
+// ---------------------------------------------------------------------------
+
+describe('pipeline integration', () => {
+  it('handles a how-to tutorial instruction', () => {
+    const result = generateThumbnail({
+      instruction: 'Photoshopの使い方チュートリアル、タイトル「初心者向けガイド」',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.design.layers.length).toBeGreaterThan(0);
+    expect(result.actions.length).toBeGreaterThan(0);
+  });
+
+  it('handles a product review instruction', () => {
+    const result = generateThumbnail({
+      instruction: '商品レビューサムネイル、タイトル「最新iPhone徹底レビュー」',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.actions.length).toBeGreaterThan(0);
+  });
+
+  it('handles an English instruction', () => {
+    const result = generateThumbnail({
+      instruction: 'Gaming thumbnail, title: "Epic Win Compilation"',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.design.layers.length).toBeGreaterThan(0);
+  });
+
+  it('generates then refines in sequence', () => {
+    // Step 1: Generate
+    const gen = generateThumbnail(createTestOptions());
+    expect(gen.success).toBe(true);
+
+    // Step 2: Refine
+    const ref1 = refineThumbnail('文字を大きくして', gen.design);
+    expect(ref1.success).toBe(true);
+
+    // Step 3: Refine again
+    const ref2 = refineThumbnail('太字にして', ref1.design);
+    expect(ref2.success).toBe(true);
+
+    // Verify cumulative effects
+    const finalTextLayers = getTextLayers(ref2.design);
+    for (const layer of finalTextLayers) {
+      expect(layer.bold).toBe(true);
+    }
+
+    // Font sizes should be larger than original
+    const originalTextLayers = getTextLayers(gen.design);
+    for (let i = 0; i < finalTextLayers.length && i < originalTextLayers.length; i++) {
+      expect(finalTextLayers[i].fontSize).toBeGreaterThan(originalTextLayers[i].fontSize);
+    }
+  });
+
+  it('handles all supported platforms', () => {
+    const platforms = ['youtube', 'twitter', 'instagram', 'custom'] as const;
+    for (const platform of platforms) {
+      const result = generateThumbnail(createTestOptions({ platform }));
+      expect(result.success).toBe(true);
+      expect(result.design.metadata.targetPlatform).toBe(platform);
+    }
+  });
+});

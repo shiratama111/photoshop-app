@@ -25,8 +25,10 @@ import { buildMenu } from './menu';
 import { registerFileDialogHandlers } from './file-dialog';
 import { registerAutoSaveHandlers } from './auto-save';
 import { registerFontHandlers } from './font-list';
+import { registerGoogleFontsHandlers } from './google-fonts';
 import { bufferToArrayBuffer } from './buffer-utils';
 import { startHttpBridge, stopHttpBridge } from './http-bridge';
+import { registerPhotoshopImportHandlers } from './photoshop-import';
 
 /** The main application window. */
 let mainWindow: BrowserWindow | null = null;
@@ -186,6 +188,8 @@ app.whenReady().then(() => {
   registerFileDialogHandlers(() => mainWindow);
   registerAutoSaveHandlers();
   registerFontHandlers();
+  registerGoogleFontsHandlers();
+  registerPhotoshopImportHandlers();
   registerWindowHandlers();
   createWindow();
 

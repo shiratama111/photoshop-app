@@ -12,8 +12,8 @@ export { generateId } from './uuid';
 // Document creation — CORE-001
 export { createDocument } from './document';
 
-// Layer factories — CORE-001
-export { createRasterLayer, createTextLayer, createLayerGroup } from './layer-factory';
+// Layer factories — CORE-001, SMART-001
+export { createRasterLayer, createTextLayer, createLayerGroup, createSmartObjectLayer } from './layer-factory';
 export type { CreateTextLayerOptions } from './layer-factory';
 
 // Layer tree operations — CORE-001
@@ -27,20 +27,44 @@ export {
   flattenLayers,
 } from './layer-tree';
 
+// Clipping mask utilities — CLIP-001
+export {
+  isClippingMask,
+  getClippingBase,
+  getClippedLayers,
+  toggleClippingMask,
+} from './layer-tree';
+export type { ClippableLayer } from './layer-tree';
+
 // Command history (undo/redo) — CORE-002
 export { CommandHistoryImpl } from './command-history';
+
+// Smart object — SMART-001
+export {
+  resampleSmartObject,
+  convertToSmartObject,
+  rasterizeSmartObject,
+} from './smart-object';
+export type {
+  SmartObjectLayer,
+  SmartObjectTransform,
+} from './smart-object';
 
 // Event bus — CORE-004
 export { EventBusImpl } from './event-bus';
 
-// Concrete commands — CORE-002
+// Concrete commands — CORE-002, SMART-001
 export {
   AddLayerCommand,
   RemoveLayerCommand,
   ReorderLayerCommand,
   SetLayerPropertyCommand,
   ModifyPixelsCommand,
+  ConvertToSmartObjectCommand,
+  TransformSmartObjectCommand,
+  RasterizeSmartObjectCommand,
 } from './commands';
+export type { LayerHolder } from './commands';
 
 // Filters — CORE-005
 export {
@@ -228,4 +252,5 @@ export type {
   PatternType,
   BorderStyle,
   MaskDirection,
+  ConcentrationLinesConfig,
 } from './procedural';

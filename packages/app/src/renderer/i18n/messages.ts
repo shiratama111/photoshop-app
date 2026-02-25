@@ -152,6 +152,19 @@ export const ja: MessageCatalog = {
   'font.customBadge': 'カスタムフォント',
   'font.loadFailed': 'フォントの読み込みに失敗しました',
   'font.imported': 'フォントを読み込みました',
+  'font.googleFontsBrowse': 'Google Fontsを参照',
+  'font.googleFontBadge': 'Google Font',
+
+  // Google Fonts browser
+  'googleFonts.title': 'Google Fonts',
+  'googleFonts.close': '閉じる',
+  'googleFonts.searchPlaceholder': 'フォント名で検索...',
+  'googleFonts.previewPlaceholder': 'プレビューテキスト',
+  'googleFonts.loading': '読み込み中...',
+  'googleFonts.noResults': 'フォントが見つかりません',
+  'googleFonts.download': 'ダウンロード',
+  'googleFonts.downloading': 'DL中...',
+  'googleFonts.downloaded': 'DL済み',
 
   // Text style presets
   'sidebar.textStyles': 'テキストスタイル',
@@ -160,6 +173,16 @@ export const ja: MessageCatalog = {
   'textStyle.selectTextLayer': 'テキストレイヤーを選択してください',
   'textStyle.enterName': 'スタイル名を入力',
   'textStyle.noPresets': 'プリセットがありません',
+  'textStyle.categoryAll': 'すべて',
+  'textStyle.categoryYouTube': 'YouTube',
+  'textStyle.categoryImpact': 'インパクト',
+  'textStyle.categoryElegant': 'エレガント',
+  'textStyle.categoryCustom': 'カスタム',
+  'textStyle.categoryImported': 'インポート',
+  'textStyle.deletePreset': 'プリセットを削除',
+  'textStyle.saved': 'スタイルを保存しました',
+  'textStyle.deleted': 'スタイルを削除しました',
+  'textStyle.createdLayer': 'プリセットから新規テキストレイヤーを作成しました',
 
   // Place image
   'menu.file.placeImage': '画像を配置...',
@@ -177,6 +200,11 @@ export const ja: MessageCatalog = {
   'template.empty': 'テンプレートがありません',
   'template.saved': 'テンプレートを保存しました',
   'template.loaded': 'テンプレートを読み込みました',
+  'template.exportToFile': 'ファイルに書き出し',
+  'template.importFromFile': 'ファイルから読み込み',
+  'template.exported': 'テンプレートをファイルに書き出しました',
+  'template.imported': 'テンプレートをファイルから読み込みました',
+  'template.importError': 'テンプレートファイルの読み込みに失敗しました',
 
   // Layer style dialog
   'layerStyle.title': 'レイヤースタイル',
@@ -364,8 +392,17 @@ export const ja: MessageCatalog = {
   'gradientMask.direction.left': '左',
   'gradientMask.direction.right': '右',
   'gradientMask.direction.radial': '放射',
+  'gradientMask.direction.topLeft': '左上',
+  'gradientMask.direction.topRight': '右上',
+  'gradientMask.direction.bottomLeft': '左下',
+  'gradientMask.direction.bottomRight': '右下',
   'gradientMask.fadeStart': 'フェード開始',
   'gradientMask.fadeEnd': 'フェード終了',
+  'gradientMask.type': 'タイプ',
+  'gradientMask.type.linear': '線形',
+  'gradientMask.type.radial': '放射状',
+  'gradientMask.customAngle': 'カスタム角度',
+  'gradientMask.reversed': '反転',
 
   // Common (Phase 1-3/1-4)
   'common.preview': 'プレビュー',
@@ -538,6 +575,19 @@ export const en: MessageCatalog = {
   'font.customBadge': 'Custom font',
   'font.loadFailed': 'Failed to load font',
   'font.imported': 'Font imported',
+  'font.googleFontsBrowse': 'Browse Google Fonts',
+  'font.googleFontBadge': 'Google Font',
+
+  // Google Fonts browser
+  'googleFonts.title': 'Google Fonts',
+  'googleFonts.close': 'Close',
+  'googleFonts.searchPlaceholder': 'Search by font name...',
+  'googleFonts.previewPlaceholder': 'Preview text',
+  'googleFonts.loading': 'Loading...',
+  'googleFonts.noResults': 'No fonts found',
+  'googleFonts.download': 'Download',
+  'googleFonts.downloading': 'Downloading...',
+  'googleFonts.downloaded': 'Downloaded',
 
   // Text style presets
   'sidebar.textStyles': 'Text Styles',
@@ -546,6 +596,16 @@ export const en: MessageCatalog = {
   'textStyle.selectTextLayer': 'Select a text layer first',
   'textStyle.enterName': 'Enter style name',
   'textStyle.noPresets': 'No presets',
+  'textStyle.categoryAll': 'All',
+  'textStyle.categoryYouTube': 'YouTube',
+  'textStyle.categoryImpact': 'Impact',
+  'textStyle.categoryElegant': 'Elegant',
+  'textStyle.categoryCustom': 'Custom',
+  'textStyle.categoryImported': 'Imported',
+  'textStyle.deletePreset': 'Delete preset',
+  'textStyle.saved': 'Style saved',
+  'textStyle.deleted': 'Style deleted',
+  'textStyle.createdLayer': 'Created text layer from preset',
 
   // Place image
   'menu.file.placeImage': 'Place Image...',
@@ -563,6 +623,11 @@ export const en: MessageCatalog = {
   'template.empty': 'No templates',
   'template.saved': 'Template saved',
   'template.loaded': 'Template loaded',
+  'template.exportToFile': 'Export to file',
+  'template.importFromFile': 'Import from file',
+  'template.exported': 'Template exported to file',
+  'template.imported': 'Template imported from file',
+  'template.importError': 'Failed to import template file',
 
   // Layer style dialog
   'layerStyle.title': 'Layer Style',
@@ -750,8 +815,17 @@ export const en: MessageCatalog = {
   'gradientMask.direction.left': 'Left',
   'gradientMask.direction.right': 'Right',
   'gradientMask.direction.radial': 'Radial',
+  'gradientMask.direction.topLeft': 'Top-Left',
+  'gradientMask.direction.topRight': 'Top-Right',
+  'gradientMask.direction.bottomLeft': 'Bottom-Left',
+  'gradientMask.direction.bottomRight': 'Bottom-Right',
   'gradientMask.fadeStart': 'Fade Start',
   'gradientMask.fadeEnd': 'Fade End',
+  'gradientMask.type': 'Type',
+  'gradientMask.type.linear': 'Linear',
+  'gradientMask.type.radial': 'Radial',
+  'gradientMask.customAngle': 'Custom Angle',
+  'gradientMask.reversed': 'Reverse',
 
   // Common (Phase 1-3/1-4)
   'common.preview': 'Preview',

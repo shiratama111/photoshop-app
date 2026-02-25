@@ -13,7 +13,7 @@ import {
   generateBorderFrame,
   generateGradientMask,
 } from '../procedural';
-import type { GradientStop, ProceduralColor } from '../procedural';
+import type { GradientStop, ProceduralColor, ConcentrationLinesConfig } from '../procedural';
 
 // Polyfill ImageData for Node.js test environment
 beforeAll(() => {
@@ -129,26 +129,162 @@ describe('generatePattern', () => {
 });
 
 describe('generateConcentrationLines', () => {
+  /** Helper to create a default config with optional overrides. */
+  function makeConfig(overrides?: Partial<ConcentrationLinesConfig>): ConcentrationLinesConfig {
+    return {
+      centerX: 50,
+      centerY: 50,
+      canvasWidth: 100,
+      canvasHeight: 100,
+      lineCount: 30,
+      lineWidthMin: 2,
+      lineWidthMax: 6,
+      innerRadius: 0.2,
+      color: BLACK,
+      randomSeed: 12345,
+      ...overrides,
+    };
+  }
+
+  /** Count pixels with non-zero alpha in the given ImageData. */
+  function countNonTransparentPixels(imageData: ImageData): number {
+    let count = 0;
+    for (let i = 3; i < imageData.data.length; i += 4) {
+      if (imageData.data[i] > 0) count++;
+    }
+    return count;
+  }
+
   it('returns ImageData with correct dimensions', () => {
-    const result = generateConcentrationLines(100, 100, 50, 50, 30, BLACK, 20, 3);
+    const result = generateConcentrationLines(makeConfig());
     expect(result.width).toBe(100);
     expect(result.height).toBe(100);
+    expect(result.data.length).toBe(100 * 100 * 4);
   });
 
-  it('center area is transparent', () => {
-    const result = generateConcentrationLines(100, 100, 50, 50, 60, BLACK, 30, 3);
-    // Check that the center pixel is transparent
+  it('returns ImageData with correct dimensions for non-square canvas', () => {
+    const result = generateConcentrationLines(makeConfig({
+      canvasWidth: 200,
+      canvasHeight: 80,
+      centerX: 100,
+      centerY: 40,
+    }));
+    expect(result.width).toBe(200);
+    expect(result.height).toBe(80);
+    expect(result.data.length).toBe(200 * 80 * 4);
+  });
+
+  it('center area within innerRadius is transparent', () => {
+    const config = makeConfig({ innerRadius: 0.3 });
+    const result = generateConcentrationLines(config);
+    // The center pixel itself should be transparent
     const centerIdx = (50 * 100 + 50) * 4;
     expect(result.data[centerIdx + 3]).toBe(0);
   });
 
   it('has non-zero pixels outside inner radius', () => {
-    const result = generateConcentrationLines(100, 100, 50, 50, 60, BLACK, 10, 5);
-    let hasContent = false;
-    for (let i = 3; i < result.data.length; i += 4) {
-      if (result.data[i] > 0) { hasContent = true; break; }
+    const result = generateConcentrationLines(makeConfig({ lineCount: 60, lineWidthMin: 4, lineWidthMax: 8 }));
+    expect(countNonTransparentPixels(result)).toBeGreaterThan(0);
+  });
+
+  it('lineCount=0 returns fully transparent image', () => {
+    const result = generateConcentrationLines(makeConfig({ lineCount: 0 }));
+    expect(countNonTransparentPixels(result)).toBe(0);
+  });
+
+  it('innerRadius=0 draws lines starting from center', () => {
+    const result = generateConcentrationLines(makeConfig({
+      innerRadius: 0,
+      lineCount: 60,
+      lineWidthMin: 4,
+      lineWidthMax: 8,
+    }));
+    // Should still have content (lines reach near center)
+    expect(countNonTransparentPixels(result)).toBeGreaterThan(0);
+  });
+
+  it('innerRadius=1 creates a large clear center (most pixels transparent)', () => {
+    const result = generateConcentrationLines(makeConfig({ innerRadius: 1 }));
+    // With innerRadius=1, the clear area covers half the diagonal.
+    // Most pixels near the center should be transparent.
+    const totalPixels = 100 * 100;
+    const visiblePixels = countNonTransparentPixels(result);
+    // The vast majority of pixels should be transparent
+    expect(visiblePixels).toBeLessThan(totalPixels * 0.5);
+  });
+
+  it('seeded random produces identical output for same seed', () => {
+    const config = makeConfig({ randomSeed: 99999 });
+    const result1 = generateConcentrationLines(config);
+    const result2 = generateConcentrationLines(config);
+    expect(result1.data).toEqual(result2.data);
+  });
+
+  it('different seeds produce different output', () => {
+    const result1 = generateConcentrationLines(makeConfig({ randomSeed: 111 }));
+    const result2 = generateConcentrationLines(makeConfig({ randomSeed: 222 }));
+    // At least some pixels should differ
+    let hasDiff = false;
+    for (let i = 0; i < result1.data.length; i++) {
+      if (result1.data[i] !== result2.data[i]) {
+        hasDiff = true;
+        break;
+      }
     }
-    expect(hasContent).toBe(true);
+    expect(hasDiff).toBe(true);
+  });
+
+  it('more lines produce more visible pixels', () => {
+    const few = generateConcentrationLines(makeConfig({ lineCount: 10, lineWidthMin: 3, lineWidthMax: 5 }));
+    const many = generateConcentrationLines(makeConfig({ lineCount: 80, lineWidthMin: 3, lineWidthMax: 5 }));
+    expect(countNonTransparentPixels(many)).toBeGreaterThan(countNonTransparentPixels(few));
+  });
+
+  it('wider lines produce more visible pixels', () => {
+    const thin = generateConcentrationLines(makeConfig({ lineWidthMin: 1, lineWidthMax: 2, lineCount: 40 }));
+    const thick = generateConcentrationLines(makeConfig({ lineWidthMin: 8, lineWidthMax: 16, lineCount: 40 }));
+    expect(countNonTransparentPixels(thick)).toBeGreaterThan(countNonTransparentPixels(thin));
+  });
+
+  it('uses default seed when randomSeed is omitted', () => {
+    const config1: ConcentrationLinesConfig = {
+      centerX: 50,
+      centerY: 50,
+      canvasWidth: 100,
+      canvasHeight: 100,
+      lineCount: 30,
+      lineWidthMin: 2,
+      lineWidthMax: 6,
+      innerRadius: 0.2,
+      color: BLACK,
+    };
+    const config2 = { ...config1 };
+    const result1 = generateConcentrationLines(config1);
+    const result2 = generateConcentrationLines(config2);
+    // Without explicit seed, both should use the same default and produce identical results
+    expect(result1.data).toEqual(result2.data);
+  });
+
+  it('respects the color parameter', () => {
+    const red: ProceduralColor = { r: 255, g: 0, b: 0, a: 255 };
+    const result = generateConcentrationLines(makeConfig({
+      color: red,
+      lineCount: 60,
+      lineWidthMin: 4,
+      lineWidthMax: 8,
+    }));
+    // Find a non-transparent pixel and verify it uses the specified color
+    let foundColor = false;
+    for (let i = 0; i < result.data.length; i += 4) {
+      if (result.data[i + 3] > 0) {
+        expect(result.data[i]).toBe(255);     // r
+        expect(result.data[i + 1]).toBe(0);   // g
+        expect(result.data[i + 2]).toBe(0);   // b
+        foundColor = true;
+        break;
+      }
+    }
+    expect(foundColor).toBe(true);
   });
 });
 

@@ -9,7 +9,12 @@ import {
   findParentGroup,
   traverseLayers,
   flattenLayers,
+  isClippingMask,
+  getClippingBase,
+  getClippedLayers,
+  toggleClippingMask,
 } from '../layer-tree';
+import type { ClippableLayer } from '../layer-tree';
 
 // --- Test helpers ---
 
@@ -435,5 +440,206 @@ describe('flattenLayers', () => {
     const root = makeRoot();
 
     expect(flattenLayers(root)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Clipping mask utilities — CLIP-001
+// ---------------------------------------------------------------------------
+
+/** Helper to create a raster layer with clippingMask flag. */
+function makeClippingRaster(id: string, name: string): RasterLayer & ClippableLayer {
+  const layer = makeRaster(id, name) as RasterLayer & ClippableLayer;
+  layer.clippingMask = true;
+  return layer;
+}
+
+describe('isClippingMask', () => {
+  it('returns false for a normal layer', () => {
+    const layer = makeRaster('l1', 'Normal');
+    expect(isClippingMask(layer)).toBe(false);
+  });
+
+  it('returns true for a layer with clippingMask: true', () => {
+    const layer = makeClippingRaster('l1', 'Clipped');
+    expect(isClippingMask(layer)).toBe(true);
+  });
+
+  it('returns false for a layer with clippingMask: false', () => {
+    const layer = makeRaster('l1', 'Normal') as RasterLayer & ClippableLayer;
+    layer.clippingMask = false;
+    expect(isClippingMask(layer)).toBe(false);
+  });
+
+  it('returns false for a layer without the clippingMask property', () => {
+    const layer = makeText('t1', 'Text', 'Hello');
+    expect(isClippingMask(layer)).toBe(false);
+  });
+});
+
+describe('getClippingBase', () => {
+  it('returns null for a non-clipping layer', () => {
+    const a = makeRaster('a', 'A');
+    const b = makeRaster('b', 'B');
+    const siblings = [a, b];
+
+    expect(getClippingBase(b, siblings)).toBeNull();
+  });
+
+  it('returns the immediately preceding non-clipping layer', () => {
+    const base = makeRaster('base', 'Base');
+    const clipped = makeClippingRaster('clip', 'Clipped');
+    const siblings = [base, clipped];
+
+    expect(getClippingBase(clipped, siblings)).toBe(base);
+  });
+
+  it('skips over intermediate clipping layers to find the base', () => {
+    const base = makeRaster('base', 'Base');
+    const clip1 = makeClippingRaster('c1', 'Clip1');
+    const clip2 = makeClippingRaster('c2', 'Clip2');
+    const siblings = [base, clip1, clip2];
+
+    expect(getClippingBase(clip2, siblings)).toBe(base);
+    expect(getClippingBase(clip1, siblings)).toBe(base);
+  });
+
+  it('returns null when the clipping layer is at index 0', () => {
+    const clip = makeClippingRaster('c1', 'Clip');
+    const siblings = [clip];
+
+    expect(getClippingBase(clip, siblings)).toBeNull();
+  });
+
+  it('returns null when all layers below are also clipping', () => {
+    const clip1 = makeClippingRaster('c1', 'Clip1');
+    const clip2 = makeClippingRaster('c2', 'Clip2');
+    const siblings = [clip1, clip2];
+
+    expect(getClippingBase(clip2, siblings)).toBeNull();
+  });
+});
+
+describe('getClippedLayers', () => {
+  it('returns empty array for a clipping layer used as baseLayer', () => {
+    const clip = makeClippingRaster('c1', 'Clip');
+    const siblings = [clip];
+
+    expect(getClippedLayers(clip, siblings)).toEqual([]);
+  });
+
+  it('returns empty array when no clipping layers follow the base', () => {
+    const base = makeRaster('base', 'Base');
+    const normal = makeRaster('normal', 'Normal');
+    const siblings = [base, normal];
+
+    expect(getClippedLayers(base, siblings)).toEqual([]);
+  });
+
+  it('returns a single clipped layer', () => {
+    const base = makeRaster('base', 'Base');
+    const clip = makeClippingRaster('c1', 'Clip');
+    const siblings = [base, clip];
+
+    expect(getClippedLayers(base, siblings)).toEqual([clip]);
+  });
+
+  it('returns multiple contiguous clipped layers', () => {
+    const base = makeRaster('base', 'Base');
+    const c1 = makeClippingRaster('c1', 'Clip1');
+    const c2 = makeClippingRaster('c2', 'Clip2');
+    const c3 = makeClippingRaster('c3', 'Clip3');
+    const siblings = [base, c1, c2, c3];
+
+    expect(getClippedLayers(base, siblings)).toEqual([c1, c2, c3]);
+  });
+
+  it('stops at the first non-clipping layer', () => {
+    const base = makeRaster('base', 'Base');
+    const c1 = makeClippingRaster('c1', 'Clip1');
+    const normal = makeRaster('normal', 'Normal');
+    const c2 = makeClippingRaster('c2', 'Clip2');
+    const siblings = [base, c1, normal, c2];
+
+    expect(getClippedLayers(base, siblings)).toEqual([c1]);
+  });
+
+  it('returns empty array when baseLayer is not in the siblings array', () => {
+    const base = makeRaster('base', 'Base');
+    const other = makeRaster('other', 'Other');
+    const siblings = [other];
+
+    expect(getClippedLayers(base, siblings)).toEqual([]);
+  });
+});
+
+describe('toggleClippingMask', () => {
+  it('enables clipping mask on a non-clipping layer', () => {
+    const base = makeRaster('base', 'Base');
+    const target = makeRaster('target', 'Target');
+    base.parentId = 'root';
+    target.parentId = 'root';
+    const root = makeRoot('root', [base, target]);
+
+    toggleClippingMask('target', root);
+
+    expect(isClippingMask(target)).toBe(true);
+  });
+
+  it('disables clipping mask on a clipping layer', () => {
+    const base = makeRaster('base', 'Base');
+    const clip = makeClippingRaster('clip', 'Clip');
+    base.parentId = 'root';
+    clip.parentId = 'root';
+    const root = makeRoot('root', [base, clip]);
+
+    toggleClippingMask('clip', root);
+
+    expect(isClippingMask(clip)).toBe(false);
+  });
+
+  it('does nothing for the bottom-most layer (index 0)', () => {
+    const bottom = makeRaster('bottom', 'Bottom');
+    bottom.parentId = 'root';
+    const root = makeRoot('root', [bottom]);
+
+    toggleClippingMask('bottom', root);
+
+    expect(isClippingMask(bottom)).toBe(false);
+  });
+
+  it('does nothing for a nonexistent layer id', () => {
+    const root = makeRoot('root');
+
+    // Should not throw.
+    toggleClippingMask('nonexistent', root);
+  });
+
+  it('works on deeply nested layers', () => {
+    const a = makeRaster('a', 'A');
+    const b = makeRaster('b', 'B');
+    a.parentId = 'sub';
+    b.parentId = 'sub';
+    const sub = makeGroup('sub', 'Sub', [a, b]);
+    sub.parentId = 'root';
+    const root = makeRoot('root', [sub]);
+
+    toggleClippingMask('b', root);
+
+    expect(isClippingMask(b)).toBe(true);
+  });
+
+  it('toggles on then off', () => {
+    const base = makeRaster('base', 'Base');
+    const target = makeRaster('target', 'Target');
+    base.parentId = 'root';
+    target.parentId = 'root';
+    const root = makeRoot('root', [base, target]);
+
+    toggleClippingMask('target', root);
+    expect(isClippingMask(target)).toBe(true);
+
+    toggleClippingMask('target', root);
+    expect(isClippingMask(target)).toBe(false);
   });
 });

@@ -8,12 +8,18 @@
  * - Drag-drop font files onto the selector
  * - localStorage persistence for custom fonts (Base64)
  * - Custom fonts displayed at top with badge
+ * - Google Fonts integration: downloaded fonts shown with cloud badge
  *
  * @see font-list.ts (main process handler)
+ * @see google-fonts-store.ts (Google Fonts state)
+ * @see GoogleFontsBrowser.tsx (Google Fonts browser modal)
+ * @see FONT-001: Google Fonts integration
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n';
+import { useGoogleFontsStore } from './google-fonts-store';
+import { GoogleFontsBrowser } from './GoogleFontsBrowser';
 
 // ── Custom font persistence ──────────────────────────────────────────────
 
@@ -101,6 +107,18 @@ async function registerCustomFontFromFile(file: File): Promise<string> {
   }
 
   return familyName;
+}
+
+/**
+ * Add an externally registered font name to the custom fonts list.
+ * Used by the Photoshop auto-import module to register fonts discovered
+ * on disk without going through the file-picker flow.
+ * Does not persist to localStorage (the auto-import manifest handles persistence).
+ */
+export function addExternalFont(familyName: string): void {
+  if (!customFontNames.includes(familyName)) {
+    customFontNames = [...customFontNames, familyName];
+  }
 }
 
 /** Remove a custom font from persistence and runtime list. */
@@ -199,16 +217,30 @@ export function FontSelector({ value, onChange }: FontSelectorProps): React.JSX.
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Rehydrate custom fonts + fetch system fonts on first mount
+  // Google Fonts store
+  const googleFontsStore = useGoogleFontsStore();
+  const downloadedGoogleFonts = googleFontsStore.getDownloadedFamilyNames();
+
+  // Rehydrate custom fonts + Google Fonts + fetch system fonts on first mount
   useEffect(() => {
     rehydrateCustomFonts().then(() => {
       setCustomFonts([...customFontNames]);
     });
     fetchSystemFonts().then((f) => setSystemFonts(f));
+    void googleFontsStore.rehydrate();
   }, []);
 
-  /** Combined font list: custom fonts first, then system fonts. */
-  const allFonts = useMemo(() => [...customFonts, ...systemFonts], [customFonts, systemFonts]);
+  /** Combined font list: custom fonts first, then downloaded Google Fonts, then system fonts. */
+  const allFonts = useMemo(
+    () => [...customFonts, ...downloadedGoogleFonts, ...systemFonts],
+    [customFonts, downloadedGoogleFonts, systemFonts],
+  );
+
+  /** Check whether a font is a downloaded Google Font. */
+  const isGoogleFont = useCallback(
+    (font: string): boolean => downloadedGoogleFonts.includes(font),
+    [downloadedGoogleFonts],
+  );
 
   const filtered = useMemo(() => {
     if (!search) return allFonts;
@@ -331,6 +363,14 @@ export function FontSelector({ value, onChange }: FontSelectorProps): React.JSX.
 
   const isCustom = (font: string): boolean => customFonts.includes(font);
 
+  /** Callback when a Google Font is downloaded via the browser modal. */
+  const handleGoogleFontDownloaded = useCallback(
+    (family: string) => {
+      onChange(family);
+    },
+    [onChange],
+  );
+
   return (
     <div
       className={`font-selector ${dragOver ? 'font-selector--drag-over' : ''}`}
@@ -348,6 +388,15 @@ export function FontSelector({ value, onChange }: FontSelectorProps): React.JSX.
           type="button"
         >
           {value}
+        </button>
+        <button
+          className="font-selector__import-btn"
+          onClick={() => googleFontsStore.open()}
+          title={t('font.googleFontsBrowse')}
+          type="button"
+          style={{ fontSize: 11, padding: '0 4px' }}
+        >
+          G
         </button>
         <button
           className="font-selector__import-btn"
@@ -434,6 +483,11 @@ export function FontSelector({ value, onChange }: FontSelectorProps): React.JSX.
                     {'★ '}
                   </span>
                 )}
+                {isGoogleFont(font) && (
+                  <span className="font-selector__google-badge" title={t('font.googleFontBadge')}>
+                    {'☁ '}
+                  </span>
+                )}
                 {font}
               </div>
             ))}
@@ -445,6 +499,9 @@ export function FontSelector({ value, onChange }: FontSelectorProps): React.JSX.
           </div>
         </div>
       )}
+
+      {/* Google Fonts browser modal */}
+      <GoogleFontsBrowser onFontDownloaded={handleGoogleFontDownloaded} />
     </div>
   );
 }

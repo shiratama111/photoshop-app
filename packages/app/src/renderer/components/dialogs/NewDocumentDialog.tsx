@@ -2,7 +2,11 @@
  * @module components/dialogs/NewDocumentDialog
  * Dialog for creating a new document with configurable name, preset, and dimensions.
  *
+ * Includes preset canvas sizes for social media (YouTube, Twitter, Instagram),
+ * standard resolutions, and print sizes.
+ *
  * @see APP-017: New Document dialog, artboard/pasteboard, default background layer
+ * @see TMPL-001: Preset canvas sizes
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -24,6 +28,12 @@ const PRESET_GROUPS: readonly PresetGroup[] = [
       { label: 'Twitter Post (1200×675)', width: 1200, height: 675 },
       { label: 'Instagram Square (1080×1080)', width: 1080, height: 1080 },
       { label: 'Instagram Story (1080×1920)', width: 1080, height: 1920 },
+    ],
+  },
+  {
+    label: 'Print',
+    presets: [
+      { label: 'A4 Landscape 72dpi (842×595)', width: 842, height: 595 },
     ],
   },
   {

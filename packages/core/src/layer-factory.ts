@@ -4,11 +4,13 @@
  * Each function produces a properly initialized layer with default values.
  *
  * @see CORE-001: Layer creation factories
+ * @see SMART-001: Smart object layer factory
  */
 
 import type { RasterLayer, TextLayer, LayerGroup, Color, WritingMode, TextAlignment } from '@photoshop-app/types';
 import { BlendMode } from '@photoshop-app/types';
 import { generateId } from './uuid';
+import type { SmartObjectLayer } from './smart-object';
 
 /**
  * Creates a new raster (pixel) layer.
@@ -110,5 +112,48 @@ export function createLayerGroup(name: string): LayerGroup {
     parentId: null,
     children: [],
     expanded: true,
+  };
+}
+
+/**
+ * Creates a new smart object layer from raw RGBA source data.
+ *
+ * @param name         - Display name for the layer.
+ * @param sourceData   - Original full-resolution RGBA pixel data.
+ * @param sourceWidth  - Width of the source image in pixels.
+ * @param sourceHeight - Height of the source image in pixels.
+ * @returns A new SmartObjectLayer with identity transform and no cached display data.
+ *
+ * @see SMART-001: Smart object factory
+ */
+export function createSmartObjectLayer(
+  name: string,
+  sourceData: Uint8Array,
+  sourceWidth: number,
+  sourceHeight: number,
+): SmartObjectLayer {
+  const expectedLength = sourceWidth * sourceHeight * 4;
+  if (sourceData.length !== expectedLength) {
+    throw new Error(
+      `sourceData length ${sourceData.length} does not match ${sourceWidth}x${sourceHeight} RGBA (expected ${expectedLength})`,
+    );
+  }
+
+  return {
+    id: generateId(),
+    name,
+    type: 'smart-object',
+    visible: true,
+    opacity: 1,
+    blendMode: BlendMode.Normal,
+    position: { x: 0, y: 0 },
+    locked: false,
+    effects: [],
+    parentId: null,
+    sourceData: new Uint8Array(sourceData),
+    sourceWidth,
+    sourceHeight,
+    transform: { scaleX: 1, scaleY: 1, rotation: 0 },
+    displayData: null,
   };
 }

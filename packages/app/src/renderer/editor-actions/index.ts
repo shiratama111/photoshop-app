@@ -23,3 +23,15 @@ export type { ValidationResult } from './validators';
 export { resolveFilter, REGISTERED_FILTER_NAMES } from './filter-registry';
 export { captureCanvasSnapshot } from './snapshot';
 export type { CanvasSnapshot } from './snapshot';
+export { describeEffects, describeLayerStyle, parseStyleDescription, effectsEquivalent } from './style-analyzer';
+export type { TextStyleProps, ParsedStyle, DescriptionLang } from './style-analyzer';
+export {
+  lookupColor,
+  findClosestColorName,
+  lookupEffectType,
+  lookupPresetId,
+  getEffectDisplayName,
+  getColorDisplayName,
+  findAdjectives,
+} from './style-vocabulary';
+export type { NamedColor, AdjectiveModifier, StyleModifierBag } from './style-vocabulary';

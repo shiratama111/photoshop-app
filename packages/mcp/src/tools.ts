@@ -2,11 +2,30 @@
  * @module tools
  * MCP tool definitions and handlers for the Photoshop App editor.
  *
- * Defines 16 high-level tools that map to EditorAction(s) in the Electron app.
+ * Defines 30 high-level tools that map to EditorAction(s) in the Electron app.
  * Each tool has a JSON Schema input definition and a handler that constructs
  * the appropriate EditorAction payload, calls the bridge, and formats the response.
  *
+ * Tool groups:
+ * - Read-only / Inspection (3)
+ * - Layer Creation (2)
+ * - Layer Modification (2)
+ * - Layer Effects (2)
+ * - Filters (1)
+ * - Procedural Generation (3)
+ * - Layer Management (1)
+ * - History (2)
+ * - Raw Dispatch (1)
+ * - Templates (4) — MCP-002
+ * - Text Style Presets (2) — MCP-002
+ * - Decorations (2) — MCP-002
+ * - Clipping Mask (1) — MCP-002
+ * - Style Analysis (2) — MCP-002
+ * - Pipeline (2) — PIPE-001
+ *
  * @see Phase 2-3: MCP Server
+ * @see PIPE-001: E2E自動生成パイプライン (.claude/tickets/PIPE-001.md)
+ * @see MCP-002: MCPツール拡充 (.claude/tickets/MCP-002.md)
  * @see packages/app/src/renderer/editor-actions/types.ts (EditorAction union)
  */
 
@@ -301,6 +320,249 @@ export const TOOLS: Tool[] = [
       required: ['actions'],
     },
   },
+
+  // ── Templates (MCP-002) ─────────────────────────────────────────
+  {
+    name: 'list_templates',
+    description:
+      'List all available templates from the template store. ' +
+      'Returns template IDs, names, dimensions, and thumbnail info.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'load_template',
+    description:
+      'Load a template by ID and create a new document from it. ' +
+      'The template layers, styles, and dimensions are applied to the new document.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        templateId: { type: 'string', description: 'Template ID to load' },
+      },
+      required: ['templateId'],
+    },
+  },
+  {
+    name: 'save_as_template',
+    description:
+      'Save the current document as a reusable template. ' +
+      'The template preserves all layers, effects, and text content.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Template name' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'create_from_preset',
+    description:
+      'Create a new blank document with a preset canvas size. ' +
+      'Available presets: youtube_1280x720, twitter_1200x675, instagram_1080x1080, ' +
+      'instagram_story_1080x1920, facebook_1200x630, a4_2480x3508, business_card_1050x600.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        presetName: {
+          type: 'string',
+          description:
+            'Preset name: youtube_1280x720, twitter_1200x675, instagram_1080x1080, ' +
+            'instagram_story_1080x1920, facebook_1200x630, a4_2480x3508, business_card_1050x600',
+        },
+      },
+      required: ['presetName'],
+    },
+  },
+
+  // ── Text Style Presets (MCP-002) ─────────────────────────────────
+  {
+    name: 'list_text_presets',
+    description:
+      'List all available text style presets (built-in and custom). ' +
+      'Returns preset IDs, names, and style properties (font, size, color, effects).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'apply_text_preset',
+    description:
+      'Apply a text style preset to a text layer. ' +
+      'Sets font, size, color, effects, and other text properties from the preset.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        layerId: { type: 'string', description: 'Target text layer ID' },
+        presetId: { type: 'string', description: 'Text style preset ID to apply' },
+      },
+      required: ['layerId', 'presetId'],
+    },
+  },
+
+  // ── Decorations (MCP-002) ────────────────────────────────────────
+  {
+    name: 'add_concentration_lines',
+    description:
+      'Add manga-style concentration lines (集中線) radiating from a center point. ' +
+      'Creates a new layer with the generated lines.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        centerX: { type: 'number', description: 'X coordinate of the center point (in document pixels)' },
+        centerY: { type: 'number', description: 'Y coordinate of the center point (in document pixels)' },
+        lineCount: { type: 'number', description: 'Number of lines to generate (default: 60)' },
+        innerRadius: { type: 'number', description: 'Inner radius (clear area) in pixels (default: 100)' },
+        color: {
+          type: 'object',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' },
+            b: { type: 'number' }, a: { type: 'number' },
+          },
+          required: ['r', 'g', 'b', 'a'],
+          description: 'Line color (RGBA 0-255). Default: black (0,0,0,255)',
+        },
+      },
+    },
+  },
+  {
+    name: 'apply_gradient_mask',
+    description:
+      'Apply a gradient mask to a layer for smooth fade-out effects. ' +
+      'Supports linear and radial gradient types.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID' },
+        type: {
+          type: 'string',
+          description: 'Gradient type: linear or radial',
+        },
+        direction: {
+          type: 'string',
+          description: 'Direction for linear gradient: top, bottom, left, right, top-left, top-right, bottom-left, bottom-right',
+        },
+        startPosition: {
+          type: 'number',
+          description: 'Start position of the gradient (0-1, where 0 = fully transparent)',
+        },
+        endPosition: {
+          type: 'number',
+          description: 'End position of the gradient (0-1, where 1 = fully opaque)',
+        },
+        reversed: {
+          type: 'boolean',
+          description: 'Reverse the gradient direction (default: false)',
+        },
+      },
+      required: ['layerId', 'type'],
+    },
+  },
+
+  // ── Clipping Mask (MCP-002) ──────────────────────────────────────
+  {
+    name: 'set_clipping_mask',
+    description:
+      'Toggle clipping mask on a layer. When enabled, the layer is clipped ' +
+      'to the content of the layer directly below it in the layer stack.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID' },
+        enabled: { type: 'boolean', description: 'true to enable clipping mask, false to disable' },
+      },
+      required: ['layerId', 'enabled'],
+    },
+  },
+
+  // ── Style Analysis (MCP-002) ─────────────────────────────────────
+  {
+    name: 'describe_layer_style',
+    description:
+      'Get a natural language description of a layer\'s visual style, ' +
+      'including text properties, effects, blend mode, and opacity.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        layerId: { type: 'string', description: 'Layer ID to describe' },
+      },
+      required: ['layerId'],
+    },
+  },
+  {
+    name: 'apply_style_description',
+    description:
+      'Apply a visual style to a layer using a natural language description. ' +
+      'The editor interprets the description and applies matching properties and effects.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID' },
+        description: {
+          type: 'string',
+          description: 'Natural language style description (e.g. "white text with black stroke and drop shadow")',
+        },
+      },
+      required: ['layerId', 'description'],
+    },
+  },
+
+  // ── Pipeline (PIPE-001) ───────────────────────────────────────────
+  {
+    name: 'generate_thumbnail',
+    description:
+      'Generate a complete thumbnail from a natural language instruction. ' +
+      'Produces a design blueprint with AI-selected fonts and returns an array of EditorActions ' +
+      'to execute. Use execute_actions to apply the result to the canvas. ' +
+      'Supports Japanese and English instructions.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        instruction: {
+          type: 'string',
+          description: 'Natural language instruction (e.g. "衝撃ニュース系サムネ、タイトル「AIが世界を変える」")',
+        },
+        category: {
+          type: 'string',
+          description: 'Design category override: news, howto, vlog, product, gaming, comparison',
+        },
+        platform: {
+          type: 'string',
+          description: 'Target platform: youtube (1280x720), twitter (1200x675), instagram (1080x1080), custom',
+        },
+        title: { type: 'string', description: 'Explicit title text (overrides extraction from instruction)' },
+        subtitle: { type: 'string', description: 'Explicit subtitle text' },
+        canvasWidth: { type: 'number', description: 'Canvas width override in pixels' },
+        canvasHeight: { type: 'number', description: 'Canvas height override in pixels' },
+      },
+      required: ['instruction'],
+    },
+  },
+  {
+    name: 'refine_thumbnail',
+    description:
+      'Refine an existing thumbnail with a follow-up instruction. ' +
+      'Supports modifications like "もっと派手に", "文字を大きく", "太字にして", etc. ' +
+      'Requires a previous generate_thumbnail result. Pass the design JSON from the previous result.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        instruction: {
+          type: 'string',
+          description: 'Refinement instruction (e.g. "もう少し派手にして", "make text bigger")',
+        },
+        currentDesign: {
+          type: 'object',
+          description: 'The current ThumbnailDesign JSON from a previous generate_thumbnail or refine_thumbnail result',
+        },
+      },
+      required: ['instruction', 'currentDesign'],
+    },
+  },
 ];
 
 /** Result type from the editor bridge. */
@@ -482,6 +744,201 @@ export async function handleToolCall(
         const actions = args.actions as unknown[];
         const results = await callEditor(actions) as ActionResult[];
         return formatResults(results);
+      }
+
+      // ── Templates (MCP-002) ───────────────────────────────────────
+      case 'list_templates': {
+        const results = await callEditor([{ type: 'listTemplates' }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      case 'load_template': {
+        const templateId = args.templateId as string | undefined;
+        if (!templateId) {
+          return errorResult('templateId is required.');
+        }
+        const results = await callEditor([{
+          type: 'loadTemplate',
+          params: { templateId },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      case 'save_as_template': {
+        const name = args.name as string | undefined;
+        if (!name) {
+          return errorResult('name is required.');
+        }
+        const results = await callEditor([{
+          type: 'saveAsTemplate',
+          params: { name },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      case 'create_from_preset': {
+        const presetName = args.presetName as string | undefined;
+        if (!presetName) {
+          return errorResult('presetName is required.');
+        }
+        const validPresets = [
+          'youtube_1280x720', 'twitter_1200x675', 'instagram_1080x1080',
+          'instagram_story_1080x1920', 'facebook_1200x630', 'a4_2480x3508',
+          'business_card_1050x600',
+        ];
+        if (!validPresets.includes(presetName)) {
+          return errorResult(
+            `Invalid presetName "${presetName}". ` +
+            `Valid presets: ${validPresets.join(', ')}`,
+          );
+        }
+        const results = await callEditor([{
+          type: 'createFromPreset',
+          params: { presetName },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      // ── Text Style Presets (MCP-002) ──────────────────────────────
+      case 'list_text_presets': {
+        const results = await callEditor([{ type: 'listTextPresets' }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      case 'apply_text_preset': {
+        const layerId = args.layerId as string | undefined;
+        const presetId = args.presetId as string | undefined;
+        if (!layerId) {
+          return errorResult('layerId is required.');
+        }
+        if (!presetId) {
+          return errorResult('presetId is required.');
+        }
+        const results = await callEditor([{
+          type: 'applyTextPreset',
+          params: { layerId, presetId },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      // ── Decorations (MCP-002) ─────────────────────────────────────
+      case 'add_concentration_lines': {
+        const results = await callEditor([{
+          type: 'addConcentrationLines',
+          params: {
+            centerX: args.centerX,
+            centerY: args.centerY,
+            lineCount: args.lineCount,
+            innerRadius: args.innerRadius,
+            color: args.color,
+          },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      case 'apply_gradient_mask': {
+        const layerId = args.layerId as string | undefined;
+        if (!layerId) {
+          return errorResult('layerId is required.');
+        }
+        const gradientType = args.type as string | undefined;
+        if (!gradientType || !['linear', 'radial'].includes(gradientType)) {
+          return errorResult('type must be "linear" or "radial".');
+        }
+        const results = await callEditor([{
+          type: 'applyGradientMask',
+          params: {
+            layerId,
+            type: gradientType,
+            direction: args.direction,
+            startPosition: args.startPosition,
+            endPosition: args.endPosition,
+            reversed: args.reversed,
+          },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      // ── Clipping Mask (MCP-002) ───────────────────────────────────
+      case 'set_clipping_mask': {
+        const layerId = args.layerId as string | undefined;
+        if (!layerId) {
+          return errorResult('layerId is required.');
+        }
+        if (typeof args.enabled !== 'boolean') {
+          return errorResult('enabled must be a boolean (true or false).');
+        }
+        const results = await callEditor([{
+          type: 'setClippingMask',
+          params: { layerId, enabled: args.enabled },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      // ── Style Analysis (MCP-002) ──────────────────────────────────
+      case 'describe_layer_style': {
+        const layerId = args.layerId as string | undefined;
+        if (!layerId) {
+          return errorResult('layerId is required.');
+        }
+        const results = await callEditor([{
+          type: 'describeLayerStyle',
+          params: { layerId },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      case 'apply_style_description': {
+        const layerId = args.layerId as string | undefined;
+        const description = args.description as string | undefined;
+        if (!layerId) {
+          return errorResult('layerId is required.');
+        }
+        if (!description) {
+          return errorResult('description is required.');
+        }
+        const results = await callEditor([{
+          type: 'applyStyleDescription',
+          params: { layerId, description },
+        }]) as ActionResult[];
+        return formatResult(results[0]);
+      }
+
+      // ── Pipeline (PIPE-001) ────────────────────────────────────────
+      case 'generate_thumbnail': {
+        const instruction = args.instruction as string | undefined;
+        if (!instruction) {
+          return errorResult('instruction is required.');
+        }
+        const pipelineResult = await callEditor([{
+          type: 'generateThumbnail',
+          params: {
+            instruction,
+            category: args.category,
+            platform: args.platform,
+            title: args.title,
+            subtitle: args.subtitle,
+            canvasWidth: args.canvasWidth,
+            canvasHeight: args.canvasHeight,
+          },
+        }]) as ActionResult[];
+        return formatResult(pipelineResult[0]);
+      }
+
+      case 'refine_thumbnail': {
+        const instruction = args.instruction as string | undefined;
+        const currentDesign = args.currentDesign as Record<string, unknown> | undefined;
+        if (!instruction) {
+          return errorResult('instruction is required.');
+        }
+        if (!currentDesign) {
+          return errorResult('currentDesign is required. Pass the design JSON from a previous generate_thumbnail result.');
+        }
+        const pipelineResult = await callEditor([{
+          type: 'refineThumbnail',
+          params: { instruction, currentDesign },
+        }]) as ActionResult[];
+        return formatResult(pipelineResult[0]);
       }
 
       default:
