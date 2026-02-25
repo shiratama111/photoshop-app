@@ -10,6 +10,7 @@
  */
 
 import { Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
+import { t } from '../renderer/i18n/index';
 
 /**
  * Build and set the application menu.
@@ -22,7 +23,7 @@ export function buildMenu(mainWindow: BrowserWindow): void {
     ...(isMac
       ? [
           {
-            label: 'Photoshop App',
+            label: t('menu.app.name'),
             submenu: [
               { role: 'about' as const },
               { type: 'separator' as const },
@@ -34,17 +35,17 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // File menu
     {
-      label: 'File',
+      label: t('menu.file'),
       submenu: [
         {
-          label: 'New',
+          label: t('menu.file.new'),
           accelerator: 'CmdOrCtrl+N',
           click: (): void => {
             mainWindow.webContents.send('menu:new');
           },
         },
         {
-          label: 'Open...',
+          label: t('menu.file.open'),
           accelerator: 'CmdOrCtrl+O',
           click: (): void => {
             mainWindow.webContents.send('menu:open');
@@ -52,14 +53,14 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Save',
+          label: t('menu.file.save'),
           accelerator: 'CmdOrCtrl+S',
           click: (): void => {
             mainWindow.webContents.send('menu:save');
           },
         },
         {
-          label: 'Save As...',
+          label: t('menu.file.saveAs'),
           accelerator: 'CmdOrCtrl+Shift+S',
           click: (): void => {
             mainWindow.webContents.send('menu:saveAs');
@@ -67,7 +68,7 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Export...',
+          label: t('menu.file.export'),
           accelerator: 'CmdOrCtrl+Shift+E',
           click: (): void => {
             mainWindow.webContents.send('menu:export');
@@ -80,17 +81,17 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // Edit menu
     {
-      label: 'Edit',
+      label: t('menu.edit'),
       submenu: [
         {
-          label: 'Undo',
+          label: t('menu.edit.undo'),
           accelerator: 'CmdOrCtrl+Z',
           click: (): void => {
             mainWindow.webContents.send('menu:undo');
           },
         },
         {
-          label: 'Redo',
+          label: t('menu.edit.redo'),
           accelerator: 'CmdOrCtrl+Shift+Z',
           click: (): void => {
             mainWindow.webContents.send('menu:redo');
@@ -98,7 +99,7 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Fill...',
+          label: t('menu.edit.fill'),
           accelerator: 'Shift+F5',
           click: (): void => {
             mainWindow.webContents.send('menu:fill');
@@ -109,17 +110,17 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // Select menu
     {
-      label: 'Select',
+      label: t('menu.select'),
       submenu: [
         {
-          label: 'All',
+          label: t('menu.select.all'),
           accelerator: 'CmdOrCtrl+A',
           click: (): void => {
             mainWindow.webContents.send('menu:selectAll');
           },
         },
         {
-          label: 'Deselect',
+          label: t('menu.select.deselect'),
           accelerator: 'CmdOrCtrl+D',
           click: (): void => {
             mainWindow.webContents.send('menu:deselect');
@@ -127,7 +128,7 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Crop',
+          label: t('menu.select.crop'),
           click: (): void => {
             mainWindow.webContents.send('menu:crop');
           },
@@ -137,40 +138,40 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // Image menu
     {
-      label: 'Image',
+      label: t('menu.image'),
       submenu: [
         {
-          label: 'Adjustments',
+          label: t('menu.image.adjustments'),
           submenu: [
             {
-              label: 'Brightness/Contrast...',
+              label: t('menu.image.adjustments.brightnessContrast'),
               click: (): void => {
                 mainWindow.webContents.send('menu:adjustment', 'brightness-contrast');
               },
             },
             {
-              label: 'Hue/Saturation...',
+              label: t('menu.image.adjustments.hueSaturation'),
               accelerator: 'CmdOrCtrl+U',
               click: (): void => {
                 mainWindow.webContents.send('menu:adjustment', 'hue-saturation');
               },
             },
             {
-              label: 'Levels...',
+              label: t('menu.image.adjustments.levels'),
               accelerator: 'CmdOrCtrl+L',
               click: (): void => {
                 mainWindow.webContents.send('menu:adjustment', 'levels');
               },
             },
             {
-              label: 'Curves...',
+              label: t('menu.image.adjustments.curves'),
               accelerator: 'CmdOrCtrl+M',
               click: (): void => {
                 mainWindow.webContents.send('menu:adjustment', 'curves');
               },
             },
             {
-              label: 'Color Balance...',
+              label: t('menu.image.adjustments.colorBalance'),
               accelerator: 'CmdOrCtrl+B',
               click: (): void => {
                 mainWindow.webContents.send('menu:adjustment', 'color-balance');
@@ -178,14 +179,14 @@ export function buildMenu(mainWindow: BrowserWindow): void {
             },
             { type: 'separator' },
             {
-              label: 'Invert',
+              label: t('menu.image.adjustments.invert'),
               accelerator: 'CmdOrCtrl+I',
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'invert');
               },
             },
             {
-              label: 'Desaturate',
+              label: t('menu.image.adjustments.desaturate'),
               accelerator: 'CmdOrCtrl+Shift+U',
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'desaturate');
@@ -195,14 +196,14 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Image Size...',
+          label: t('menu.image.imageSize'),
           accelerator: 'CmdOrCtrl+Alt+I',
           click: (): void => {
             mainWindow.webContents.send('menu:imageSize');
           },
         },
         {
-          label: 'Canvas Size...',
+          label: t('menu.image.canvasSize'),
           accelerator: 'CmdOrCtrl+Alt+C',
           click: (): void => {
             mainWindow.webContents.send('menu:canvasSize');
@@ -210,35 +211,35 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Image Rotation',
+          label: t('menu.image.rotation'),
           submenu: [
             {
-              label: '180 Degrees',
+              label: t('menu.image.rotation.180'),
               click: (): void => {
                 mainWindow.webContents.send('menu:rotateCanvas', '180');
               },
             },
             {
-              label: '90 Degrees Clockwise',
+              label: t('menu.image.rotation.90cw'),
               click: (): void => {
                 mainWindow.webContents.send('menu:rotateCanvas', '90cw');
               },
             },
             {
-              label: '90 Degrees Counter-Clockwise',
+              label: t('menu.image.rotation.90ccw'),
               click: (): void => {
                 mainWindow.webContents.send('menu:rotateCanvas', '90ccw');
               },
             },
             { type: 'separator' },
             {
-              label: 'Flip Canvas Horizontal',
+              label: t('menu.image.rotation.flipHorizontal'),
               click: (): void => {
                 mainWindow.webContents.send('menu:flipCanvas', 'horizontal');
               },
             },
             {
-              label: 'Flip Canvas Vertical',
+              label: t('menu.image.rotation.flipVertical'),
               click: (): void => {
                 mainWindow.webContents.send('menu:flipCanvas', 'vertical');
               },
@@ -250,19 +251,19 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // Filter menu
     {
-      label: 'Filter',
+      label: t('menu.filter'),
       submenu: [
         {
-          label: 'Blur',
+          label: t('menu.filter.blur'),
           submenu: [
             {
-              label: 'Gaussian Blur...',
+              label: t('menu.filter.blur.gaussian'),
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'gaussianBlur');
               },
             },
             {
-              label: 'Motion Blur...',
+              label: t('menu.filter.blur.motion'),
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'motionBlur');
               },
@@ -270,10 +271,10 @@ export function buildMenu(mainWindow: BrowserWindow): void {
           ],
         },
         {
-          label: 'Sharpen',
+          label: t('menu.filter.sharpen'),
           submenu: [
             {
-              label: 'Sharpen',
+              label: t('menu.filter.sharpen.sharpen'),
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'sharpen');
               },
@@ -281,16 +282,16 @@ export function buildMenu(mainWindow: BrowserWindow): void {
           ],
         },
         {
-          label: 'Noise',
+          label: t('menu.filter.noise'),
           submenu: [
             {
-              label: 'Add Noise...',
+              label: t('menu.filter.noise.add'),
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'addNoise');
               },
             },
             {
-              label: 'Reduce Noise...',
+              label: t('menu.filter.noise.reduce'),
               click: (): void => {
                 mainWindow.webContents.send('menu:filter', 'reduceNoise');
               },
@@ -299,25 +300,25 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Grayscale',
+          label: t('menu.filter.grayscale'),
           click: (): void => {
             mainWindow.webContents.send('menu:filter', 'grayscale');
           },
         },
         {
-          label: 'Sepia',
+          label: t('menu.filter.sepia'),
           click: (): void => {
             mainWindow.webContents.send('menu:filter', 'sepia');
           },
         },
         {
-          label: 'Posterize...',
+          label: t('menu.filter.posterize'),
           click: (): void => {
             mainWindow.webContents.send('menu:filter', 'posterize');
           },
         },
         {
-          label: 'Threshold...',
+          label: t('menu.filter.threshold'),
           click: (): void => {
             mainWindow.webContents.send('menu:filter', 'threshold');
           },
@@ -327,17 +328,17 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // View menu
     {
-      label: 'View',
+      label: t('menu.view'),
       submenu: [
         {
-          label: 'Zoom In',
+          label: t('menu.view.zoomIn'),
           accelerator: 'CmdOrCtrl+=',
           click: (): void => {
             mainWindow.webContents.send('menu:zoomIn');
           },
         },
         {
-          label: 'Zoom Out',
+          label: t('menu.view.zoomOut'),
           accelerator: 'CmdOrCtrl+-',
           click: (): void => {
             mainWindow.webContents.send('menu:zoomOut');
@@ -345,14 +346,14 @@ export function buildMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
-          label: 'Fit to Window',
+          label: t('menu.view.fitToWindow'),
           accelerator: 'CmdOrCtrl+0',
           click: (): void => {
             mainWindow.webContents.send('menu:fitToWindow');
           },
         },
         {
-          label: 'Actual Size',
+          label: t('menu.view.actualSize'),
           accelerator: 'CmdOrCtrl+1',
           click: (): void => {
             mainWindow.webContents.send('menu:actualSize');
@@ -366,10 +367,10 @@ export function buildMenu(mainWindow: BrowserWindow): void {
 
     // Help menu
     {
-      label: 'Help',
+      label: t('menu.help'),
       submenu: [
         {
-          label: 'About Photoshop App',
+          label: t('menu.help.about'),
           click: (): void => {
             mainWindow.webContents.send('menu:about');
           },

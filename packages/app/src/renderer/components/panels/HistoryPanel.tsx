@@ -1,57 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useAppStore } from '../../store';
-
-interface HistoryEntry {
-  id: number;
-  revision: number;
-  label: string;
-}
 
 export function HistoryPanel(): React.JSX.Element | null {
   const activeDocument = useAppStore((state) => state.document);
-  const revision = useAppStore((state) => state.revision);
+  const historyEntries = useAppStore((state) => state.historyEntries);
+  const historyIndex = useAppStore((state) => state.historyIndex);
   const canUndo = useAppStore((state) => state.canUndo);
   const canRedo = useAppStore((state) => state.canRedo);
   const undo = useAppStore((state) => state.undo);
   const redo = useAppStore((state) => state.redo);
 
-  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([
-    { id: 0, revision: 0, label: 'Original' }
-  ]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    if (!activeDocument) {
-      setHistoryEntries([{ id: 0, revision: 0, label: 'Original' }]);
-      setCurrentIndex(0);
-      return;
-    }
-
-    setHistoryEntries((prev) => {
-      const lastEntry = prev[prev.length - 1];
-
-      if (revision > lastEntry.revision) {
-        const newEntry: HistoryEntry = {
-          id: prev.length,
-          revision,
-          label: `Action ${prev.length}`
-        };
-        const newHistory = [...prev, newEntry];
-        setCurrentIndex(newHistory.length - 1);
-        return newHistory;
-      }
-
-      const currentIdx = prev.findIndex((entry) => entry.revision === revision);
-      if (currentIdx !== -1) {
-        setCurrentIndex(currentIdx);
-      }
-
-      return prev;
-    });
-  }, [revision, activeDocument]);
-
-  const handleEntryClick = (index: number) => {
-    const diff = index - currentIndex;
+  const handleEntryClick = (index: number): void => {
+    const diff = index - historyIndex;
 
     if (diff > 0) {
       for (let i = 0; i < diff; i++) {
@@ -75,14 +35,14 @@ export function HistoryPanel(): React.JSX.Element | null {
       </div>
 
       <div className="history-list">
-        {historyEntries.map((entry, index) => (
+        {historyEntries.map((label, index) => (
           <div
-            key={entry.id}
-            className={`history-item ${index === currentIndex ? 'history-item--active' : ''}`}
+            key={index}
+            className={`history-item ${index === historyIndex ? 'history-item--active' : ''}`}
             onClick={() => handleEntryClick(index)}
             style={{ cursor: 'pointer' }}
           >
-            {entry.label}
+            {label}
           </div>
         ))}
       </div>

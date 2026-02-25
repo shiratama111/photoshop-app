@@ -115,6 +115,7 @@ function makeTextLayer(name: string, text: string): TextLayer {
     lineHeight: 1.2,
     letterSpacing: 0,
     textBounds: null,
+    writingMode: 'horizontal-tb',
   };
 }
 
@@ -588,6 +589,52 @@ describe('Canvas2DRenderer', () => {
       const firstCall = ctx.fillText.mock.calls[0];
       expect(firstCall[1]).toBe(50);
       expect(firstCall[2]).toBe(30);
+    });
+
+    it('should render vertical-rl text with per-character fillText', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Vertical', 'AB');
+      layer.writingMode = 'vertical-rl';
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText.mock.calls.length).toBe(2);
+      expect(ctx.fillText.mock.calls[0][0]).toBe('A');
+      expect(ctx.fillText.mock.calls[1][0]).toBe('B');
+    });
+
+    it('should render vertical-rl multi-line text in right-to-left columns', () => {
+      const canvas = createMockCanvas(200, 200);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('VertMulti', 'AB\nCD');
+      layer.writingMode = 'vertical-rl';
+      layer.fontSize = 24;
+      layer.lineHeight = 1.2;
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText.mock.calls.length).toBe(4);
+      const colABx = ctx.fillText.mock.calls[0][1] as number;
+      const colCDx = ctx.fillText.mock.calls[2][1] as number;
+      expect(colABx).toBeGreaterThan(colCDx);
+    });
+
+    it('should use horizontal-tb by default (fillText with full line strings)', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Default', 'Hello');
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText.mock.calls.length).toBe(1);
+      expect(ctx.fillText.mock.calls[0][0]).toBe('Hello');
     });
 
     it('should use correct line height spacing', () => {

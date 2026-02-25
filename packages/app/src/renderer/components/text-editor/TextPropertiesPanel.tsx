@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback } from 'react';
-import type { TextLayer, Color, TextAlignment } from '@photoshop-app/types';
+import type { TextLayer, Color, TextAlignment, WritingMode } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
 
@@ -44,6 +44,7 @@ function hexToColor(hex: string): Color {
 function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): React.JSX.Element {
   const setTextProperty = useAppStore((s) => s.setTextProperty);
   const id = textLayer.id;
+  const writingMode = textLayer.writingMode ?? 'horizontal-tb';
 
   const onFontChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>): void => {
@@ -93,6 +94,13 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
   const onLetterSpacingChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>): void => {
       setTextProperty(id, 'letterSpacing', Number(e.target.value));
+    },
+    [id, setTextProperty],
+  );
+
+  const onWritingModeChange = useCallback(
+    (mode: WritingMode): void => {
+      setTextProperty(id, 'writingMode', mode);
     },
     [id, setTextProperty],
   );
@@ -176,6 +184,24 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
           title="Align right"
         >
           &gt;
+        </button>
+      </div>
+
+      <div className="text-property-row">
+        <span className="text-property-label">文字方向</span>
+        <button
+          className={`text-property-btn ${writingMode === 'horizontal-tb' ? 'text-property-btn--active' : ''}`}
+          onClick={(): void => onWritingModeChange('horizontal-tb')}
+          title="横書き"
+        >
+          横書き
+        </button>
+        <button
+          className={`text-property-btn ${writingMode === 'vertical-rl' ? 'text-property-btn--active' : ''}`}
+          onClick={(): void => onWritingModeChange('vertical-rl')}
+          title="縦書き"
+        >
+          縦書き
         </button>
       </div>
 

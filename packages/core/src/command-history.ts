@@ -37,6 +37,19 @@ export class CommandHistoryImpl implements CommandHistory {
     this.maxDepth = maxDepth;
   }
 
+  /** All command descriptions in execution order (undoStack + reversed redoStack). */
+  get entries(): string[] {
+    return [
+      ...this.undoStack.map((c: Command) => c.description),
+      ...[...this.redoStack].reverse().map((c: Command) => c.description),
+    ];
+  }
+
+  /** Index pointing to the current state (number of executed commands). */
+  get currentIndex(): number {
+    return this.undoStack.length;
+  }
+
   /** @inheritdoc */
   get canUndo(): boolean {
     return this.undoStack.length > 0;

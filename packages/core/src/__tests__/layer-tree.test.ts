@@ -69,6 +69,7 @@ function makeText(id: string, name: string, text: string): TextLayer {
     lineHeight: 1.2,
     letterSpacing: 0,
     textBounds: null,
+    writingMode: 'horizontal-tb',
   };
 }
 

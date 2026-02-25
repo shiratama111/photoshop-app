@@ -67,6 +67,13 @@ describe('createTextLayer', () => {
     expect(layer.lineHeight).toBe(1.2);
     expect(layer.letterSpacing).toBe(0);
     expect(layer.textBounds).toBeNull();
+    expect(layer.writingMode).toBe('horizontal-tb');
+  });
+
+  it('applies writingMode option', () => {
+    const layer = createTextLayer('Title', 'Hi', { writingMode: 'vertical-rl' });
+
+    expect(layer.writingMode).toBe('vertical-rl');
   });
 
   it('applies provided text options', () => {

@@ -163,6 +163,7 @@ describe('importPsd', () => {
         expect(layer.text).toBe('Hello World');
         expect(layer.fontFamily).toBe('Arial');
         expect(layer.fontSize).toBe(24);
+        expect(layer.writingMode).toBe('horizontal-tb');
       }
     });
 

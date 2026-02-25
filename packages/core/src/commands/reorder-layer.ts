@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @module commands/reorder-layer
  * Command for moving a layer to a new position within its parent group.
  *
@@ -31,7 +31,7 @@ export class ReorderLayerCommand implements Command {
       throw new Error(`Layer "${layer.id}" is not a child of group "${parent.id}"`);
     }
     this.toIndex = toIndex;
-    this.description = `Reorder layer "${layer.name}"`;
+    this.description = `レイヤー「${layer.name}」を並べ替え`;
   }
 
   /** Move the layer to the target index. */

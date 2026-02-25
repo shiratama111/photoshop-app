@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @module commands/remove-layer
  * Command for removing a layer from a LayerGroup.
  *
@@ -28,7 +28,7 @@ export class RemoveLayerCommand implements Command {
     if (this.originalIndex === -1) {
       throw new Error(`Layer "${layer.id}" is not a child of group "${parent.id}"`);
     }
-    this.description = `Remove layer "${layer.name}"`;
+    this.description = `レイヤー「${layer.name}」を削除`;
   }
 
   /** Remove the layer from the parent group. */

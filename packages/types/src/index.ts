@@ -22,6 +22,7 @@ export type {
   RasterLayer,
   TextAlignment,
   TextLayer,
+  WritingMode,
 } from './layer';
 
 // Effects

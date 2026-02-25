@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { AddLayerCommand } from './add-layer';
 import type { LayerGroup, RasterLayer } from '@photoshop-app/types';
 import { BlendMode } from '@photoshop-app/types';
@@ -84,10 +84,10 @@ describe('AddLayerCommand', () => {
     expect(group.children[0]).toBe(layer);
   });
 
-  it('has a descriptive description', () => {
+  it('has a descriptive description in Japanese', () => {
     const group = createGroup();
     const layer = createRasterLayer('l1', 'My Layer');
     const cmd = new AddLayerCommand(group, layer);
-    expect(cmd.description).toBe('Add layer "My Layer"');
+    expect(cmd.description).toBe('レイヤー「My Layer」を追加');
   });
 });

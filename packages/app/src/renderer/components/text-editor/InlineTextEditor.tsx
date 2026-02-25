@@ -85,6 +85,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
   if (!layer || layer.type !== 'text') return null;
 
   const textLayer = layer as TextLayer;
+  const writingMode = textLayer.writingMode ?? 'horizontal-tb';
   const vp = getViewport();
   const screenPos = vp.documentToScreen({
     x: textLayer.position.x,
@@ -125,6 +126,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
         textAlign: textLayer.alignment,
         lineHeight: textLayer.lineHeight,
         letterSpacing: `${textLayer.letterSpacing * zoom}px`,
+        writingMode,
         ...sizeStyle,
       }}
     />

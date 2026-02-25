@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @module commands/modify-pixels
  * Command for modifying pixel data on a raster layer.
  * Stores only the changed region for memory efficiency.
@@ -49,7 +49,7 @@ export class ModifyPixelsCommand implements Command {
     this.region = region;
     this.oldPixels = oldPixels;
     this.newPixels = newPixels;
-    this.description = `Modify pixels on "${layer.name}"`;
+    this.description = `「${layer.name}」のピクセルを編集`;
   }
 
   /** Apply the new pixel data to the layer's imageData. */

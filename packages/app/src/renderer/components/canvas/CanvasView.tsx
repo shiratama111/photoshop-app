@@ -714,6 +714,7 @@ export function CanvasView(): React.JSX.Element {
   const cursorDiameter = brushSize * zoom;
   const isEyedropper = activeTool === 'eyedropper';
   const isCrosshair = activeTool === 'gradient' || activeTool === 'shape' || activeTool === 'fill';
+  const isTextTool = activeTool === 'text';
 
   // Pan cursor class takes priority over tool cursor (PS-PAN-001)
   const panClass = panCursor === 'grabbing' ? 'canvas-area--panning' : panCursor === 'grab' ? 'canvas-area--space-held' : '';
@@ -723,7 +724,7 @@ export function CanvasView(): React.JSX.Element {
     <div
       ref={containerRef}
       className={className}
-      style={panCursor ? undefined : isBrushTool ? { cursor: 'none' } : isCrosshair ? { cursor: 'crosshair' } : isEyedropper ? { cursor: 'crosshair' } : undefined}
+      style={panCursor ? undefined : isBrushTool ? { cursor: 'none' } : isTextTool ? { cursor: 'text' } : isCrosshair ? { cursor: 'crosshair' } : isEyedropper ? { cursor: 'crosshair' } : undefined}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

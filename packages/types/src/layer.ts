@@ -63,6 +63,9 @@ export interface RasterLayer extends BaseLayer {
 /** Text alignment options. */
 export type TextAlignment = 'left' | 'center' | 'right';
 
+/** Writing direction for text layout. */
+export type WritingMode = 'horizontal-tb' | 'vertical-rl';
+
 /** A text layer with editable text content. */
 export interface TextLayer extends BaseLayer {
   type: 'text';
@@ -86,6 +89,8 @@ export interface TextLayer extends BaseLayer {
   letterSpacing: number;
   /** Bounding box for text wrapping. Null = auto-sized. */
   textBounds: Rect | null;
+  /** Writing direction: horizontal (default) or vertical. */
+  writingMode: WritingMode;
 }
 
 /** A group that contains child layers. */

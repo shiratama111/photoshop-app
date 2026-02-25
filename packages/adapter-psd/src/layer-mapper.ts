@@ -260,6 +260,7 @@ function mapTextLayer(
     lineHeight: style?.leading ? style.leading / fontSize : 1.2,
     letterSpacing: style?.tracking ? style.tracking / 1000 : 0,
     textBounds: null,
+    writingMode: 'horizontal-tb',
   };
 }
 

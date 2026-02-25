@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @module commands/add-layer
  * Command for adding a layer to a LayerGroup.
  *
@@ -27,7 +27,7 @@ export class AddLayerCommand implements Command {
     this.parent = parent;
     this.layer = layer;
     this.index = index ?? parent.children.length;
-    this.description = `Add layer "${layer.name}"`;
+    this.description = `レイヤー「${layer.name}」を追加`;
   }
 
   /** Insert the layer into the parent group. */

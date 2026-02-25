@@ -201,6 +201,10 @@ export interface AppState {
   selectionSubTool: 'rect' | 'ellipse' | 'wand';
   /** Whether the new document dialog is visible. */
   showNewDocumentDialog: boolean;
+  /** History panel entries (descriptions), starting with 'Original'. */
+  historyEntries: string[];
+  /** Current position in the history entries list. 0 = Original. */
+  historyIndex: number;
 }
 
 /** Actions on the state. */
@@ -413,12 +417,49 @@ export interface AppActions {
  */
 function executeCommand(command: Command, set: (partial: Partial<AppState>) => void): void {
   commandHistory.execute(command);
+  const state = useAppStore.getState();
+  const history = getHistorySnapshot(state, { appendDescription: command.description });
   set({
     canUndo: commandHistory.canUndo,
     canRedo: commandHistory.canRedo,
-    revision: useAppStore.getState().revision + 1,
+    revision: state.revision + 1,
+    ...history,
   });
   eventBus.emit('document:changed');
+}
+
+function getHistorySnapshot(
+  state: Pick<AppState, 'historyEntries' | 'historyIndex'>,
+  options?: { appendDescription?: string; indexDelta?: number },
+): Pick<AppState, 'historyEntries' | 'historyIndex'> {
+  const history = commandHistory as unknown as { entries?: unknown; currentIndex?: unknown };
+  if (Array.isArray(history.entries) && typeof history.currentIndex === 'number') {
+    return {
+      historyEntries: ['Original', ...history.entries],
+      historyIndex: history.currentIndex,
+    };
+  }
+
+  if (options?.appendDescription) {
+    const entries = state.historyEntries.slice(0, state.historyIndex + 1);
+    entries.push(options.appendDescription);
+    return {
+      historyEntries: entries,
+      historyIndex: entries.length - 1,
+    };
+  }
+
+  const nextIndex = Math.max(
+    0,
+    Math.min(
+      state.historyEntries.length - 1,
+      state.historyIndex + (options?.indexDelta ?? 0),
+    ),
+  );
+  return {
+    historyEntries: state.historyEntries,
+    historyIndex: nextIndex,
+  };
 }
 
 /** Deep-clone a layer for duplication. */
@@ -613,6 +654,8 @@ async function openImageAsDocument(
       canUndo: false,
       canRedo: false,
       revision: 0,
+      historyEntries: ['Original'],
+      historyIndex: 0,
       statusMessage: `Opened: ${name} (${width} x ${height})`,
     });
     eventBus.emit('document:changed');
@@ -655,6 +698,8 @@ function openPsdFromData(
       canUndo: false,
       canRedo: false,
       revision: 0,
+      historyEntries: ['Original'],
+      historyIndex: 0,
       statusMessage: `Opened: ${getBaseName(filePath)}`,
     });
     eventBus.emit('document:changed');
@@ -698,6 +743,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   selection: null,
   selectionSubTool: 'rect',
   showNewDocumentDialog: false,
+  historyEntries: ['Original'],
+  historyIndex: 0,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -763,6 +810,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       canUndo: false,
       canRedo: false,
       revision: 0,
+      historyEntries: ['Original'],
+      historyIndex: 0,
       statusMessage: `Created: ${name} (${width}x${height})`,
     });
     eventBus.emit('document:changed');
@@ -962,6 +1011,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!doc) return;
     const layer = findLayerById(doc.rootGroup, layerId);
     if (!layer || layer.type !== 'text') return;
+    if (key === 'writingMode' && layer.writingMode === undefined) {
+      // Backward compatibility: old documents may lack writingMode.
+      layer.writingMode = 'horizontal-tb';
+    }
     const cmd = new SetLayerPropertyCommand(
       layer,
       key as unknown as keyof Layer,
@@ -1037,10 +1090,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   undo: (): void => {
     if (!commandHistory.canUndo) return;
     commandHistory.undo();
+    const state = get();
+    const history = getHistorySnapshot(state, { indexDelta: -1 });
     set({
       canUndo: commandHistory.canUndo,
       canRedo: commandHistory.canRedo,
-      revision: get().revision + 1,
+      revision: state.revision + 1,
+      ...history,
     });
     eventBus.emit('document:changed');
   },
@@ -1048,10 +1104,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   redo: (): void => {
     if (!commandHistory.canRedo) return;
     commandHistory.redo();
+    const state = get();
+    const history = getHistorySnapshot(state, { indexDelta: 1 });
     set({
       canUndo: commandHistory.canUndo,
       canRedo: commandHistory.canRedo,
-      revision: get().revision + 1,
+      revision: state.revision + 1,
+      ...history,
     });
     eventBus.emit('document:changed');
   },
@@ -1216,6 +1275,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       canUndo: false,
       canRedo: false,
       revision: 0,
+      historyEntries: ['Original'],
+      historyIndex: 0,
       statusMessage: `Opened: ${doc.name}`,
     });
     eventBus.emit('document:changed');
@@ -1327,6 +1388,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           canUndo: false,
           canRedo: false,
           revision: 0,
+          historyEntries: ['Original'],
+          historyIndex: 0,
           statusMessage: `Recovered: ${name}`,
         });
         eventBus.emit('document:changed');
@@ -1455,12 +1518,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         },
       };
 
-      // Push to history (execute() is idempotent 窶・safe to re-apply)
+      // Push to history (execute() is idempotent — safe to re-apply)
       commandHistory.execute(resizeCmd);
+      const curState = useAppStore.getState();
+      const history = getHistorySnapshot(curState, { appendDescription: resizeCmd.description });
       set({
         canUndo: commandHistory.canUndo,
         canRedo: commandHistory.canRedo,
-        revision: useAppStore.getState().revision + 1,
+        revision: curState.revision + 1,
+        ...history,
       });
       eventBus.emit('document:changed');
       doc.dirty = true;

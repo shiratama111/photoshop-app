@@ -341,11 +341,10 @@ export class Canvas2DRenderer implements Renderer {
 
   /**
    * Draw a text layer using Canvas 2D text rendering.
-   * Supports font styling, color, alignment, multi-line text, and word wrapping.
+   * Supports font styling, color, alignment, multi-line text, word wrapping,
+   * and vertical writing mode (PS-TEXT-001).
    */
   private drawTextLayer(ctx: CanvasContext2DLike, layer: TextLayer): void {
-    // Canvas 2D text APIs are not in CanvasContext2DLike, so we cast
-    // for fillText / measureText / font / textAlign / textBaseline access.
     const tc = ctx as unknown as CanvasRenderingContext2D;
 
     ctx.save();
@@ -359,20 +358,34 @@ export class Canvas2DRenderer implements Renderer {
     const { r, g, b, a } = layer.color;
     ctx.fillStyle = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
 
-    // Alignment
-    tc.textAlign = layer.alignment as CanvasTextAlign;
-    tc.textBaseline = 'top';
-
     // Letter spacing (Chrome 99+)
     if ('letterSpacing' in tc) {
       (tc as unknown as Record<string, string>).letterSpacing = `${layer.letterSpacing}px`;
     }
 
+    if (layer.writingMode === 'vertical-rl') {
+      this.drawTextVertical(tc, layer);
+    } else {
+      this.drawTextHorizontal(tc, layer);
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Draw text in horizontal-tb mode (default).
+   */
+  private drawTextHorizontal(
+    tc: CanvasRenderingContext2D,
+    layer: TextLayer,
+  ): void {
+    tc.textAlign = layer.alignment as CanvasTextAlign;
+    tc.textBaseline = 'top';
+
     const lineH = layer.fontSize * layer.lineHeight;
     let x = layer.position.x;
     const y = layer.position.y;
 
-    // Adjust x for alignment
     if (layer.textBounds) {
       if (layer.alignment === 'center') {
         x = layer.position.x + layer.textBounds.width / 2;
@@ -381,14 +394,38 @@ export class Canvas2DRenderer implements Renderer {
       }
     }
 
-    // Split text into lines, with optional word wrapping
     const lines = this.getTextLines(tc, layer);
 
     for (let i = 0; i < lines.length; i++) {
       tc.fillText(lines[i], x, y + i * lineH);
     }
+  }
 
-    ctx.restore();
+  /**
+   * Draw text in vertical-rl mode.
+   * Each character is drawn individually, top-to-bottom, columns right-to-left.
+   */
+  private drawTextVertical(
+    tc: CanvasRenderingContext2D,
+    layer: TextLayer,
+  ): void {
+    tc.textAlign = 'center';
+    tc.textBaseline = 'middle';
+
+    const charH = layer.fontSize * layer.lineHeight;
+    const colW = layer.fontSize * layer.lineHeight;
+    const lines = layer.text.split('\n');
+
+    const startX = layer.position.x + (lines.length - 1) * colW + layer.fontSize / 2;
+    const startY = layer.position.y + layer.fontSize / 2;
+
+    for (let col = 0; col < lines.length; col++) {
+      const x = startX - col * colW;
+      const chars = [...lines[col]];
+      for (let row = 0; row < chars.length; row++) {
+        tc.fillText(chars[row], x, startY + row * charH);
+      }
+    }
   }
 
   /**

@@ -149,6 +149,44 @@ describe('TextPropertiesPanel store actions', () => {
       expect(layer.fontSize).toBe(16); // default from createTextLayer
     });
 
+    it('should change writingMode', () => {
+      createTestDocument();
+      const id = addTextAndSelect();
+      useAppStore.getState().setTextProperty(id, 'writingMode', 'vertical-rl');
+      const doc = useAppStore.getState().document!;
+      const layer = doc.rootGroup.children[BG] as { writingMode: string };
+      expect(layer.writingMode).toBe('vertical-rl');
+    });
+
+    it('should preserve writingMode through undo/redo', () => {
+      createTestDocument();
+      const id = addTextAndSelect();
+      useAppStore.getState().setTextProperty(id, 'writingMode', 'vertical-rl');
+      useAppStore.getState().undo();
+      const doc1 = useAppStore.getState().document!;
+      const layer1 = doc1.rootGroup.children[BG] as { writingMode: string };
+      expect(layer1.writingMode).toBe('horizontal-tb');
+      useAppStore.getState().redo();
+      const doc2 = useAppStore.getState().document!;
+      const layer2 = doc2.rootGroup.children[BG] as { writingMode: string };
+      expect(layer2.writingMode).toBe('vertical-rl');
+    });
+
+    it('should recover legacy text layer without writingMode when undoing', () => {
+      createTestDocument();
+      const id = addTextAndSelect();
+      const doc = useAppStore.getState().document!;
+      const layer = doc.rootGroup.children[BG] as { writingMode?: string };
+      delete layer.writingMode;
+
+      useAppStore.getState().setTextProperty(id, 'writingMode', 'vertical-rl');
+      useAppStore.getState().undo();
+
+      const docAfterUndo = useAppStore.getState().document!;
+      const layerAfterUndo = docAfterUndo.rootGroup.children[BG] as { writingMode: string };
+      expect(layerAfterUndo.writingMode).toBe('horizontal-tb');
+    });
+
     it('should not change non-text layers', () => {
       createTestDocument();
       useAppStore.getState().addRasterLayer('Raster');
