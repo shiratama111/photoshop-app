@@ -46,6 +46,8 @@ export interface RenderOptions {
   background: 'checkerboard' | 'white' | 'black';
   /** Document dimensions for artboard/pasteboard rendering. */
   documentSize?: { width: number; height: number };
+  /** Layer IDs that should be skipped during this render pass. */
+  hiddenLayerIds?: string[];
 }
 
 /** Renderer interface for compositing layers onto a canvas. */

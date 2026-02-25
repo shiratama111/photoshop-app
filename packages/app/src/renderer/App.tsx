@@ -276,6 +276,16 @@ export function App(): React.JSX.Element {
   /** Global keyboard shortcut handler. */
   const handleKeyDown = useCallback(
     (e: KeyboardEvent): void => {
+      const editingLayerId = useAppStore.getState().editingTextLayerId;
+      if (editingLayerId) {
+        // While inline text editing is active, never run global shortcuts.
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          stopEditingText(editingLayerId);
+        }
+        return;
+      }
+
       const target = e.target as HTMLElement;
       if (
         target.tagName === 'INPUT' ||

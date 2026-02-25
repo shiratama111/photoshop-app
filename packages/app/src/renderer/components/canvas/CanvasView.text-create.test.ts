@@ -75,6 +75,19 @@ function resetStore(): void {
     revision: 0,
     contextMenu: null,
     editingTextLayerId: null,
+    textToolDefaults: {
+      fontFamily: 'Arial',
+      fontSize: 16,
+      color: { r: 0, g: 0, b: 0, a: 1 },
+      bold: false,
+      italic: false,
+      alignment: 'left',
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      writingMode: 'horizontal-tb',
+      underline: false,
+      strikethrough: false,
+    },
   });
 }
 
@@ -122,6 +135,30 @@ describe('PS-TEXT-003: Click-to-type text creation', () => {
       const layer = findLayerById(doc.rootGroup, layerId)! as TextLayer;
 
       expect(layer.text).toBe('');
+    });
+
+    it('should apply current text tool defaults to newly created text layer', () => {
+      createTestDocument();
+      const store = useAppStore.getState();
+      store.setActiveTool('text');
+
+      store.addTextLayer('Template', 'A');
+      const templateId = useAppStore.getState().selectedLayerId!;
+      store.setTextProperty(templateId, 'fontSize', 42);
+      store.setTextProperty(templateId, 'fontFamily', 'Georgia');
+      store.setTextProperty(templateId, 'bold', true);
+      store.setTextProperty(templateId, 'writingMode', 'vertical-rl');
+      store.stopEditingText(templateId);
+
+      store.addTextLayerAt(220, 240);
+      const createdId = useAppStore.getState().selectedLayerId!;
+      const doc = useAppStore.getState().document!;
+      const created = findLayerById(doc.rootGroup, createdId)! as TextLayer;
+
+      expect(created.fontSize).toBe(42);
+      expect(created.fontFamily).toBe('Georgia');
+      expect(created.bold).toBe(true);
+      expect(created.writingMode).toBe('vertical-rl');
     });
 
     it('should use custom name when provided', () => {
@@ -232,6 +269,32 @@ describe('PS-TEXT-003: Click-to-type text creation', () => {
       useAppStore.getState().redo();
       const updated = findLayerById(doc.rootGroup, layerId)! as TextLayer;
       expect(updated.text).toBe('\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8');
+    });
+  });
+
+  describe('text layer naming from typed content', () => {
+    it('should auto-rename default text layer name using typed content', () => {
+      createTestDocument();
+      useAppStore.getState().addTextLayerAt(120, 120);
+      const layerId = useAppStore.getState().selectedLayerId!;
+
+      useAppStore.getState().setTextProperty(layerId, 'text', '契約書レビュー draft');
+
+      const doc = useAppStore.getState().document!;
+      const layer = findLayerById(doc.rootGroup, layerId)! as TextLayer;
+      expect(layer.name).toBe('契約書レビュー draft');
+    });
+
+    it('should keep manually assigned names while text content changes', () => {
+      createTestDocument();
+      useAppStore.getState().addTextLayerAt(10, 10, 'Cover Copy');
+      const layerId = useAppStore.getState().selectedLayerId!;
+
+      useAppStore.getState().setTextProperty(layerId, 'text', 'Top secret body');
+
+      const doc = useAppStore.getState().document!;
+      const layer = findLayerById(doc.rootGroup, layerId)! as TextLayer;
+      expect(layer.name).toBe('Cover Copy');
     });
   });
 });

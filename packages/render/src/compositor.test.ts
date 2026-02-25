@@ -270,6 +270,18 @@ describe('Canvas2DRenderer', () => {
       expect(ctx.putImageData).not.toHaveBeenCalled();
     });
 
+    it('should skip layers listed in hiddenLayerIds', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const textLayer = makeTextLayer('Editing', 'Inline');
+      const doc = createTestDocument([textLayer]);
+      const options = createRenderOptions({ hiddenLayerIds: [textLayer.id] });
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect((ctx as unknown as Record<string, unknown>).fillText).not.toHaveBeenCalled();
+    });
+
     it('should set blend mode and opacity', () => {
       const canvas = createMockCanvas(100, 100);
       const ctx = canvas.getContext('2d')!;
@@ -322,6 +334,22 @@ describe('Canvas2DRenderer', () => {
 
       // New text rendering calls fillText instead of translate
       expect((ctx as unknown as Record<string, unknown>).fillText).toHaveBeenCalled();
+    });
+
+    it('should wrap CJK text by character when textBounds width is narrow', () => {
+      const canvas = createMockCanvas(100, 100);
+      const ctx = canvas.getContext('2d')!;
+      const layer = makeTextLayer('JP', 'あいう');
+      layer.textBounds = { x: 0, y: 0, width: 16, height: 100 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      const fillText = (ctx as unknown as { fillText: ReturnType<typeof vi.fn> }).fillText;
+      const renderedLines = fillText.mock.calls.map((c: unknown[]) => c[0]);
+      expect(renderedLines).toContain('あい');
+      expect(renderedLines).toContain('う');
     });
   });
 

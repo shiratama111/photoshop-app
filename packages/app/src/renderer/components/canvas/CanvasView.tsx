@@ -36,6 +36,7 @@ import { TransformHandles } from './TransformHandles';
 import { SelectionOverlay } from './SelectionOverlay';
 import { CutoutTool } from '../tools/CutoutTool';
 import { spacePanState } from './spacePanState';
+import { getTextLayerHitBounds, isPointInBounds } from './text-hit-test';
 
 /** Module-level brush engine instance (APP-014). */
 const brushEngine = new BrushEngine();
@@ -53,6 +54,7 @@ export function CanvasView(): React.JSX.Element {
   const panOffset = useAppStore((s) => s.panOffset);
   const activeTool = useAppStore((s) => s.activeTool);
   const brushSize = useAppStore((s) => s.brushSize);
+  const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const renderToCanvas = useAppStore((s) => s.renderToCanvas);
   const setPanOffset = useAppStore((s) => s.setPanOffset);
   const fitToWindow = useAppStore((s) => s.fitToWindow);
@@ -132,7 +134,14 @@ export function CanvasView(): React.JSX.Element {
   // Re-render when document or revision changes
   useEffect(() => {
     scheduleRender();
-  }, [scheduleRender, revision, zoom, panOffset.x, panOffset.y]);
+  }, [scheduleRender, revision, zoom, panOffset.x, panOffset.y, editingTextLayerId]);
+
+  // Force an immediate repaint when text edit mode toggles.
+  // Electron can throttle rAF around window deactivation, which may leave
+  // stale pixels after the inline editor unmounts.
+  useEffect(() => {
+    doRender();
+  }, [doRender, editingTextLayerId]);
 
   // Fit to window on first mount and when document changes
   useEffect(() => {
@@ -178,6 +187,25 @@ export function CanvasView(): React.JSX.Element {
     observer.observe(container);
     return (): void => observer.disconnect();
   }, [fitToWindow, scheduleRender]);
+
+  // Ensure canvas is repainted after app/window focus changes.
+  useEffect(() => {
+    const handleFocus = (): void => {
+      doRender();
+    };
+    const handleVisibility = (): void => {
+      if (globalThis.document.visibilityState === 'visible') {
+        doRender();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    globalThis.document.addEventListener('visibilitychange', handleVisibility);
+    return (): void => {
+      window.removeEventListener('focus', handleFocus);
+      globalThis.document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [doRender]);
 
   // Space-key listener for temporary pan mode (PS-PAN-001)
   useEffect(() => {
@@ -281,14 +309,8 @@ export function CanvasView(): React.JSX.Element {
           const layer = textLayers[i];
           if (layer.type !== 'text' || !layer.visible) continue;
           const tl = layer as TextLayer;
-          const hitW = tl.textBounds ? tl.textBounds.width : Math.max(100, tl.fontSize * 10);
-          const hitH = tl.textBounds ? tl.textBounds.height : tl.fontSize * tl.lineHeight * 3;
-          if (
-            docPt.x >= tl.position.x &&
-            docPt.x <= tl.position.x + hitW &&
-            docPt.y >= tl.position.y &&
-            docPt.y <= tl.position.y + hitH
-          ) {
+          const hitBounds = getTextLayerHitBounds(tl, vp.zoom);
+          if (isPointInBounds(docPt, hitBounds)) {
             startEditingText(tl.id);
             return;
           }
@@ -500,11 +522,14 @@ export function CanvasView(): React.JSX.Element {
   /** Handle mouse move for pan or brush continuation (APP-014). */
   const handleMouseMove = useCallback(
     (e: React.MouseEvent): void => {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+
       // Update brush cursor position
       if (cursorRef.current) {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        cursorRef.current.style.left = `${e.clientX - rect.left}px`;
-        cursorRef.current.style.top = `${e.clientY - rect.top}px`;
+        cursorRef.current.style.left = `${localX}px`;
+        cursorRef.current.style.top = `${localY}px`;
       }
 
       // Pan path
@@ -530,11 +555,10 @@ export function CanvasView(): React.JSX.Element {
         if (!layer || layer.type !== 'raster') return;
         const raster = layer as RasterLayer;
 
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const vp = getViewport();
         const docPt = vp.screenToDocument({
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
+          x: localX,
+          y: localY,
         });
         brushEngine.continueStroke({
           x: docPt.x - raster.position.x,
@@ -555,11 +579,10 @@ export function CanvasView(): React.JSX.Element {
         const raster = layer as RasterLayer;
         if (!raster.imageData) return;
 
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const vp = getViewport();
         const docPt = vp.screenToDocument({
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
+          x: localX,
+          y: localY,
         });
         const lx = Math.round(docPt.x - raster.position.x);
         const ly = Math.round(docPt.y - raster.position.y);

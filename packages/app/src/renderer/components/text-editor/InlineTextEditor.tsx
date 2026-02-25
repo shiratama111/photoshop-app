@@ -37,7 +37,12 @@ function contrastShadow(c: { r: number; g: number; b: number }): string {
  * Handles browser-inserted line breaks and trims the trailing editor newline.
  */
 function extractText(el: HTMLElement): string {
-  return (el.innerText ?? '').replace(/\n$/, '');
+  const inner = el.innerText ?? '';
+  const raw = inner.length > 0 ? inner : (el.textContent ?? '');
+  return raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\n$/, '');
 }
 
 /** Put the text caret at the end of a contentEditable element. */
@@ -72,20 +77,91 @@ function insertPlainTextAtSelection(el: HTMLElement, text: string): void {
   selection.addRange(range);
 }
 
+/** Auto-size editor box to current content so active/inactive layout stays consistent. */
+function resizeEditorToContent(el: HTMLDivElement): void {
+  const computed = globalThis.getComputedStyle(el);
+  const lineHeight = Number.parseFloat(computed.lineHeight);
+  const minHeight = Number.isFinite(lineHeight) ? Math.max(1, Math.ceil(lineHeight)) : 1;
+
+  el.style.width = 'auto';
+  el.style.height = 'auto';
+
+  const nextWidth = Math.max(1, Math.ceil(el.scrollWidth));
+  const nextHeight = Math.max(minHeight, Math.ceil(el.scrollHeight));
+
+  el.style.width = `${nextWidth}px`;
+  el.style.height = `${nextHeight}px`;
+}
+
 /** InlineTextEditor - fixed-position contentEditable overlay for editing text layers. */
 export function InlineTextEditor(): React.JSX.Element | null {
   const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const document = useAppStore((s) => s.document);
   const zoom = useAppStore((s) => s.zoom);
+  const textTransformPreview = useAppStore((s) => s.textTransformPreview);
   const setTextProperty = useAppStore((s) => s.setTextProperty);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
   const editorRef = useRef<HTMLDivElement>(null);
   const isComposing = useRef(false);
+  const lastEditingLayerIdRef = useRef<string | null>(null);
+
+  const commitEditorState = useCallback(
+    (layerId: string, el: HTMLDivElement): void => {
+      const vp = getViewport();
+      const docWidth = el.offsetWidth / vp.zoom;
+      const docHeight = el.offsetHeight / vp.zoom;
+      const currentText = extractText(el);
+
+      const state = useAppStore.getState();
+      const doc = state.document;
+      if (!doc) return;
+
+      const layer = findLayerById(doc.rootGroup, layerId);
+      if (!layer || layer.type !== 'text') return;
+
+      const tl = layer as TextLayer;
+
+      // Keep latest visible editor text even if the final input/composition
+      // event did not fire before focus loss or layer switch.
+      if (tl.text !== currentText) {
+        setTextProperty(layerId, 'text', currentText);
+      }
+
+      const nextBounds = {
+        x: tl.position.x,
+        y: tl.position.y,
+        width: docWidth,
+        height: docHeight,
+      };
+      const prevBounds = tl.textBounds;
+      const boundsChanged = !prevBounds
+        || prevBounds.x !== nextBounds.x
+        || prevBounds.y !== nextBounds.y
+        || prevBounds.width !== nextBounds.width
+        || prevBounds.height !== nextBounds.height;
+      if (boundsChanged) {
+        setTextProperty(layerId, 'textBounds', nextBounds);
+      }
+    },
+    [setTextProperty],
+  );
 
   useEffect(() => {
-    if (!editingTextLayerId) return;
+    const prevLayerId = lastEditingLayerIdRef.current;
     const el = editorRef.current;
-    if (!el) return;
+    // If editing target changed while the editor stayed mounted, commit
+    // previous layer text before replacing the editor contents.
+    if (prevLayerId && prevLayerId !== editingTextLayerId && el) {
+      commitEditorState(prevLayerId, el);
+    }
+    lastEditingLayerIdRef.current = editingTextLayerId ?? null;
+
+    if (!editingTextLayerId) return;
+    const nextEl = editorRef.current;
+    const currentEl = nextEl ?? el;
+    if (!currentEl) return;
+
+    const targetEl = currentEl;
 
     const currentDoc = useAppStore.getState().document;
     if (!currentDoc) return;
@@ -93,10 +169,30 @@ export function InlineTextEditor(): React.JSX.Element | null {
     const layer = findLayerById(currentDoc.rootGroup, editingTextLayerId);
     if (!layer || layer.type !== 'text') return;
 
-    el.textContent = layer.text;
-    el.focus();
-    placeCaretAtEnd(el);
-  }, [editingTextLayerId]);
+    targetEl.textContent = layer.text;
+    const rafId = window.requestAnimationFrame(() => {
+      resizeEditorToContent(targetEl);
+      // Delay focus until after the click/up sequence finishes.
+      targetEl.focus();
+      placeCaretAtEnd(targetEl);
+    });
+
+    return (): void => window.cancelAnimationFrame(rafId);
+  }, [editingTextLayerId, commitEditorState]);
+
+  useEffect(() => {
+    if (!editingTextLayerId) return;
+
+    const handleWindowBlur = (): void => {
+      const el = editorRef.current;
+      if (!el) return;
+      commitEditorState(editingTextLayerId, el);
+      stopEditingText(editingTextLayerId);
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+    return (): void => window.removeEventListener('blur', handleWindowBlur);
+  }, [editingTextLayerId, commitEditorState, stopEditingText]);
 
   const handleCompositionStart = useCallback((): void => {
     isComposing.current = true;
@@ -105,6 +201,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const handleCompositionEnd = useCallback(
     (e: React.CompositionEvent<HTMLDivElement>): void => {
       isComposing.current = false;
+      resizeEditorToContent(e.currentTarget);
       if (editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
       }
@@ -115,6 +212,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
   const handleInput = useCallback(
     (e: React.FormEvent<HTMLDivElement>): void => {
       if (isComposing.current) return;
+      resizeEditorToContent(e.currentTarget as HTMLDivElement);
       if (editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
       }
@@ -127,6 +225,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
       e.preventDefault();
       const plainText = e.clipboardData.getData('text/plain').replace(/\r\n/g, '\n');
       insertPlainTextAtSelection(e.currentTarget, plainText);
+      resizeEditorToContent(e.currentTarget);
 
       if (!isComposing.current && editingTextLayerId) {
         setTextProperty(editingTextLayerId, 'text', extractText(e.currentTarget));
@@ -139,7 +238,10 @@ export function InlineTextEditor(): React.JSX.Element | null {
     (e: React.KeyboardEvent): void => {
       // Allow all keys during IME composition
       if (e.nativeEvent.isComposing) return;
+      // Never bubble text-edit key events to global shortcut handlers.
+      e.stopPropagation();
       if (e.key === 'Escape') {
+        e.preventDefault();
         e.stopPropagation();
         stopEditingText(editingTextLayerId ?? undefined);
       }
@@ -152,30 +254,16 @@ export function InlineTextEditor(): React.JSX.Element | null {
   );
 
   const handleBlur = useCallback((): void => {
-    // Commit the resized dimensions as textBounds before stopping edit
+    // Keep inline edit session alive while dragging transform handles.
+    if (useAppStore.getState().transformActive) {
+      return;
+    }
+    // Commit current text and resized dimensions before stopping edit.
     if (editingTextLayerId && editorRef.current) {
-      const el = editorRef.current;
-      const vp = getViewport();
-      const docWidth = el.offsetWidth / vp.zoom;
-      const docHeight = el.offsetHeight / vp.zoom;
-
-      const state = useAppStore.getState();
-      const doc = state.document;
-      if (doc) {
-        const layer = findLayerById(doc.rootGroup, editingTextLayerId);
-        if (layer && layer.type === 'text') {
-          const tl = layer as TextLayer;
-          setTextProperty(editingTextLayerId, 'textBounds', {
-            x: tl.position.x,
-            y: tl.position.y,
-            width: docWidth,
-            height: docHeight,
-          });
-        }
-      }
+      commitEditorState(editingTextLayerId, editorRef.current);
     }
     stopEditingText(editingTextLayerId);
-  }, [editingTextLayerId, setTextProperty, stopEditingText]);
+  }, [editingTextLayerId, commitEditorState, stopEditingText]);
 
   if (!editingTextLayerId || !document) return null;
 
@@ -184,10 +272,13 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   const textLayer = layer as TextLayer;
   const writingMode = textLayer.writingMode ?? 'horizontal-tb';
+  const activePreview = textTransformPreview?.layerId === textLayer.id
+    ? textTransformPreview.bounds
+    : null;
   const vp = getViewport();
   const screenPos = vp.documentToScreen({
-    x: textLayer.position.x,
-    y: textLayer.position.y,
+    x: activePreview?.x ?? textLayer.position.x,
+    y: activePreview?.y ?? textLayer.position.y,
   });
 
   // Account for the canvas-area element offset
@@ -200,9 +291,9 @@ export function InlineTextEditor(): React.JSX.Element | null {
 
   // If textBounds exists, set initial size in screen coordinates
   const sizeStyle: React.CSSProperties = {};
-  if (textLayer.textBounds) {
-    sizeStyle.width = `${textLayer.textBounds.width * zoom}px`;
-    sizeStyle.height = `${textLayer.textBounds.height * zoom}px`;
+  if (activePreview) {
+    sizeStyle.width = `${activePreview.width * zoom}px`;
+    sizeStyle.height = `${activePreview.height * zoom}px`;
   }
 
   return (
@@ -211,6 +302,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
       className="inline-text-editor"
       contentEditable
       suppressContentEditableWarning
+      tabIndex={0}
       role="textbox"
       aria-multiline
       onInput={handleInput}

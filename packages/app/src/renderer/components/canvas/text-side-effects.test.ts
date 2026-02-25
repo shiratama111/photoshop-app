@@ -65,6 +65,19 @@ function resetStore(): void {
     revision: 0,
     contextMenu: null,
     editingTextLayerId: null,
+    textToolDefaults: {
+      fontFamily: 'Arial',
+      fontSize: 16,
+      color: { r: 0, g: 0, b: 0, a: 1 },
+      bold: false,
+      italic: false,
+      alignment: 'left',
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      writingMode: 'horizontal-tb',
+      underline: false,
+      strikethrough: false,
+    },
     layerStyleDialog: null,
   });
 }

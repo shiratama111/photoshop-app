@@ -20,6 +20,13 @@ To avoid conflicts within `packages/app`, each APP ticket owns specific director
 - APP-006: `components/tools/CutoutTool.tsx`, `components/overlays/MaskOverlay.tsx`
 - APP-007: `components/panels/AssetBrowser.tsx`
 
+## Custom Commands & Skills
+| Trigger | Command / Skill | Description |
+|---------|----------------|-------------|
+| 「バグ修正して」「デバッグして」「バグ取りして」「長期デバッグ」 | `/debug-fix` / `.agents/skills/debug-fix/` | 長期デバッグAgent Team（スカウト→仮説→検証→修正→テスト） |
+
+バグ修正時は `.claude/agents/debug-fix.md`（Claude Code）または `.agents/skills/debug-fix/SKILL.md`（Codex）のワークフローに従う。
+
 ## Pre-PR Checklist
 1. `pnpm lint` passes with 0 errors
 2. `pnpm test` passes for your package

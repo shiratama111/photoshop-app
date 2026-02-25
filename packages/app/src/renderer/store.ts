@@ -91,6 +91,28 @@ export interface RecoveryEntry {
   savedAt: string;
 }
 
+/** Persistent defaults used when creating a new text layer with the Text tool. */
+export type TextToolDefaults = Pick<
+  TextLayer,
+  'fontFamily'
+  | 'fontSize'
+  | 'color'
+  | 'bold'
+  | 'italic'
+  | 'alignment'
+  | 'lineHeight'
+  | 'letterSpacing'
+  | 'writingMode'
+  | 'underline'
+  | 'strikethrough'
+>;
+
+/** Live transform preview for inline-edited text layer (not yet committed to history). */
+export interface TextTransformPreview {
+  layerId: string;
+  bounds: { x: number; y: number; width: number; height: number };
+}
+
 export type CanvasAnchorPosition =
   | 'top-left'
   | 'top-center'
@@ -121,6 +143,53 @@ let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Floating-point comparison epsilon for viewport values. */
 const VIEWPORT_EPSILON = 1e-4;
+const DEFAULT_TEXT_TOOL_DEFAULTS: TextToolDefaults = {
+  fontFamily: 'Arial',
+  fontSize: 16,
+  color: { r: 0, g: 0, b: 0, a: 1 },
+  bold: false,
+  italic: false,
+  alignment: 'left',
+  lineHeight: 1.2,
+  letterSpacing: 0,
+  writingMode: 'horizontal-tb',
+  underline: false,
+  strikethrough: false,
+};
+const TEXT_TOOL_STYLE_KEYS = new Set<keyof TextToolDefaults>([
+  'fontFamily',
+  'fontSize',
+  'color',
+  'bold',
+  'italic',
+  'alignment',
+  'lineHeight',
+  'letterSpacing',
+  'writingMode',
+  'underline',
+  'strikethrough',
+]);
+const AUTO_TEXT_LAYER_NAME_PATTERN = /^Text \d+$/;
+const MAX_AUTO_TEXT_LAYER_NAME_CHARS = 40;
+
+function deriveAutoTextLayerName(text: string): string | null {
+  const collapsed = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!collapsed) return null;
+
+  const chars = [...collapsed];
+  if (chars.length <= MAX_AUTO_TEXT_LAYER_NAME_CHARS) {
+    return collapsed;
+  }
+  return `${chars.slice(0, MAX_AUTO_TEXT_LAYER_NAME_CHARS).join('')}...`;
+}
 
 function nearlyEqual(a: number, b: number): boolean {
   return Math.abs(a - b) <= VIEWPORT_EPSILON;
@@ -160,6 +229,10 @@ export interface AppState {
   recentFiles: RecentFileEntry[];
   /** ID of the text layer currently being inline-edited (APP-005). */
   editingTextLayerId: string | null;
+  /** Live text transform preview bounds while dragging handles. */
+  textTransformPreview: TextTransformPreview | null;
+  /** Default text style for new layers created by the Text tool. */
+  textToolDefaults: TextToolDefaults;
   /** Layer style dialog state (APP-005). */
   layerStyleDialog: { layerId: string } | null;
   /** Recovery entries found on startup (APP-008). */
@@ -267,6 +340,8 @@ export interface AppActions {
   startEditingText: (layerId: string) => void;
   /** Stop inline editing. If expectedLayerId is provided, stop only when it matches current editor. */
   stopEditingText: (expectedLayerId?: string) => void;
+  /** Set or clear live transform preview for inline text editor UI. */
+  setTextTransformPreview: (preview: TextTransformPreview | null) => void;
   /** Open the layer style dialog. */
   openLayerStyleDialog: (layerId: string) => void;
   /** Close the layer style dialog. */
@@ -742,6 +817,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   pendingPsdImport: null,
   recentFiles: [],
   editingTextLayerId: null,
+  textTransformPreview: null,
+  textToolDefaults: { ...DEFAULT_TEXT_TOOL_DEFAULTS, color: { ...DEFAULT_TEXT_TOOL_DEFAULTS.color } },
   layerStyleDialog: null,
   recoveryEntries: [],
   pendingClose: false,
@@ -1015,7 +1092,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { document: doc } = get();
     if (!doc) return;
     const layerName = name ?? `Text ${doc.rootGroup.children.length + 1}`;
-    const layer = createTextLayer(layerName, text ?? 'New Text');
+    const style = get().textToolDefaults;
+    const layer = createTextLayer(layerName, text ?? 'New Text', {
+      ...style,
+      color: { ...style.color },
+    });
     const cmd = new AddLayerCommand(doc.rootGroup, layer);
     executeCommand(cmd, set);
     set({ selectedLayerId: layer.id, statusMessage: `${t('status.added')}: ${layerName}` });
@@ -1029,7 +1110,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { document: doc } = get();
     if (!doc) return;
     const layerName = name ?? `Text ${doc.rootGroup.children.length + 1}`;
-    const layer = createTextLayer(layerName, '');
+    const style = get().textToolDefaults;
+    const layer = createTextLayer(layerName, '', {
+      ...style,
+      color: { ...style.color },
+    });
     layer.position = { x, y };
     const cmd = new AddLayerCommand(doc.rootGroup, layer);
     executeCommand(cmd, set);
@@ -1049,6 +1134,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!doc) return;
     const layer = findLayerById(doc.rootGroup, layerId);
     if (!layer || layer.type !== 'text') return;
+    const previousName = layer.name;
+    const previousText = layer.text;
     const textLayer = layer as Layer & { underline?: boolean; strikethrough?: boolean };
     if (key === 'writingMode' && layer.writingMode === undefined) {
       // Backward compatibility: old documents may lack writingMode.
@@ -1068,6 +1155,27 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       value as Layer[keyof Layer],
     );
     executeCommand(cmd, set);
+    if (get().activeTool === 'text' && TEXT_TOOL_STYLE_KEYS.has(key as keyof TextToolDefaults)) {
+      set((state) => ({
+        textToolDefaults: {
+          ...state.textToolDefaults,
+          [key]: key === 'color'
+            ? { ...(value as TextToolDefaults['color']) }
+            : value as TextToolDefaults[keyof TextToolDefaults],
+        },
+      }));
+    }
+    if (key === 'text' && typeof value === 'string') {
+      const nextText = value;
+      const previousAutoName = deriveAutoTextLayerName(previousText);
+      const nextAutoName = deriveAutoTextLayerName(nextText);
+      const wasAutoNamed = AUTO_TEXT_LAYER_NAME_PATTERN.test(previousName)
+        || (previousAutoName !== null && previousName === previousAutoName);
+      if (wasAutoNamed && nextAutoName && layer.name !== nextAutoName) {
+        layer.name = nextAutoName;
+        eventBus.emit('layer:property-changed', { layerId, property: 'name' });
+      }
+    }
     doc.dirty = true;
     eventBus.emit('layer:property-changed', { layerId, property: key });
     get().updateTitleBar();
@@ -1126,7 +1234,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const { editingTextLayerId } = get();
       if (editingTextLayerId !== expectedLayerId) return;
     }
-    set({ editingTextLayerId: null });
+    set({ editingTextLayerId: null, textTransformPreview: null });
+  },
+
+  setTextTransformPreview: (preview): void => {
+    const current = get().textTransformPreview;
+    if (
+      current?.layerId === preview?.layerId
+      && current?.bounds.x === preview?.bounds.x
+      && current?.bounds.y === preview?.bounds.y
+      && current?.bounds.width === preview?.bounds.width
+      && current?.bounds.height === preview?.bounds.height
+    ) {
+      return;
+    }
+    set({ textTransformPreview: preview });
   },
 
   openLayerStyleDialog: (layerId): void => {
@@ -1172,7 +1294,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   // Rendering
   renderToCanvas: (canvas): void => {
-    const { document: doc } = get();
+    const { document: doc, editingTextLayerId } = get();
     if (!doc) return;
     try {
       renderer.render(doc, canvas, {
@@ -1182,6 +1304,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         showGuides: false,
         background: 'checkerboard',
         documentSize: { width: doc.canvas.size.width, height: doc.canvas.size.height },
+        hiddenLayerIds: editingTextLayerId ? [editingTextLayerId] : undefined,
       });
     } catch {
       const renderFailedMessage = t('status.renderFailed');
