@@ -16,9 +16,20 @@ import type { TextLayer } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore, getViewport } from '../../store';
 
-/** Convert 0-1 Color to CSS rgba string. */
+/** Convert Color (r/g/b 0-255, a 0-1) to CSS rgba string. */
 function colorToCss(c: { r: number; g: number; b: number; a: number }): string {
-  return `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${c.a})`;
+  return `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${c.a})`;
+}
+
+/**
+ * Build a contrasting text-shadow so typed text is always legible,
+ * regardless of the underlying canvas / pasteboard colour.
+ */
+function contrastShadow(c: { r: number; g: number; b: number }): string {
+  // Perceived luminance (ITU-R BT.709)
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const shadow = lum > 128 ? '0 0 4px rgba(0,0,0,0.8)' : '0 0 4px rgba(255,255,255,0.8)';
+  return shadow;
 }
 
 /** InlineTextEditor — fixed-position textarea for editing text layers. */
@@ -146,6 +157,7 @@ export function InlineTextEditor(): React.JSX.Element | null {
         lineHeight: textLayer.lineHeight,
         letterSpacing: `${textLayer.letterSpacing * zoom}px`,
         writingMode,
+        textShadow: contrastShadow(textLayer.color),
         ...sizeStyle,
       }}
     />

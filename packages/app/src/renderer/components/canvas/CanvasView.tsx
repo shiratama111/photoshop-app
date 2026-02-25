@@ -713,37 +713,6 @@ export function CanvasView(): React.JSX.Element {
     [document, scheduleRender],
   );
 
-  /** Handle double-click to start text editing — APP-005. */
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent): void => {
-      if (!document) return;
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-      const vp = getViewport();
-      const docPoint = vp.screenToDocument({ x: screenX, y: screenY });
-
-      const allLayers = flattenLayers(document.rootGroup);
-      for (let i = allLayers.length - 1; i >= 0; i--) {
-        const layer = allLayers[i];
-        if (layer.type !== 'text' || !layer.visible) continue;
-        const tl = layer as TextLayer;
-        const hitW = Math.max(100, tl.fontSize * 10);
-        const hitH = tl.fontSize * tl.lineHeight * 3;
-        if (
-          docPoint.x >= tl.position.x &&
-          docPoint.x <= tl.position.x + hitW &&
-          docPoint.y >= tl.position.y &&
-          docPoint.y <= tl.position.y + hitH
-        ) {
-          startEditingText(tl.id);
-          return;
-        }
-      }
-    },
-    [document, startEditingText],
-  );
-
   const isBrushTool = activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'clone';
   const cursorDiameter = brushSize * zoom;
   const isEyedropper = activeTool === 'eyedropper';
@@ -765,7 +734,6 @@ export function CanvasView(): React.JSX.Element {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onDoubleClick={handleDoubleClick}
     >
       {document ? (
         <>

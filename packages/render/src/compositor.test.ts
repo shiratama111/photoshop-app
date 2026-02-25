@@ -803,6 +803,49 @@ describe('Canvas2DRenderer', () => {
     });
   });
 
+  describe('PS-TEXT-004: Text visibility after confirmation', () => {
+    it('should render テスト ABC 123 via fillText', () => {
+      const canvas = createMockCanvas(400, 200);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Mixed', 'テスト ABC 123');
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalledWith('テスト ABC 123', expect.any(Number), expect.any(Number));
+    });
+
+    it('should render text with correct rgba fill for black text', () => {
+      const canvas = createMockCanvas(200, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Black', 'Visible');
+      layer.color = { r: 0, g: 0, b: 0, a: 1 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      // fillStyle should be set to rgba(0, 0, 0, 1)
+      expect(ctx.fillStyle).toBe('rgba(0, 0, 0, 1)');
+    });
+
+    it('should render text with correct rgba fill for non-black color', () => {
+      const canvas = createMockCanvas(200, 100);
+      const ctx = canvas.getContext('2d')! as unknown as Record<string, unknown>;
+      const layer = makeTextLayer('Red', 'Colored');
+      layer.color = { r: 255, g: 0, b: 0, a: 1 };
+      const doc = createTestDocument([layer]);
+      const options = createRenderOptions();
+
+      renderer.render(doc, canvas as unknown as HTMLCanvasElement, options);
+
+      expect(ctx.fillText).toHaveBeenCalled();
+      expect(ctx.fillStyle).toBe('rgba(255, 0, 0, 1)');
+    });
+  });
+
   describe('Text Decorations', () => {
     it('should draw underline when underline=true', () => {
       const canvas = createMockCanvas(100, 100);

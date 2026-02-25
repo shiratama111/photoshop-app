@@ -1,15 +1,17 @@
 /**
  * @module CanvasView.text-create.test
- * Store-level tests for text tool click-to-create behavior (PS-TEXT-003).
+ * Store-level tests for text tool click-to-create behavior (PS-TEXT-003, PS-TEXT-004).
  *
  * Tests verify:
  * - addTextLayerAt creates a text layer at the specified position
  * - editingTextLayerId is set immediately after addTextLayerAt
  * - Existing text layer click starts editing without adding new layer
+ * - Single-click new/existing branching consistency
  * - Undo removes the created text layer
  * - Japanese/English mixed text stored correctly
  *
  * @see docs/agent-briefs/PS-TEXT-003.md
+ * @see docs/agent-briefs/PS-TEXT-004.md
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -229,5 +231,79 @@ describe('PS-TEXT-003: Click-to-type text creation', () => {
       const updated = findLayerById(doc.rootGroup, layerId)! as TextLayer;
       expect(updated.text).toBe('日本語テスト');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PS-TEXT-004: Single-click branching & editingTextLayerId consistency
+// ---------------------------------------------------------------------------
+
+describe('PS-TEXT-004: Single-click new/existing branching', () => {
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('should set editingTextLayerId on new layer and clear on stop', () => {
+    createTestDocument();
+    useAppStore.getState().addTextLayerAt(100, 100);
+    const layerId = useAppStore.getState().editingTextLayerId;
+    expect(layerId).not.toBeNull();
+
+    useAppStore.getState().stopEditingText(layerId!);
+    expect(useAppStore.getState().editingTextLayerId).toBeNull();
+  });
+
+  it('should not increase layer count when starting edit on existing text', () => {
+    createTestDocument();
+    useAppStore.getState().addTextLayer('Existing', 'Hello');
+    const existingId = useAppStore.getState().selectedLayerId!;
+    useAppStore.getState().stopEditingText();
+
+    const doc = useAppStore.getState().document!;
+    const countBefore = flattenLayers(doc.rootGroup).length;
+
+    useAppStore.getState().startEditingText(existingId);
+    expect(flattenLayers(doc.rootGroup).length).toBe(countBefore);
+    expect(useAppStore.getState().editingTextLayerId).toBe(existingId);
+  });
+
+  it('should allow sequential create → stop → create cycles', () => {
+    createTestDocument();
+    const doc = useAppStore.getState().document!;
+
+    // First create
+    useAppStore.getState().addTextLayerAt(10, 10);
+    const firstId = useAppStore.getState().editingTextLayerId!;
+    useAppStore.getState().setTextProperty(firstId, 'text', 'First');
+    useAppStore.getState().stopEditingText(firstId);
+    expect(useAppStore.getState().editingTextLayerId).toBeNull();
+
+    // Second create
+    useAppStore.getState().addTextLayerAt(200, 200);
+    const secondId = useAppStore.getState().editingTextLayerId!;
+    expect(secondId).not.toBe(firstId);
+    useAppStore.getState().setTextProperty(secondId, 'text', 'Second');
+    useAppStore.getState().stopEditingText(secondId);
+
+    // Both layers should exist
+    const layers = flattenLayers(doc.rootGroup).filter((l) => l.type === 'text');
+    expect(layers.length).toBeGreaterThanOrEqual(2);
+    const texts = layers.map((l) => (l as TextLayer).text);
+    expect(texts).toContain('First');
+    expect(texts).toContain('Second');
+  });
+
+  it('should preserve テスト ABC 123 through full create → edit → stop cycle', () => {
+    createTestDocument();
+    useAppStore.getState().addTextLayerAt(50, 50);
+    const layerId = useAppStore.getState().editingTextLayerId!;
+
+    const text = 'テスト ABC 123';
+    useAppStore.getState().setTextProperty(layerId, 'text', text);
+    useAppStore.getState().stopEditingText(layerId);
+
+    const doc = useAppStore.getState().document!;
+    const layer = findLayerById(doc.rootGroup, layerId)! as TextLayer;
+    expect(layer.text).toBe(text);
   });
 });
