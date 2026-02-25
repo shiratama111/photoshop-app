@@ -779,23 +779,26 @@ html, body, #root {
 .text-property-btn:hover { background: var(--bg-hover); }
 .text-property-btn--active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* Inline Text Editor — APP-005 */
+/* Inline Text Editor — PS-TEXT-005 (custom overlay, no OS-native textarea) */
 .inline-text-editor {
   position: fixed;
   z-index: 100;
   padding: 2px 4px;
-  border: 1px dashed var(--accent);
-  background: transparent;
+  border: 1.5px dashed var(--accent);
+  border-radius: 2px;
+  background: rgba(0, 120, 212, 0.04);
   color: inherit;
-  resize: both;
   outline: none;
-  overflow: auto;
+  overflow: visible;
   min-width: 100px;
   min-height: 1.5em;
   white-space: pre-wrap;
   word-break: break-word;
   -webkit-user-select: text;
   user-select: text;
+  caret-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.25);
+  cursor: text;
 }
 
 /* Layer Style Dialog — APP-005 */

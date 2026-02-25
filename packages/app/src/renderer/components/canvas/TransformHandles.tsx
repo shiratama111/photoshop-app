@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { TextLayer } from '@photoshop-app/types';
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore, getViewport } from '../../store';
 
@@ -51,7 +52,9 @@ export function TransformHandles(): React.JSX.Element | null {
   const zoom = useAppStore((s) => s.zoom);
   const revision = useAppStore((s) => s.revision);
   const resizeLayer = useAppStore((s) => s.resizeLayer);
+  const resizeTextLayer = useAppStore((s) => s.resizeTextLayer);
   const setLayerPosition = useAppStore((s) => s.setLayerPosition);
+  const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
 
   const isDragging = useRef(false);
   const dragHandle = useRef<HandlePosition | null>(null);
@@ -93,15 +96,29 @@ export function TransformHandles(): React.JSX.Element | null {
   if (!document || !selectedLayerId) return null;
 
   const layer = findLayerById(document.rootGroup, selectedLayerId);
-  if (!layer || layer.type !== 'raster') return null;
+  if (!layer || (layer.type !== 'raster' && layer.type !== 'text')) return null;
+
+  // Hide handles while inline-editing a text layer
+  if (layer.type === 'text' && editingTextLayerId === layer.id) return null;
 
   // Get layer bounds in document coordinates.
-  const layerBounds: Bounds = {
-    x: layer.position.x,
-    y: layer.position.y,
-    width: layer.bounds.width,
-    height: layer.bounds.height,
-  };
+  let layerBounds: Bounds;
+  if (layer.type === 'text') {
+    const textLayer = layer as TextLayer;
+    const tb = textLayer.textBounds;
+    if (tb) {
+      layerBounds = { x: textLayer.position.x, y: textLayer.position.y, width: tb.width, height: tb.height };
+    } else {
+      // textBounds not set — estimate from fontSize
+      const lines = textLayer.text.split('\n');
+      const estW = Math.max(...lines.map(l => l.length)) * textLayer.fontSize * 0.6;
+      const estH = lines.length * textLayer.fontSize * textLayer.lineHeight;
+      layerBounds = { x: textLayer.position.x, y: textLayer.position.y, width: Math.max(20, estW), height: Math.max(20, estH) };
+    }
+  } else {
+    // raster (existing logic)
+    layerBounds = { x: layer.position.x, y: layer.position.y, width: layer.bounds.width, height: layer.bounds.height };
+  }
   const displayBounds = previewBounds ?? layerBounds;
 
   // Convert to screen coordinates
@@ -188,11 +205,19 @@ export function TransformHandles(): React.JSX.Element | null {
 
         // Only commit if size actually changed
         if (finalBounds.width !== ob.width || finalBounds.height !== ob.height) {
-          resizeLayer(
-            selectedLayerId,
-            Math.round(finalBounds.width),
-            Math.round(finalBounds.height),
-          );
+          if (layer.type === 'text') {
+            resizeTextLayer(
+              selectedLayerId,
+              Math.round(finalBounds.width),
+              Math.round(finalBounds.height),
+            );
+          } else {
+            resizeLayer(
+              selectedLayerId,
+              Math.round(finalBounds.width),
+              Math.round(finalBounds.height),
+            );
+          }
         }
         if (finalBounds.x !== ob.x || finalBounds.y !== ob.y) {
           setLayerPosition(
