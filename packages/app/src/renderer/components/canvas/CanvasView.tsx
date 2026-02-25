@@ -12,7 +12,7 @@
  * @see APP-002: Canvas view integration
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { RasterLayer, TextLayer } from '@photoshop-app/types';
 import {
   flattenLayers,
@@ -64,6 +64,10 @@ export function CanvasView(): React.JSX.Element {
   const fittedDocumentIdRef = useRef<string | null>(null);
   const renderRequestRef = useRef<number | null>(null);
   const observedSizeRef = useRef<{ width: number; height: number } | null>(null);
+
+  // Space-key pan state (PS-PAN-001)
+  const isSpacePressed = useRef(false);
+  const [panCursor, setPanCursor] = useState<'grab' | 'grabbing' | null>(null);
 
   // Tool-specific drag state
   const dragStart = useRef<{ x: number; y: number } | null>(null);
@@ -174,6 +178,37 @@ export function CanvasView(): React.JSX.Element {
     return (): void => observer.disconnect();
   }, [fitToWindow, scheduleRender]);
 
+  // Space-key listener for temporary pan mode (PS-PAN-001)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.code !== 'Space' || e.repeat) return;
+      // Skip if an input element is focused (text editing, etc.)
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((document.activeElement as HTMLElement | null)?.isContentEditable) return;
+      e.preventDefault();
+      isSpacePressed.current = true;
+      setPanCursor('grab');
+    };
+
+    const handleKeyUp = (e: KeyboardEvent): void => {
+      if (e.code !== 'Space') return;
+      isSpacePressed.current = false;
+      if (isPanning.current) {
+        // Still dragging — will clear on mouseup
+        return;
+      }
+      setPanCursor(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return (): void => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
   /** Handle mouse wheel for zoom. */
   const handleWheel = useCallback(
     (e: React.WheelEvent): void => {
@@ -205,6 +240,16 @@ export function CanvasView(): React.JSX.Element {
         e.preventDefault();
         isPanning.current = true;
         lastPanPoint.current = { x: e.clientX, y: e.clientY };
+        setPanCursor('grabbing');
+        return;
+      }
+
+      // Space + left button — temporary pan (PS-PAN-001)
+      if (e.button === 0 && isSpacePressed.current) {
+        e.preventDefault();
+        isPanning.current = true;
+        lastPanPoint.current = { x: e.clientX, y: e.clientY };
+        setPanCursor('grabbing');
         return;
       }
 
@@ -488,7 +533,11 @@ export function CanvasView(): React.JSX.Element {
   /** Handle mouse up for pan end, brush commit, or drag-tool finalize. */
   const handleMouseUp = useCallback(
     (e: React.MouseEvent): void => {
-      isPanning.current = false;
+      if (isPanning.current) {
+        isPanning.current = false;
+        // Restore cursor: grab if Space still held, else clear
+        setPanCursor(isSpacePressed.current ? 'grab' : null);
+      }
 
       // Brush commit (APP-014)
       if (brushEngine.isActive) {
@@ -655,11 +704,15 @@ export function CanvasView(): React.JSX.Element {
   const isEyedropper = activeTool === 'eyedropper';
   const isCrosshair = activeTool === 'gradient' || activeTool === 'shape' || activeTool === 'fill';
 
+  // Pan cursor class takes priority over tool cursor (PS-PAN-001)
+  const panClass = panCursor === 'grabbing' ? 'canvas-area--panning' : panCursor === 'grab' ? 'canvas-area--space-held' : '';
+  const className = panClass ? `canvas-area ${panClass}` : 'canvas-area';
+
   return (
     <div
       ref={containerRef}
-      className="canvas-area"
-      style={isBrushTool ? { cursor: 'none' } : isCrosshair ? { cursor: 'crosshair' } : isEyedropper ? { cursor: 'crosshair' } : undefined}
+      className={className}
+      style={panCursor ? undefined : isBrushTool ? { cursor: 'none' } : isCrosshair ? { cursor: 'crosshair' } : isEyedropper ? { cursor: 'crosshair' } : undefined}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

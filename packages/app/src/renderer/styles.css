@@ -297,6 +297,10 @@ html, body, #root {
   box-sizing: border-box;
 }
 
+/* Space-key pan cursors — PS-PAN-001 */
+.canvas-area--space-held { cursor: grab !important; }
+.canvas-area--panning { cursor: grabbing !important; }
+
 .canvas-area canvas { display: block; position: absolute; top: 0; left: 0; }
 .editor-canvas { image-rendering: pixelated; }
 
