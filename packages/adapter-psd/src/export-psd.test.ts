@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { exportPsd } from './export-psd';
 import { importPsd } from './import-psd';
+import { exportLayer } from './layer-exporter';
 import type { Document, LayerGroup, RasterLayer, TextLayer } from '@photoshop-app/types';
 import { BlendMode } from '@photoshop-app/types';
 
@@ -141,6 +142,93 @@ describe('exportPsd', () => {
     const doc = createTestDocument({ width: 1920, height: 1080 });
     const buffer = exportPsd(doc);
     expect(buffer.byteLength).toBeGreaterThan(0);
+  });
+
+  it('should export layer effects when includeEffects is true', () => {
+    const layer = makeRasterLayer('FX');
+    layer.effects = [
+      {
+        type: 'drop-shadow',
+        enabled: true,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        opacity: 0.5,
+        angle: 120,
+        distance: 8,
+        blur: 6,
+        spread: 3,
+      },
+      {
+        type: 'inner-glow',
+        enabled: true,
+        color: { r: 255, g: 200, b: 120, a: 1 },
+        opacity: 0.6,
+        size: 10,
+        choke: 5,
+        source: 'edge',
+      },
+      {
+        type: 'gradient-overlay',
+        enabled: true,
+        opacity: 0.8,
+        angle: 45,
+        gradientType: 'linear',
+        reverse: false,
+        scale: 100,
+        stops: [
+          { position: 0, color: { r: 255, g: 0, b: 0, a: 1 } },
+          { position: 1, color: { r: 0, g: 0, b: 255, a: 1 } },
+        ],
+      },
+      {
+        type: 'bevel-emboss',
+        enabled: true,
+        style: 'inner-bevel',
+        depth: 120,
+        direction: 'up',
+        size: 6,
+        soften: 1,
+        angle: 120,
+        altitude: 30,
+        highlightColor: { r: 255, g: 255, b: 255, a: 1 },
+        highlightOpacity: 0.7,
+        shadowColor: { r: 0, g: 0, b: 0, a: 1 },
+        shadowOpacity: 0.7,
+      },
+    ];
+
+    const agLayer = exportLayer(layer, {
+      preserveText: true,
+      generateComposite: false,
+      includeEffects: true,
+    });
+
+    expect(agLayer.effects).toBeDefined();
+    expect(agLayer.effects?.dropShadow?.length).toBe(1);
+    expect(agLayer.effects?.innerGlow).toBeDefined();
+    expect(agLayer.effects?.gradientOverlay?.length).toBe(1);
+    expect(agLayer.effects?.bevel).toBeDefined();
+  });
+
+  it('should omit layer effects when includeEffects is false', () => {
+    const layer = makeRasterLayer('NoFX');
+    layer.effects = [{
+      type: 'drop-shadow',
+      enabled: true,
+      color: { r: 0, g: 0, b: 0, a: 1 },
+      opacity: 0.5,
+      angle: 120,
+      distance: 8,
+      blur: 6,
+      spread: 3,
+    }];
+
+    const agLayer = exportLayer(layer, {
+      preserveText: true,
+      generateComposite: false,
+      includeEffects: false,
+    });
+
+    expect(agLayer.effects).toBeUndefined();
   });
 });
 

@@ -9,8 +9,10 @@
  */
 
 import type {
+  BevelEmbossEffect,
   BlendMode,
   CompatibilityIssue,
+  LayerEffect,
   Layer,
   LayerGroup,
   LayerMask,
@@ -18,7 +20,19 @@ import type {
   RasterLayer,
   TextLayer,
 } from '@photoshop-app/types';
-import type { Layer as AgLayer } from 'ag-psd';
+import type {
+  Color as AgColor,
+  Layer as AgLayer,
+  LayerEffectBevel,
+  LayerEffectGradientOverlay,
+  LayerEffectInnerGlow,
+  LayerEffectShadow,
+  LayerEffectSolidFill,
+  LayerEffectStroke,
+  LayerEffectsInfo,
+  LayerEffectsOuterGlow,
+  UnitsValue,
+} from 'ag-psd';
 
 /** ag-psd blend mode string → our BlendMode enum value. */
 const BLEND_MODE_MAP: Record<string, BlendMode> = {
@@ -101,7 +115,7 @@ function mapGroupLayer(
     blendMode: mapBlendMode(agLayer.blendMode),
     position: { x: agLayer.left ?? 0, y: agLayer.top ?? 0 },
     locked: false,
-    effects: [],
+    effects: mapLayerEffects(agLayer.effects, issues, agLayer.name),
     parentId,
     children,
     expanded: !(agLayer.opened === false),
@@ -200,7 +214,7 @@ function mapRasterLayer(
     blendMode: mapBlendMode(agLayer.blendMode),
     position: { x: left, y: top },
     locked: false,
-    effects: [],
+    effects: mapLayerEffects(agLayer.effects, issues, agLayer.name),
     mask,
     parentId,
     imageData,
@@ -248,7 +262,7 @@ function mapTextLayer(
     blendMode: mapBlendMode(agLayer.blendMode),
     position: { x: agLayer.left ?? 0, y: agLayer.top ?? 0 },
     locked: false,
-    effects: [],
+    effects: mapLayerEffects(agLayer.effects, issues, agLayer.name),
     parentId,
     text: textData.text ?? '',
     fontFamily,
@@ -264,6 +278,263 @@ function mapTextLayer(
     underline: style?.underline ?? false,
     strikethrough: style?.strikethrough ?? false,
   };
+}
+
+function mapLayerEffects(
+  effectsInfo: LayerEffectsInfo | undefined,
+  issues: CompatibilityIssue[],
+  layerName?: string,
+): LayerEffect[] {
+  if (!effectsInfo) return [];
+
+  const effects: LayerEffect[] = [];
+
+  const dropShadow = effectsInfo.dropShadow?.[0];
+  if (dropShadow) {
+    effects.push(mapDropShadow(dropShadow));
+  }
+
+  const innerShadow = effectsInfo.innerShadow?.[0];
+  if (innerShadow) {
+    effects.push(mapInnerShadow(innerShadow));
+  }
+
+  const outerGlow = effectsInfo.outerGlow;
+  if (outerGlow) {
+    effects.push(mapOuterGlow(outerGlow));
+  }
+
+  const innerGlow = effectsInfo.innerGlow;
+  if (innerGlow) {
+    effects.push(mapInnerGlow(innerGlow));
+  }
+
+  const stroke = effectsInfo.stroke?.[0];
+  if (stroke) {
+    effects.push(mapStroke(stroke));
+  }
+
+  const solidFill = effectsInfo.solidFill?.[0];
+  if (solidFill) {
+    effects.push(mapColorOverlay(solidFill));
+  }
+
+  const gradientOverlay = effectsInfo.gradientOverlay?.[0];
+  if (gradientOverlay) {
+    effects.push(mapGradientOverlay(gradientOverlay, issues, layerName));
+  }
+
+  const bevel = effectsInfo.bevel;
+  if (bevel) {
+    effects.push(mapBevel(bevel));
+  }
+
+  return effects;
+}
+
+function mapDropShadow(shadow: LayerEffectShadow): LayerEffect {
+  return {
+    type: 'drop-shadow',
+    enabled: shadow.enabled ?? true,
+    color: mapColor(shadow.color, { r: 0, g: 0, b: 0, a: 1 }),
+    opacity: normalizeOpacity(shadow.opacity, 0.75),
+    angle: shadow.angle ?? 120,
+    distance: getUnitsNumber(shadow.distance, 5),
+    blur: getUnitsNumber(shadow.size, 5),
+    spread: getUnitsNumber(shadow.choke, 0),
+  };
+}
+
+function mapInnerShadow(shadow: LayerEffectShadow): LayerEffect {
+  return {
+    type: 'inner-shadow',
+    enabled: shadow.enabled ?? true,
+    color: mapColor(shadow.color, { r: 0, g: 0, b: 0, a: 1 }),
+    opacity: normalizeOpacity(shadow.opacity, 0.75),
+    angle: shadow.angle ?? 120,
+    distance: getUnitsNumber(shadow.distance, 5),
+    blur: getUnitsNumber(shadow.size, 5),
+    choke: getUnitsNumber(shadow.choke, 0),
+  };
+}
+
+function mapOuterGlow(glow: LayerEffectsOuterGlow): LayerEffect {
+  return {
+    type: 'outer-glow',
+    enabled: glow.enabled ?? true,
+    color: mapColor(glow.color, { r: 255, g: 255, b: 190, a: 1 }),
+    opacity: normalizeOpacity(glow.opacity, 0.75),
+    size: getUnitsNumber(glow.size, 10),
+    spread: getUnitsNumber(glow.choke, 0),
+  };
+}
+
+function mapInnerGlow(glow: LayerEffectInnerGlow): LayerEffect {
+  return {
+    type: 'inner-glow',
+    enabled: glow.enabled ?? true,
+    color: mapColor(glow.color, { r: 255, g: 255, b: 190, a: 1 }),
+    opacity: normalizeOpacity(glow.opacity, 0.75),
+    size: getUnitsNumber(glow.size, 10),
+    choke: getUnitsNumber(glow.choke, 0),
+    source: glow.source === 'center' ? 'center' : 'edge',
+  };
+}
+
+function mapStroke(stroke: LayerEffectStroke): LayerEffect {
+  return {
+    type: 'stroke',
+    enabled: stroke.enabled ?? true,
+    color: mapColor(stroke.color, { r: 0, g: 0, b: 0, a: 1 }),
+    size: getUnitsNumber(stroke.size, 3),
+    position: stroke.position ?? 'outside',
+    opacity: normalizeOpacity(stroke.opacity, 1),
+  };
+}
+
+function mapColorOverlay(fill: LayerEffectSolidFill): LayerEffect {
+  return {
+    type: 'color-overlay',
+    enabled: fill.enabled ?? true,
+    color: mapColor(fill.color, { r: 255, g: 0, b: 0, a: 1 }),
+    opacity: normalizeOpacity(fill.opacity, 1),
+  };
+}
+
+function mapGradientOverlay(
+  gradientOverlay: LayerEffectGradientOverlay,
+  issues: CompatibilityIssue[],
+  layerName?: string,
+): LayerEffect {
+  const style = gradientOverlay.type ?? 'linear';
+  const gradientType = style === 'radial' ? 'radial' : 'linear';
+  if (style !== 'linear' && style !== 'radial') {
+    issues.push({
+      severity: 'info',
+      message: `Gradient overlay style "${style}" mapped to linear`,
+      layerName,
+      feature: 'gradient-overlay-style',
+    });
+  }
+
+  const gradient = gradientOverlay.gradient;
+  const rawStops =
+    gradient && gradient.type === 'solid' && Array.isArray(gradient.colorStops)
+      ? gradient.colorStops
+      : [];
+
+  const stops =
+    rawStops.length > 0
+      ? rawStops
+        .map((s) => ({
+          position: normalizeStopPosition(s.location),
+          color: mapColor(s.color, { r: 255, g: 255, b: 255, a: 1 }),
+        }))
+        .sort((a, b) => a.position - b.position)
+      : [
+        { position: 0, color: { r: 255, g: 255, b: 255, a: 1 } },
+        { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } },
+      ];
+
+  return {
+    type: 'gradient-overlay',
+    enabled: gradientOverlay.enabled ?? true,
+    opacity: normalizeOpacity(gradientOverlay.opacity, 1),
+    angle: (gradientOverlay as { angle?: number }).angle ?? 90,
+    gradientType,
+    stops,
+    reverse: gradientOverlay.reverse ?? false,
+    scale: clamp(Math.round(gradientOverlay.scale ?? 100), 10, 150),
+  };
+}
+
+function mapBevel(bevel: LayerEffectBevel): LayerEffect {
+  return {
+    type: 'bevel-emboss',
+    enabled: bevel.enabled ?? true,
+    style: mapBevelStyle(bevel.style),
+    depth: clamp(Math.round(bevel.strength ?? 100), 1, 1000),
+    direction: bevel.direction === 'down' ? 'down' : 'up',
+    size: getUnitsNumber(bevel.size, 5),
+    soften: getUnitsNumber(bevel.soften, 0),
+    angle: bevel.angle ?? 120,
+    altitude: clamp(Math.round(bevel.altitude ?? 30), 0, 90),
+    highlightColor: mapColor(bevel.highlightColor, { r: 255, g: 255, b: 255, a: 1 }),
+    highlightOpacity: normalizeOpacity(bevel.highlightOpacity, 0.75),
+    shadowColor: mapColor(bevel.shadowColor, { r: 0, g: 0, b: 0, a: 1 }),
+    shadowOpacity: normalizeOpacity(bevel.shadowOpacity, 0.75),
+  };
+}
+
+function mapBevelStyle(style: LayerEffectBevel['style']): BevelEmbossEffect['style'] {
+  switch (style) {
+    case 'outer bevel':
+      return 'outer-bevel';
+    case 'emboss':
+      return 'emboss';
+    case 'pillow emboss':
+      return 'pillow-emboss';
+    case 'stroke emboss':
+      return 'stroke-emboss';
+    case 'inner bevel':
+    default:
+      return 'inner-bevel';
+  }
+}
+
+function getUnitsNumber(value: number | UnitsValue | undefined, fallback: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number') return value;
+  if (typeof value.value === 'number') return value.value;
+  return fallback;
+}
+
+function normalizeOpacity(value: number | undefined, fallback: number): number {
+  if (value === undefined || Number.isNaN(value)) return fallback;
+  if (value > 1) return clamp(value / 100, 0, 1);
+  return clamp(value, 0, 1);
+}
+
+function normalizeStopPosition(location: number | undefined): number {
+  if (location === undefined || Number.isNaN(location)) return 0;
+  if (location > 1) return clamp(location / 4096, 0, 1);
+  return clamp(location, 0, 1);
+}
+
+function mapColor(color: AgColor | undefined, fallback: { r: number; g: number; b: number; a: number }) {
+  if (!color) return fallback;
+  const c = color as Partial<{
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+    fr: number;
+    fg: number;
+    fb: number;
+    k: number;
+  }>;
+
+  const toChannel = (v: number | undefined): number | undefined => {
+    if (v === undefined || Number.isNaN(v)) return undefined;
+    return v <= 1 ? v * 255 : v;
+  };
+
+  const gray = toChannel(c.k);
+  const r = toChannel(c.r) ?? toChannel(c.fr) ?? gray ?? fallback.r;
+  const g = toChannel(c.g) ?? toChannel(c.fg) ?? gray ?? fallback.g;
+  const b = toChannel(c.b) ?? toChannel(c.fb) ?? gray ?? fallback.b;
+  const a = c.a === undefined ? fallback.a : c.a > 1 ? c.a / 255 : c.a;
+
+  return {
+    r: clamp(r, 0, 255),
+    g: clamp(g, 0, 255),
+    b: clamp(b, 0, 255),
+    a: clamp(a, 0, 1),
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function mapBlendMode(mode: string | undefined): BlendMode {

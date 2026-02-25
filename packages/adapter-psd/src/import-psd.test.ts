@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { importPsd } from './import-psd';
+import { mapLayer } from './layer-mapper';
 import { writePsd } from 'ag-psd';
+import type { CompatibilityIssue, PsdImportOptions } from '@photoshop-app/types';
 
 // ag-psd needs a canvas implementation in Node.
 // Provide a minimal mock for testing.
@@ -72,6 +74,12 @@ function createTestPsd(options?: {
 }
 
 describe('importPsd', () => {
+  const defaultOptions: PsdImportOptions = {
+    rasterizeText: false,
+    rasterizeSmartObjects: true,
+    maxDimension: 0,
+  };
+
   describe('basic import', () => {
     it('should import an empty PSD', () => {
       const buffer = createTestPsd({ width: 200, height: 150 });
@@ -175,6 +183,162 @@ describe('importPsd', () => {
 
       const layer = document.rootGroup.children[0];
       expect(layer.type).toBe('raster');
+    });
+
+    it('should map PSD layer effects to internal LayerEffect[]', () => {
+      const issues: CompatibilityIssue[] = [];
+      const agLayer = {
+        name: 'FX Layer',
+        left: 0,
+        top: 0,
+        right: 100,
+        bottom: 100,
+        effects: {
+          dropShadow: [{
+            enabled: true,
+            color: { r: 10, g: 20, b: 30 },
+            opacity: 80,
+            angle: 135,
+            distance: { units: 'Pixels', value: 12 },
+            size: { units: 'Pixels', value: 8 },
+            choke: { units: 'Pixels', value: 5 },
+          }],
+          innerShadow: [{
+            enabled: true,
+            color: { r: 1, g: 2, b: 3 },
+            opacity: 70,
+            angle: 45,
+            distance: { units: 'Pixels', value: 6 },
+            size: { units: 'Pixels', value: 7 },
+            choke: { units: 'Pixels', value: 4 },
+          }],
+          outerGlow: {
+            enabled: true,
+            color: { r: 200, g: 210, b: 220 },
+            opacity: 65,
+            size: { units: 'Pixels', value: 10 },
+            choke: { units: 'Pixels', value: 2 },
+          },
+          innerGlow: {
+            enabled: true,
+            color: { r: 100, g: 120, b: 140 },
+            opacity: 55,
+            size: { units: 'Pixels', value: 9 },
+            choke: { units: 'Pixels', value: 3 },
+            source: 'center',
+          },
+          solidFill: [{
+            enabled: true,
+            color: { r: 255, g: 0, b: 0 },
+            opacity: 50,
+          }],
+          stroke: [{
+            enabled: true,
+            size: { units: 'Pixels', value: 4 },
+            position: 'inside',
+            opacity: 90,
+            color: { r: 0, g: 255, b: 0 },
+          }],
+          gradientOverlay: [{
+            enabled: true,
+            opacity: 75,
+            angle: 30,
+            type: 'radial',
+            reverse: true,
+            scale: 130,
+            gradient: {
+              type: 'solid',
+              name: 'test',
+              colorStops: [
+                { color: { r: 255, g: 0, b: 0 }, location: 0, midpoint: 50 },
+                { color: { r: 0, g: 0, b: 255 }, location: 4096, midpoint: 50 },
+              ],
+              opacityStops: [
+                { opacity: 100, location: 0, midpoint: 50 },
+                { opacity: 100, location: 4096, midpoint: 50 },
+              ],
+            },
+          }],
+          bevel: {
+            enabled: true,
+            style: 'pillow emboss',
+            strength: 220,
+            direction: 'down',
+            size: { units: 'Pixels', value: 11 },
+            soften: { units: 'Pixels', value: 2 },
+            angle: 110,
+            altitude: 35,
+            highlightColor: { r: 250, g: 250, b: 250 },
+            shadowColor: { r: 5, g: 5, b: 5 },
+            highlightOpacity: 60,
+            shadowOpacity: 70,
+          },
+        },
+      };
+
+      const mapped = mapLayer(agLayer as never, null, defaultOptions, issues);
+      expect(mapped.type).toBe('raster');
+      expect(mapped.effects.map((e) => e.type)).toEqual(expect.arrayContaining([
+        'drop-shadow',
+        'inner-shadow',
+        'outer-glow',
+        'inner-glow',
+        'stroke',
+        'color-overlay',
+        'gradient-overlay',
+        'bevel-emboss',
+      ]));
+
+      const gradient = mapped.effects.find((e) => e.type === 'gradient-overlay');
+      expect(gradient).toBeDefined();
+      if (gradient?.type === 'gradient-overlay') {
+        expect(gradient.gradientType).toBe('radial');
+        expect(gradient.reverse).toBe(true);
+      }
+
+      const bevel = mapped.effects.find((e) => e.type === 'bevel-emboss');
+      expect(bevel).toBeDefined();
+      if (bevel?.type === 'bevel-emboss') {
+        expect(bevel.style).toBe('pillow-emboss');
+        expect(bevel.direction).toBe('down');
+      }
+    });
+
+    it('should map unsupported gradient style to linear and report issue', () => {
+      const issues: CompatibilityIssue[] = [];
+      const agLayer = {
+        name: 'Gradient Fallback',
+        left: 0,
+        top: 0,
+        right: 10,
+        bottom: 10,
+        effects: {
+          gradientOverlay: [{
+            enabled: true,
+            type: 'diamond',
+            gradient: {
+              type: 'solid',
+              name: 'fallback',
+              colorStops: [
+                { color: { r: 255, g: 255, b: 255 }, location: 0, midpoint: 50 },
+                { color: { r: 0, g: 0, b: 0 }, location: 4096, midpoint: 50 },
+              ],
+              opacityStops: [
+                { opacity: 100, location: 0, midpoint: 50 },
+                { opacity: 100, location: 4096, midpoint: 50 },
+              ],
+            },
+          }],
+        },
+      };
+
+      const mapped = mapLayer(agLayer as never, null, defaultOptions, issues);
+      const gradient = mapped.effects.find((e) => e.type === 'gradient-overlay');
+      expect(gradient).toBeDefined();
+      if (gradient?.type === 'gradient-overlay') {
+        expect(gradient.gradientType).toBe('linear');
+      }
+      expect(issues.some((i) => i.feature === 'gradient-overlay-style')).toBe(true);
     });
   });
 
