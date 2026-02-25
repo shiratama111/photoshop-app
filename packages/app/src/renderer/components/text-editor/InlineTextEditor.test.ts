@@ -112,6 +112,7 @@ describe('InlineTextEditor store actions', () => {
       const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'stroke',
+        enabled: true,
         color: { r: 1, g: 0, b: 0, a: 1 },
         size: 2,
         position: 'outside',
@@ -129,6 +130,7 @@ describe('InlineTextEditor store actions', () => {
       const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'stroke',
+        enabled: true,
         color: { r: 1, g: 0, b: 0, a: 1 },
         size: 2,
         position: 'outside',
@@ -146,6 +148,7 @@ describe('InlineTextEditor store actions', () => {
       const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'stroke',
+        enabled: true,
         color: { r: 1, g: 0, b: 0, a: 1 },
         size: 2,
         position: 'outside',
@@ -153,6 +156,7 @@ describe('InlineTextEditor store actions', () => {
       });
       useAppStore.getState().updateLayerEffect(layerId, 0, {
         type: 'stroke',
+        enabled: true,
         color: { r: 0, g: 1, b: 0, a: 1 },
         size: 5,
         position: 'inside',
@@ -170,6 +174,7 @@ describe('InlineTextEditor store actions', () => {
       const layerId = useAppStore.getState().selectedLayerId!;
       useAppStore.getState().addLayerEffect(layerId, {
         type: 'drop-shadow',
+        enabled: true,
         color: { r: 0, g: 0, b: 0, a: 1 },
         opacity: 0.75,
         angle: 135,

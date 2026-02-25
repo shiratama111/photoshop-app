@@ -42,7 +42,9 @@ vi.stubGlobal('OffscreenCanvas', vi.fn(() => ({
 })));
 
 // Mock electronAPI on window for Node.js test environment
-const mockExportFile = vi.fn(() => Promise.resolve('/exported/TestDoc.png'));
+const mockExportFile = vi.fn<
+  (data: ArrayBuffer, defaultPath?: string) => Promise<string | null>
+>(() => Promise.resolve('/exported/TestDoc.png'));
 const mockElectronAPI = {
   exportFile: mockExportFile,
   setTitle: vi.fn(() => Promise.resolve()),

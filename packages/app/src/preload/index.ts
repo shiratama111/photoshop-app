@@ -77,7 +77,7 @@ const electronAPI = {
   onBeforeClose: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('app:beforeClose', listener);
-    return (): void => ipcRenderer.removeListener('app:beforeClose', listener);
+    return (): void => { ipcRenderer.removeListener('app:beforeClose', listener); };
   },
   confirmClose: (action: 'save' | 'discard' | 'cancel'): void => {
     ipcRenderer.send('app:confirmClose', action);
@@ -87,62 +87,114 @@ const electronAPI = {
   onMenuNew: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:new', listener);
-    return (): void => ipcRenderer.removeListener('menu:new', listener);
+    return (): void => { ipcRenderer.removeListener('menu:new', listener); };
   },
   onMenuOpen: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:open', listener);
-    return (): void => ipcRenderer.removeListener('menu:open', listener);
+    return (): void => { ipcRenderer.removeListener('menu:open', listener); };
   },
   onMenuSave: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:save', listener);
-    return (): void => ipcRenderer.removeListener('menu:save', listener);
+    return (): void => { ipcRenderer.removeListener('menu:save', listener); };
   },
   onMenuSaveAs: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:saveAs', listener);
-    return (): void => ipcRenderer.removeListener('menu:saveAs', listener);
+    return (): void => { ipcRenderer.removeListener('menu:saveAs', listener); };
   },
   onMenuExport: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:export', listener);
-    return (): void => ipcRenderer.removeListener('menu:export', listener);
+    return (): void => { ipcRenderer.removeListener('menu:export', listener); };
   },
   onMenuUndo: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:undo', listener);
-    return (): void => ipcRenderer.removeListener('menu:undo', listener);
+    return (): void => { ipcRenderer.removeListener('menu:undo', listener); };
   },
   onMenuRedo: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:redo', listener);
-    return (): void => ipcRenderer.removeListener('menu:redo', listener);
+    return (): void => { ipcRenderer.removeListener('menu:redo', listener); };
   },
   onMenuZoomIn: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:zoomIn', listener);
-    return (): void => ipcRenderer.removeListener('menu:zoomIn', listener);
+    return (): void => { ipcRenderer.removeListener('menu:zoomIn', listener); };
   },
   onMenuZoomOut: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:zoomOut', listener);
-    return (): void => ipcRenderer.removeListener('menu:zoomOut', listener);
+    return (): void => { ipcRenderer.removeListener('menu:zoomOut', listener); };
   },
   onMenuFitToWindow: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:fitToWindow', listener);
-    return (): void => ipcRenderer.removeListener('menu:fitToWindow', listener);
+    return (): void => { ipcRenderer.removeListener('menu:fitToWindow', listener); };
   },
   onMenuActualSize: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:actualSize', listener);
-    return (): void => ipcRenderer.removeListener('menu:actualSize', listener);
+    return (): void => { ipcRenderer.removeListener('menu:actualSize', listener); };
   },
   onMenuAbout: (callback: () => void): (() => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('menu:about', listener);
-    return (): void => ipcRenderer.removeListener('menu:about', listener);
+    return (): void => { ipcRenderer.removeListener('menu:about', listener); };
+  },
+
+  // Image/Filter menu events
+  onMenuAdjustment: (callback: (type: string) => void): (() => void) => {
+    const listener = (_event: unknown, type: string): void => callback(type);
+    ipcRenderer.on('menu:adjustment', listener as (...args: unknown[]) => void);
+    return (): void => { ipcRenderer.removeListener('menu:adjustment', listener as (...args: unknown[]) => void); };
+  },
+  onMenuFilter: (callback: (type: string) => void): (() => void) => {
+    const listener = (_event: unknown, type: string): void => callback(type);
+    ipcRenderer.on('menu:filter', listener as (...args: unknown[]) => void);
+    return (): void => { ipcRenderer.removeListener('menu:filter', listener as (...args: unknown[]) => void); };
+  },
+  onMenuImageSize: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:imageSize', listener);
+    return (): void => { ipcRenderer.removeListener('menu:imageSize', listener); };
+  },
+  onMenuCanvasSize: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:canvasSize', listener);
+    return (): void => { ipcRenderer.removeListener('menu:canvasSize', listener); };
+  },
+  onMenuRotateCanvas: (callback: (direction: string) => void): (() => void) => {
+    const listener = (_event: unknown, direction: string): void => callback(direction);
+    ipcRenderer.on('menu:rotateCanvas', listener as (...args: unknown[]) => void);
+    return (): void => { ipcRenderer.removeListener('menu:rotateCanvas', listener as (...args: unknown[]) => void); };
+  },
+  onMenuFlipCanvas: (callback: (direction: string) => void): (() => void) => {
+    const listener = (_event: unknown, direction: string): void => callback(direction);
+    ipcRenderer.on('menu:flipCanvas', listener as (...args: unknown[]) => void);
+    return (): void => { ipcRenderer.removeListener('menu:flipCanvas', listener as (...args: unknown[]) => void); };
+  },
+  onMenuFill: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:fill', listener);
+    return (): void => { ipcRenderer.removeListener('menu:fill', listener); };
+  },
+  onMenuSelectAll: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:selectAll', listener);
+    return (): void => { ipcRenderer.removeListener('menu:selectAll', listener); };
+  },
+  onMenuDeselect: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:deselect', listener);
+    return (): void => { ipcRenderer.removeListener('menu:deselect', listener); };
+  },
+  onMenuCrop: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:crop', listener);
+    return (): void => { ipcRenderer.removeListener('menu:crop', listener); };
   },
 };
 
@@ -150,3 +202,4 @@ contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
 /** Type declaration for the exposed API. */
 export type ElectronAPI = typeof electronAPI;
+

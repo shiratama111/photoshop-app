@@ -40,17 +40,39 @@ import {
   createTextLayer,
   findLayerById,
   findParentGroup,
+  flattenLayers,
   AddLayerCommand,
   RemoveLayerCommand,
   ReorderLayerCommand,
   SetLayerPropertyCommand,
   ModifyPixelsCommand,
+  rotate90CW,
+  rotate90CCW,
+  rotate180,
+  scaleImage,
+  flipHorizontal,
+  flipVertical,
+  cropImage,
 } from '@photoshop-app/core';
 import { importPsd, exportPsd } from '@photoshop-app/adapter-psd';
 import { Canvas2DRenderer, ViewportImpl } from '@photoshop-app/render';
 
 /** Active tool in the toolbar. */
-export type Tool = 'select' | 'move' | 'brush' | 'eraser' | 'text' | 'crop' | 'segment';
+export type Tool =
+  | 'select'
+  | 'move'
+  | 'brush'
+  | 'eraser'
+  | 'text'
+  | 'crop'
+  | 'segment'
+  | 'gradient'
+  | 'eyedropper'
+  | 'fill'
+  | 'shape'
+  | 'dodge'
+  | 'burn'
+  | 'clone';
 
 /** Recent file entry from the main process (APP-004). */
 export interface RecentFileEntry {
@@ -65,6 +87,22 @@ export interface RecoveryEntry {
   documentName: string;
   filePath: string | null;
   savedAt: string;
+}
+
+export type CanvasAnchorPosition =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'middle-left'
+  | 'center'
+  | 'middle-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right';
+
+export interface ResizeDocumentOptions {
+  mode?: 'image' | 'canvas';
+  anchor?: CanvasAnchorPosition;
 }
 
 /** Shared singleton instances. */
@@ -130,6 +168,21 @@ export interface AppState {
   dragOverActive: boolean;
   /** Whether a transform operation is active (APP-012). */
   transformActive: boolean;
+  /** Adjustments dialog state: which adjustment is active, or null. */
+  adjustmentDialog: {
+    type: 'brightness-contrast' | 'hue-saturation' | 'levels' | 'curves' | 'color-balance';
+    preview: boolean;
+  } | null;
+  /** Image size dialog visibility. */
+  showImageSizeDialog: boolean;
+  /** Canvas size dialog visibility. */
+  showCanvasSizeDialog: boolean;
+  /** Gradient tool type. */
+  gradientType: 'linear' | 'radial' | 'angle' | 'diamond';
+  /** Shape tool type. */
+  shapeType: 'rectangle' | 'ellipse' | 'line';
+  /** Fill tolerance for paint bucket. */
+  fillTolerance: number;
   /** Brush size in pixels (APP-014). */
   brushSize: number;
   /** Brush hardness 0-1 (APP-014). */
@@ -144,6 +197,8 @@ export interface AppState {
   backgroundColor: { r: number; g: number; b: number; a: number };
   /** Current selection rectangle, or null (APP-015). */
   selection: { x: number; y: number; width: number; height: number } | null;
+  /** Selection sub-tool type. */
+  selectionSubTool: 'rect' | 'ellipse' | 'wand';
   /** Whether the new document dialog is visible. */
   showNewDocumentDialog: boolean;
 }
@@ -271,17 +326,17 @@ export interface AppActions {
   /** Set pending close state. */
   setPendingClose: (pending: boolean) => void;
 
-  // Export — APP-010
+  // Export 窶・APP-010
   /** Export the current document as PNG/JPEG/WebP. */
   exportAsImage: (format?: 'png' | 'jpeg' | 'webp') => Promise<void>;
 
-  // Transform — APP-012
+  // Transform 窶・APP-012
   /** Resize a layer to new dimensions (undoable for raster layers). */
   resizeLayer: (layerId: string, newWidth: number, newHeight: number) => void;
   /** Set whether a transform operation is active. */
   setTransformActive: (active: boolean) => void;
 
-  // Brush — APP-014
+  // Brush 窶・APP-014
   /** Set the brush size. */
   setBrushSize: (size: number) => void;
   /** Set the brush opacity. */
@@ -308,12 +363,48 @@ export interface AppActions {
   clearSelection: () => void;
   /** Select all (entire document). */
   selectAll: () => void;
+  /** Set selection sub-tool (rect, ellipse, wand). */
+  setSelectionSubTool: (subTool: AppState['selectionSubTool']) => void;
+  /** Crop the document to the current selection. */
+  cropToSelection: () => void;
 
   // New Document Dialog
   /** Open the new document dialog. */
   openNewDocumentDialog: () => void;
   /** Close the new document dialog. */
   closeNewDocumentDialog: () => void;
+
+  // Adjustments 窶・CORE-005 integration
+  /** Open an adjustment dialog. */
+  openAdjustmentDialog: (type: AppState['adjustmentDialog'] extends null ? never : NonNullable<AppState['adjustmentDialog']>['type']) => void;
+  /** Close the adjustment dialog. */
+  closeAdjustmentDialog: () => void;
+  /** Apply a filter to the active raster layer (undoable). */
+  applyFilter: (filterFn: (imageData: ImageData) => ImageData) => void;
+
+  // Image operations 窶・CORE-008 integration
+  /** Open the image size dialog. */
+  openImageSizeDialog: () => void;
+  /** Close the image size dialog. */
+  closeImageSizeDialog: () => void;
+  /** Resize the document image or canvas, depending on mode. */
+  resizeDocument: (newWidth: number, newHeight: number, options?: ResizeDocumentOptions) => void;
+  /** Open the canvas size dialog. */
+  openCanvasSizeDialog: () => void;
+  /** Close the canvas size dialog. */
+  closeCanvasSizeDialog: () => void;
+  /** Rotate the entire canvas (90CW, 90CCW, 180). */
+  rotateCanvas: (direction: '90cw' | '90ccw' | '180') => void;
+  /** Flip the entire canvas. */
+  flipCanvas: (direction: 'horizontal' | 'vertical') => void;
+
+  // Gradient tool settings
+  /** Set the gradient type. */
+  setGradientType: (type: AppState['gradientType']) => void;
+  /** Set the shape tool type. */
+  setShapeType: (type: AppState['shapeType']) => void;
+  /** Set the fill tolerance. */
+  setFillTolerance: (tolerance: number) => void;
 }
 
 /**
@@ -366,6 +457,38 @@ function cloneLayer(layer: Layer): Layer {
 
   // Text layer \u2014 all primitives, spread is sufficient
   return base as Layer;
+}
+
+const ANCHOR_FACTORS: Record<CanvasAnchorPosition, { x: number; y: number }> = {
+  'top-left': { x: 0, y: 0 },
+  'top-center': { x: 0.5, y: 0 },
+  'top-right': { x: 1, y: 0 },
+  'middle-left': { x: 0, y: 0.5 },
+  center: { x: 0.5, y: 0.5 },
+  'middle-right': { x: 1, y: 0.5 },
+  'bottom-left': { x: 0, y: 1 },
+  'bottom-center': { x: 0.5, y: 1 },
+  'bottom-right': { x: 1, y: 1 },
+};
+
+function getAnchorFactors(anchor: CanvasAnchorPosition = 'center'): { x: number; y: number } {
+  return ANCHOR_FACTORS[anchor] ?? ANCHOR_FACTORS.center;
+}
+
+function getLayerSize(layer: Layer): { width: number; height: number } {
+  if (layer.type === 'raster') {
+    return {
+      width: layer.bounds.width,
+      height: layer.bounds.height,
+    };
+  }
+  if (layer.type === 'text' && layer.textBounds) {
+    return {
+      width: layer.textBounds.width,
+      height: layer.textBounds.height,
+    };
+  }
+  return { width: 0, height: 0 };
 }
 
 /** Extract file extension from a path (lowercase, no dot). */
@@ -490,7 +613,7 @@ async function openImageAsDocument(
       canUndo: false,
       canRedo: false,
       revision: 0,
-      statusMessage: `Opened: ${name} (${width}×${height})`,
+      statusMessage: `Opened: ${name} (${width} x ${height})`,
     });
     eventBus.emit('document:changed');
   } catch {
@@ -560,6 +683,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   pendingClose: false,
   dragOverActive: false,
   transformActive: false,
+  adjustmentDialog: null,
+  showImageSizeDialog: false,
+  showCanvasSizeDialog: false,
+  gradientType: 'linear',
+  shapeType: 'rectangle',
+  fillTolerance: 32,
   brushSize: 10,
   brushHardness: 0.8,
   brushOpacity: 1,
@@ -567,6 +696,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   brushVariant: 'soft' as BrushVariantId,
   backgroundColor: { r: 255, g: 255, b: 255, a: 1 },
   selection: null,
+  selectionSubTool: 'rect',
   showNewDocumentDialog: false,
 
   // Basic actions
@@ -1050,8 +1180,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       }
 
       // Render document at 1:1 scale using the renderer
+      const exportViewport = new ViewportImpl({ width, height });
       renderer.render(doc, offscreen as unknown as HTMLCanvasElement, {
-        viewport: { zoom: 1, offset: { x: 0, y: 0 }, visibleArea: { x: 0, y: 0, width, height } },
+        viewport: exportViewport,
         renderEffects: true,
         showSelection: false,
         showGuides: false,
@@ -1263,7 +1394,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({ pendingClose: pending });
   },
 
-  // Transform — APP-012
+  // Transform 窶・APP-012
   resizeLayer: (layerId, newWidth, newHeight): void => {
     const { document: doc } = get();
     if (!doc) return;
@@ -1313,7 +1444,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const capturedNewBounds = { ...newBounds };
 
       const resizeCmd: Command = {
-        description: `Resize "${raster.name}" to ${newWidth}×${newHeight}`,
+        description: `Resize "${raster.name}" to ${newWidth} x ${newHeight}`,
         execute(): void {
           raster.imageData = capturedNewImageData;
           raster.bounds = capturedNewBounds;
@@ -1324,7 +1455,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         },
       };
 
-      // Push to history (execute() is idempotent — safe to re-apply)
+      // Push to history (execute() is idempotent 窶・safe to re-apply)
       commandHistory.execute(resizeCmd);
       set({
         canUndo: commandHistory.canUndo,
@@ -1333,7 +1464,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       });
       eventBus.emit('document:changed');
       doc.dirty = true;
-      set({ statusMessage: `Resized layer: ${newWidth}×${newHeight}` });
+      set({ statusMessage: `Resized layer: ${newWidth} x ${newHeight}` });
       get().updateTitleBar();
     } catch {
       set({ statusMessage: 'Resize failed' });
@@ -1344,7 +1475,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({ transformActive: active });
   },
 
-  // Brush — APP-014
+  // Brush 窶・APP-014
   setBrushSize: (size): void => {
     set({ brushSize: Math.max(1, Math.min(500, size)) });
   },
@@ -1388,7 +1519,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setSelection: (rect): void => {
     set({ selection: rect });
     if (rect) {
-      set({ statusMessage: `Selection: ${Math.round(rect.width)}×${Math.round(rect.height)}` });
+      set({ statusMessage: `Selection: ${Math.round(rect.width)} x ${Math.round(rect.height)}` });
     }
   },
 
@@ -1402,8 +1533,51 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { width, height } = doc.canvas.size;
     set({
       selection: { x: 0, y: 0, width, height },
-      statusMessage: `Selected all: ${width}×${height}`,
+      statusMessage: `Selected all: ${width} x ${height}`,
     });
+  },
+
+  setSelectionSubTool: (subTool): void => {
+    set({ selectionSubTool: subTool });
+  },
+
+  cropToSelection: (): void => {
+    const { document: doc, selection } = get();
+    if (!doc || !selection) {
+      set({ statusMessage: 'No selection to crop' });
+      return;
+    }
+    const sx = Math.max(0, Math.round(selection.x));
+    const sy = Math.max(0, Math.round(selection.y));
+    const sw = Math.round(selection.width);
+    const sh = Math.round(selection.height);
+    if (sw < 1 || sh < 1) return;
+
+    const allLayers = flattenLayers(doc.rootGroup);
+    for (const layer of allLayers) {
+      if (layer.type === 'raster') {
+        const raster = layer as RasterLayer;
+        if (!raster.imageData) continue;
+        const cropped = cropImage(
+          raster.imageData,
+          sx - raster.position.x,
+          sy - raster.position.y,
+          sw,
+          sh,
+        );
+        raster.imageData = cropped;
+        raster.bounds = { x: 0, y: 0, width: sw, height: sh };
+        raster.position = { x: sx, y: sy };
+      }
+    }
+    doc.canvas.size = { width: sw, height: sh };
+    set({
+      selection: null,
+      statusMessage: `Cropped to ${sw} x ${sh}`,
+      revision: get().revision + 1,
+    });
+    doc.dirty = true;
+    get().updateTitleBar();
   },
 
   // New Document Dialog
@@ -1413,6 +1587,333 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   closeNewDocumentDialog: (): void => {
     set({ showNewDocumentDialog: false });
+  },
+
+  // Adjustments 窶・CORE-005 integration
+  openAdjustmentDialog: (type): void => {
+    set({ adjustmentDialog: { type, preview: true } });
+  },
+
+  closeAdjustmentDialog: (): void => {
+    set({ adjustmentDialog: null });
+  },
+
+  applyFilter: (filterFn): void => {
+    const { document: doc, selectedLayerId } = get();
+    if (!doc || !selectedLayerId) {
+      set({ statusMessage: 'Select a raster layer first' });
+      return;
+    }
+    const layer = findLayerById(doc.rootGroup, selectedLayerId);
+    if (!layer || layer.type !== 'raster') {
+      set({ statusMessage: 'Filter can only be applied to raster layers' });
+      return;
+    }
+    const raster = layer as RasterLayer;
+    if (!raster.imageData) return;
+
+    const oldData = new Uint8ClampedArray(raster.imageData.data);
+    const result = filterFn(raster.imageData);
+    const newData = new Uint8ClampedArray(result.data);
+
+    raster.imageData = result;
+
+    const cmd = new ModifyPixelsCommand(
+      raster,
+      { x: 0, y: 0, width: raster.bounds.width, height: raster.bounds.height },
+      oldData,
+      newData,
+    );
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    set({ statusMessage: 'Filter applied' });
+    get().updateTitleBar();
+  },
+
+  // Image operations 窶・CORE-008 integration
+  openImageSizeDialog: (): void => {
+    set({ showImageSizeDialog: true });
+  },
+
+  closeImageSizeDialog: (): void => {
+    set({ showImageSizeDialog: false });
+  },
+
+  resizeDocument: (newWidth, newHeight, options): void => {
+    const { document: doc, selection } = get();
+    if (!doc) return;
+    if (newWidth < 1 || newHeight < 1 || newWidth > 16384 || newHeight > 16384) {
+      set({ statusMessage: 'Invalid document size' });
+      return;
+    }
+
+    const oldWidth = doc.canvas.size.width;
+    const oldHeight = doc.canvas.size.height;
+    if (oldWidth === newWidth && oldHeight === newHeight) return;
+
+    const mode = options?.mode ?? 'image';
+    let nextSelection = selection;
+
+    if (mode === 'canvas') {
+      const { x: anchorX, y: anchorY } = getAnchorFactors(options?.anchor ?? 'center');
+      const offsetX = Math.round((newWidth - oldWidth) * anchorX);
+      const offsetY = Math.round((newHeight - oldHeight) * anchorY);
+
+      for (const layer of flattenLayers(doc.rootGroup)) {
+        if (layer.type === 'group') continue;
+        layer.position = {
+          x: layer.position.x + offsetX,
+          y: layer.position.y + offsetY,
+        };
+      }
+
+      if (nextSelection) {
+        nextSelection = {
+          ...nextSelection,
+          x: nextSelection.x + offsetX,
+          y: nextSelection.y + offsetY,
+        };
+      }
+    } else {
+      const scaleX = newWidth / oldWidth;
+      const scaleY = newHeight / oldHeight;
+
+      for (const layer of flattenLayers(doc.rootGroup)) {
+        if (layer.type === 'group') continue;
+
+        layer.position = {
+          x: Math.round(layer.position.x * scaleX),
+          y: Math.round(layer.position.y * scaleY),
+        };
+
+        if (layer.type === 'raster') {
+          const raster = layer as RasterLayer;
+          const targetWidth = Math.max(1, Math.round(raster.bounds.width * scaleX));
+          const targetHeight = Math.max(1, Math.round(raster.bounds.height * scaleY));
+          if (raster.imageData) {
+            raster.imageData = scaleImage(raster.imageData, targetWidth, targetHeight);
+          }
+          raster.bounds = {
+            ...raster.bounds,
+            width: targetWidth,
+            height: targetHeight,
+          };
+          continue;
+        }
+
+        if (layer.type === 'text') {
+          layer.fontSize = Math.max(1, Math.round(layer.fontSize * ((scaleX + scaleY) / 2)));
+          if (layer.textBounds) {
+            layer.textBounds = {
+              ...layer.textBounds,
+              width: Math.max(1, Math.round(layer.textBounds.width * scaleX)),
+              height: Math.max(1, Math.round(layer.textBounds.height * scaleY)),
+            };
+          }
+        }
+      }
+
+      if (nextSelection) {
+        nextSelection = {
+          x: Math.round(nextSelection.x * scaleX),
+          y: Math.round(nextSelection.y * scaleY),
+          width: Math.max(1, Math.round(nextSelection.width * scaleX)),
+          height: Math.max(1, Math.round(nextSelection.height * scaleY)),
+        };
+      }
+    }
+
+    doc.canvas.size = { width: newWidth, height: newHeight };
+    doc.dirty = true;
+    set({
+      selection: nextSelection,
+      revision: get().revision + 1,
+      statusMessage: mode === 'canvas'
+        ? `Canvas resized to ${newWidth} x ${newHeight}`
+        : `Image resized to ${newWidth} x ${newHeight}`,
+    });
+    eventBus.emit('document:changed');
+    get().updateTitleBar();
+  },
+
+  openCanvasSizeDialog: (): void => {
+    set({ showCanvasSizeDialog: true });
+  },
+
+  closeCanvasSizeDialog: (): void => {
+    set({ showCanvasSizeDialog: false });
+  },
+
+  rotateCanvas: (direction): void => {
+    const { document: doc, selection } = get();
+    if (!doc) return;
+
+    const oldWidth = doc.canvas.size.width;
+    const oldHeight = doc.canvas.size.height;
+    let nextSelection = selection;
+
+    for (const layer of flattenLayers(doc.rootGroup)) {
+      if (layer.type === 'group') continue;
+
+      const { width: layerWidth, height: layerHeight } = getLayerSize(layer);
+      const x = layer.position.x;
+      const y = layer.position.y;
+
+      if (direction === '180') {
+        layer.position = {
+          x: oldWidth - (x + layerWidth),
+          y: oldHeight - (y + layerHeight),
+        };
+      } else if (direction === '90cw') {
+        layer.position = {
+          x: oldHeight - (y + layerHeight),
+          y: x,
+        };
+      } else {
+        layer.position = {
+          x: y,
+          y: oldWidth - (x + layerWidth),
+        };
+      }
+
+      if (layer.type === 'raster') {
+        const raster = layer as RasterLayer;
+        if (raster.imageData) {
+          if (direction === '180') {
+            raster.imageData = rotate180(raster.imageData);
+          } else if (direction === '90cw') {
+            raster.imageData = rotate90CW(raster.imageData);
+          } else {
+            raster.imageData = rotate90CCW(raster.imageData);
+          }
+        }
+
+        if (direction !== '180') {
+          raster.bounds = {
+            ...raster.bounds,
+            width: raster.bounds.height,
+            height: raster.bounds.width,
+          };
+        }
+      } else if (layer.type === 'text' && layer.textBounds && direction !== '180') {
+        layer.textBounds = {
+          ...layer.textBounds,
+          width: layer.textBounds.height,
+          height: layer.textBounds.width,
+        };
+      }
+    }
+
+    if (direction !== '180') {
+      doc.canvas.size = {
+        width: oldHeight,
+        height: oldWidth,
+      };
+    }
+
+    if (nextSelection) {
+      if (direction === '180') {
+        nextSelection = {
+          x: oldWidth - (nextSelection.x + nextSelection.width),
+          y: oldHeight - (nextSelection.y + nextSelection.height),
+          width: nextSelection.width,
+          height: nextSelection.height,
+        };
+      } else if (direction === '90cw') {
+        nextSelection = {
+          x: oldHeight - (nextSelection.y + nextSelection.height),
+          y: nextSelection.x,
+          width: nextSelection.height,
+          height: nextSelection.width,
+        };
+      } else {
+        nextSelection = {
+          x: nextSelection.y,
+          y: oldWidth - (nextSelection.x + nextSelection.width),
+          width: nextSelection.height,
+          height: nextSelection.width,
+        };
+      }
+    }
+
+    doc.dirty = true;
+    set({
+      selection: nextSelection,
+      revision: get().revision + 1,
+      statusMessage: `Canvas rotated ${direction}`,
+    });
+    eventBus.emit('document:changed');
+    get().updateTitleBar();
+  },
+
+  flipCanvas: (direction): void => {
+    const { document: doc, selection } = get();
+    if (!doc) return;
+
+    const { width: canvasWidth, height: canvasHeight } = doc.canvas.size;
+    let nextSelection = selection;
+
+    for (const layer of flattenLayers(doc.rootGroup)) {
+      if (layer.type === 'group') continue;
+
+      const { width: layerWidth, height: layerHeight } = getLayerSize(layer);
+      if (direction === 'horizontal') {
+        layer.position = {
+          x: canvasWidth - (layer.position.x + layerWidth),
+          y: layer.position.y,
+        };
+      } else {
+        layer.position = {
+          x: layer.position.x,
+          y: canvasHeight - (layer.position.y + layerHeight),
+        };
+      }
+
+      if (layer.type === 'raster') {
+        const raster = layer as RasterLayer;
+        if (raster.imageData) {
+          raster.imageData = direction === 'horizontal'
+            ? flipHorizontal(raster.imageData)
+            : flipVertical(raster.imageData);
+        }
+      }
+    }
+
+    if (nextSelection) {
+      if (direction === 'horizontal') {
+        nextSelection = {
+          ...nextSelection,
+          x: canvasWidth - (nextSelection.x + nextSelection.width),
+        };
+      } else {
+        nextSelection = {
+          ...nextSelection,
+          y: canvasHeight - (nextSelection.y + nextSelection.height),
+        };
+      }
+    }
+
+    doc.dirty = true;
+    set({
+      selection: nextSelection,
+      revision: get().revision + 1,
+      statusMessage: `Canvas flipped ${direction}`,
+    });
+    eventBus.emit('document:changed');
+    get().updateTitleBar();
+  },
+
+  // Tool settings
+  setGradientType: (type): void => {
+    set({ gradientType: type });
+  },
+
+  setShapeType: (type): void => {
+    set({ shapeType: type });
+  },
+
+  setFillTolerance: (tolerance): void => {
+    set({ fillTolerance: Math.max(0, Math.min(255, tolerance)) });
   },
 
 }));
@@ -1426,3 +1927,5 @@ export function getEventBus(): EventBusImpl {
 export function getViewport(): ViewportImpl {
   return viewport;
 }
+
+

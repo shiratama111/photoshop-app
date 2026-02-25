@@ -10,6 +10,8 @@
 // SAM Provider — AI-001
 export { MobileSamProvider } from './sam-provider';
 export type { OnnxSession, OnnxTensor, OnnxRuntime, SamProviderConfig } from './sam-provider';
+export { createSegmentationProvider } from './provider-factory';
+export type { CreateSegmentationProviderOptions } from './provider-factory';
 
 // Image utilities
 export {

@@ -2,7 +2,7 @@
  * @module components/canvas/SelectionOverlay
  * Marching ants selection overlay for the canvas.
  *
- * Renders a dashed animated border around the current selection rectangle.
+ * Supports rect selection, ellipse selection, and magic wand.
  * Uses CSS animation for the marching ants effect.
  *
  * @see APP-015: Selection tools
@@ -10,12 +10,15 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { useAppStore, getViewport } from '../../store';
+import type { RasterLayer } from '@photoshop-app/types';
+import { flattenLayers, magicWandSelect, selectionBounds } from '@photoshop-app/core';
 
 /** SelectionOverlay renders marching ants around the current selection. */
 export function SelectionOverlay(): React.JSX.Element | null {
   const selection = useAppStore((s) => s.selection);
   const document = useAppStore((s) => s.document);
   const activeTool = useAppStore((s) => s.activeTool);
+  const selectionSubTool = useAppStore((s) => s.selectionSubTool);
   const setSelection = useAppStore((s) => s.setSelection);
 
   const isDragging = useRef(false);
@@ -44,8 +47,10 @@ export function SelectionOverlay(): React.JSX.Element | null {
   const handleMouseDown = useCallback(
     (e: React.MouseEvent): void => {
       const tool = useAppStore.getState().activeTool;
-      if (tool !== 'select') return;
+      if (tool !== 'select' && tool !== 'crop') return;
       if (e.button !== 0) return;
+
+      const subTool = useAppStore.getState().selectionSubTool;
 
       e.preventDefault();
       e.stopPropagation();
@@ -59,6 +64,35 @@ export function SelectionOverlay(): React.JSX.Element | null {
         y: e.clientY - rect.top,
       });
 
+      // Magic wand — single click
+      if (subTool === 'wand') {
+        const state = useAppStore.getState();
+        const doc = state.document;
+        if (!doc) return;
+        const activeId = state.selectedLayerId;
+        if (!activeId) return;
+        const allLayers = flattenLayers(doc.rootGroup);
+        const layer = allLayers.find((l) => l.id === activeId);
+        if (!layer || layer.type !== 'raster') return;
+        const raster = layer as RasterLayer;
+        if (!raster.imageData) return;
+
+        const lx = Math.round(docPoint.x - raster.position.x);
+        const ly = Math.round(docPoint.y - raster.position.y);
+        const mask = magicWandSelect(raster.imageData, lx, ly, state.fillTolerance);
+        const bounds = selectionBounds(mask);
+        if (bounds) {
+          setSelection({
+            x: bounds.x + raster.position.x,
+            y: bounds.y + raster.position.y,
+            width: bounds.width,
+            height: bounds.height,
+          });
+        }
+        return;
+      }
+
+      // Rect or ellipse drag selection
       isDragging.current = true;
       dragStart.current = { x: docPoint.x, y: docPoint.y };
       setSelection(null);
@@ -97,7 +131,7 @@ export function SelectionOverlay(): React.JSX.Element | null {
 
   if (!document) return null;
 
-  let selectionRect: React.JSX.Element | null = null;
+  let selectionVis: React.JSX.Element | null = null;
   if (selection) {
     // Convert selection to screen coordinates
     const vp = getViewport();
@@ -112,27 +146,43 @@ export function SelectionOverlay(): React.JSX.Element | null {
     const sw = bottomRight.x - topLeft.x;
     const sh = bottomRight.y - topLeft.y;
 
-    selectionRect = (
-      <div
-        className="selection-marching-ants"
-        data-testid="selection-rect"
-        style={{
-          left: `${sx}px`,
-          top: `${sy}px`,
-          width: `${sw}px`,
-          height: `${sh}px`,
-        }}
-      />
-    );
+    if (selectionSubTool === 'ellipse') {
+      selectionVis = (
+        <div
+          className="selection-marching-ants selection-marching-ants--ellipse"
+          data-testid="selection-ellipse"
+          style={{
+            left: `${sx}px`,
+            top: `${sy}px`,
+            width: `${sw}px`,
+            height: `${sh}px`,
+            borderRadius: '50%',
+          }}
+        />
+      );
+    } else {
+      selectionVis = (
+        <div
+          className="selection-marching-ants"
+          data-testid="selection-rect"
+          style={{
+            left: `${sx}px`,
+            top: `${sy}px`,
+            width: `${sw}px`,
+            height: `${sh}px`,
+          }}
+        />
+      );
+    }
   }
 
   return (
     <div
-      className={`selection-overlay ${activeTool === 'select' ? 'selection-overlay--interactive' : ''}`}
+      className={`selection-overlay ${(activeTool === 'select' || activeTool === 'crop') ? 'selection-overlay--interactive' : ''}`}
       onMouseDown={handleMouseDown}
       data-testid="selection-overlay"
     >
-      {selectionRect}
+      {selectionVis}
     </div>
   );
 }

@@ -125,7 +125,7 @@ describe('listRecoveryFiles', () => {
 
   it('returns entries for valid meta files with matching data files', () => {
     // existsSync: first call for dir, subsequent calls for data files
-    mockExistsSync.mockImplementation((p: string) => {
+    mockExistsSync.mockImplementation((p) => {
       if (typeof p === 'string' && p.includes('autosave')) return true;
       return true;
     });
@@ -152,7 +152,7 @@ describe('listRecoveryFiles', () => {
   });
 
   it('skips meta files without matching data files', () => {
-    mockExistsSync.mockImplementation((p: string) => {
+    mockExistsSync.mockImplementation((p) => {
       if (typeof p === 'string' && p.endsWith('.autosave')) return false;
       return true;
     });

@@ -26,6 +26,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore, getViewport } from './store';
 import type { Tool } from './store';
+import {
+  invert as invertFilter,
+  desaturate as desaturateFilter,
+  grayscale as grayscaleFilter,
+  sepia as sepiaFilter,
+  sharpen as sharpenFilter,
+  gaussianBlur as gaussianBlurFilter,
+  motionBlur as motionBlurFilter,
+  addNoise as addNoiseFilter,
+  reduceNoise as reduceNoiseFilter,
+  posterize as posterizeFilter,
+  threshold as thresholdFilter,
+} from '@photoshop-app/core';
 import { CanvasView } from './components/canvas/CanvasView';
 import { LayerPanel } from './components/panels/LayerPanel';
 import { LayerContextMenu } from './components/panels/LayerContextMenu';
@@ -38,6 +51,10 @@ import { NewDocumentDialog } from './components/dialogs/NewDocumentDialog';
 import { AssetBrowser } from './components/panels/AssetBrowser';
 import { BrushOptionsPanel } from './components/panels/BrushOptionsPanel';
 import { ColorPalette } from './components/panels/ColorPalette';
+import { HistoryPanel } from './components/panels/HistoryPanel';
+import { AdjustmentsDialog } from './components/dialogs/AdjustmentsDialog';
+import { ImageSizeDialog } from './components/dialogs/ImageSizeDialog';
+import { CanvasSizeDialog } from './components/dialogs/CanvasSizeDialog';
 import { TextPropertiesPanel, InlineTextEditor } from './components/text-editor';
 import { useCutoutStore } from './components/tools/cutout-store';
 
@@ -58,6 +75,17 @@ interface ElectronMenuAPI {
   onMenuAbout?: (callback: () => void) => Unsubscribe | void;
   onBeforeClose?: (callback: () => void) => Unsubscribe | void;
   confirmClose?: (action: 'save' | 'discard' | 'cancel') => void;
+  // Image/Filter menu events
+  onMenuAdjustment?: (callback: (type: string) => void) => Unsubscribe | void;
+  onMenuFilter?: (callback: (type: string) => void) => Unsubscribe | void;
+  onMenuImageSize?: (callback: () => void) => Unsubscribe | void;
+  onMenuCanvasSize?: (callback: () => void) => Unsubscribe | void;
+  onMenuRotateCanvas?: (callback: (direction: string) => void) => Unsubscribe | void;
+  onMenuFlipCanvas?: (callback: (direction: string) => void) => Unsubscribe | void;
+  onMenuFill?: (callback: () => void) => Unsubscribe | void;
+  onMenuSelectAll?: (callback: () => void) => Unsubscribe | void;
+  onMenuDeselect?: (callback: () => void) => Unsubscribe | void;
+  onMenuCrop?: (callback: () => void) => Unsubscribe | void;
 }
 
 let startupChecksInitialized = false;
@@ -68,6 +96,12 @@ const TOOLS: Array<{ id: Tool; label: string; shortcut: string }> = [
   { id: 'move', label: 'Move', shortcut: 'M' },
   { id: 'brush', label: 'Brush', shortcut: 'B' },
   { id: 'eraser', label: 'Eraser', shortcut: 'E' },
+  { id: 'gradient', label: 'Gradient', shortcut: 'G' },
+  { id: 'fill', label: 'Fill', shortcut: 'K' },
+  { id: 'eyedropper', label: 'Eyedropper', shortcut: 'I' },
+  { id: 'clone', label: 'Clone', shortcut: 'S' },
+  { id: 'dodge', label: 'Dodge', shortcut: 'O' },
+  { id: 'shape', label: 'Shape', shortcut: 'U' },
   { id: 'text', label: 'Text', shortcut: 'T' },
   { id: 'crop', label: 'Crop', shortcut: 'C' },
   { id: 'segment', label: 'AI Cutout', shortcut: 'W' },
@@ -206,6 +240,7 @@ function SidebarWrapper(): React.JSX.Element {
           <>
             <LayerPanel />
             <TextPropertiesPanel />
+            <HistoryPanel />
           </>
         ) : (
           <AssetBrowser />
@@ -249,7 +284,7 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      // Ctrl+N — New Document dialog
+      // Ctrl+N 窶・New Document dialog
       if (e.ctrlKey && !e.shiftKey && e.key === 'n') {
         e.preventDefault();
         useAppStore.getState().openNewDocumentDialog();
@@ -291,14 +326,14 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      // Ctrl+A — Select all (APP-015)
+      // Ctrl+A 窶・Select all (APP-015)
       if (e.ctrlKey && !e.shiftKey && e.key === 'a') {
         e.preventDefault();
         useAppStore.getState().selectAll();
         return;
       }
 
-      // Ctrl+D — Deselect (APP-015)
+      // Ctrl+D 窶・Deselect (APP-015)
       if (e.ctrlKey && !e.shiftKey && e.key === 'd') {
         e.preventDefault();
         useAppStore.getState().clearSelection();
@@ -312,7 +347,7 @@ export function App(): React.JSX.Element {
           setActiveTool(tool);
         }
 
-        // [ / ] — Brush size adjustment (APP-014)
+        // [ / ] 窶・Brush size adjustment (APP-014)
         if (e.key === '[') {
           e.preventDefault();
           const s = useAppStore.getState();
@@ -324,13 +359,13 @@ export function App(): React.JSX.Element {
           s.setBrushSize(Math.min(500, s.brushSize + (s.brushSize >= 20 ? 10 : 2)));
         }
 
-        // X — Swap foreground/background colors (APP-016)
+        // X 窶・Swap foreground/background colors (APP-016)
         if (e.key === 'x' || e.key === 'X') {
           e.preventDefault();
           useAppStore.getState().swapColors();
         }
 
-        // D — Reset foreground/background to default (APP-016)
+        // D 窶・Reset foreground/background to default (APP-016)
         if (e.key === 'd') {
           e.preventDefault();
           useAppStore.getState().resetColors();
@@ -434,6 +469,72 @@ export function App(): React.JSX.Element {
       state.setPanOffset(vp.offset);
     });
     register(api.onMenuAbout, () => useAppStore.getState().toggleAbout());
+
+    // Image/Filter menu events
+    const registerWithArg = (
+      subscribe: ((callback: (arg: string) => void) => Unsubscribe | void) | undefined,
+      callback: (arg: string) => void,
+    ): void => {
+      const unsub = subscribe?.(callback);
+      if (typeof unsub === 'function') {
+        unsubs.push(unsub);
+      }
+    };
+
+    registerWithArg(api.onMenuAdjustment, (type) => {
+      const s = useAppStore.getState();
+      const validTypes = ['brightness-contrast', 'hue-saturation', 'levels', 'curves', 'color-balance'] as const;
+      if (validTypes.includes(type as typeof validTypes[number])) {
+        s.openAdjustmentDialog(type as typeof validTypes[number]);
+      }
+    });
+
+    registerWithArg(api.onMenuFilter, (type) => {
+      const s = useAppStore.getState();
+      // Direct-apply filters (no dialog needed)
+      const directFilters: Record<string, () => void> = {
+        invert: () => s.applyFilter((img: ImageData) => invertFilter(img)),
+        desaturate: () => s.applyFilter((img: ImageData) => desaturateFilter(img)),
+        grayscale: () => s.applyFilter((img: ImageData) => grayscaleFilter(img)),
+        sepia: () => s.applyFilter((img: ImageData) => sepiaFilter(img)),
+        sharpen: () => s.applyFilter((img: ImageData) => sharpenFilter(img, 100)),
+        gaussianBlur: () => s.applyFilter((img: ImageData) => gaussianBlurFilter(img, 4)),
+        motionBlur: () => s.applyFilter((img: ImageData) => motionBlurFilter(img, 0, 12)),
+        addNoise: () => s.applyFilter((img: ImageData) => addNoiseFilter(img, 20, false)),
+        reduceNoise: () => s.applyFilter((img: ImageData) => reduceNoiseFilter(img, 2)),
+        posterize: () => s.applyFilter((img: ImageData) => posterizeFilter(img, 6)),
+        threshold: () => s.applyFilter((img: ImageData) => thresholdFilter(img, 128)),
+      };
+      if (directFilters[type]) {
+        directFilters[type]();
+      } else {
+        s.setStatusMessage(`Unsupported filter: ${type}`);
+      }
+    });
+
+    register(api.onMenuFill, () => {
+      const s = useAppStore.getState();
+      s.setActiveTool('fill');
+      s.setStatusMessage('Fill tool selected');
+    });
+    register(api.onMenuImageSize, () => useAppStore.getState().openImageSizeDialog());
+    register(api.onMenuCanvasSize, () => useAppStore.getState().openCanvasSizeDialog());
+    registerWithArg(api.onMenuRotateCanvas, (direction) => {
+      useAppStore.getState().rotateCanvas(direction as '90cw' | '90ccw' | '180');
+    });
+    registerWithArg(api.onMenuFlipCanvas, (direction) => {
+      useAppStore.getState().flipCanvas(direction as 'horizontal' | 'vertical');
+    });
+
+    register(api.onMenuSelectAll, () => {
+      useAppStore.getState().selectAll();
+    });
+    register(api.onMenuDeselect, () => {
+      useAppStore.getState().clearSelection();
+    });
+    register(api.onMenuCrop, () => {
+      useAppStore.getState().cropToSelection();
+    });
 
     return (): void => {
       for (const unsub of unsubs) {
@@ -546,6 +647,9 @@ export function App(): React.JSX.Element {
       <CloseConfirmDialog />
       <AboutDialog />
       <NewDocumentDialog />
+      <AdjustmentsDialog />
+      <ImageSizeDialog />
+      <CanvasSizeDialog />
       {editingTextLayerId && <InlineTextEditor />}
       {layerStyleDialog && <LayerStyleDialog />}
       {dragOverActive && (
@@ -558,3 +662,4 @@ export function App(): React.JSX.Element {
     </div>
   );
 }
+

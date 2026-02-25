@@ -27,8 +27,15 @@ export type {
 // Effects
 export type {
   BaseEffect,
+  BevelDirection,
+  BevelEmbossEffect,
+  BevelStyle,
+  ColorOverlayEffect,
   DropShadowEffect,
   EffectType,
+  GradientOverlayEffect,
+  InnerGlowEffect,
+  InnerShadowEffect,
   LayerEffect,
   OuterGlowEffect,
   StrokeEffect,

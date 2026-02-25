@@ -81,7 +81,6 @@ function giveLayerPixels(layerId: string, width: number, height: number): void {
     data[i + 2] = 0;
     data[i + 3] = 255;
   }
-  // @ts-expect-error Using mock ImageData in test environment
   raster.imageData = new ImageData(data, width, height);
   raster.bounds = { x: 0, y: 0, width, height };
 }

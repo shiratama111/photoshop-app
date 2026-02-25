@@ -3,5 +3,7 @@
  * This avoids leaking extra bytes from pooled Buffer backing storage.
  */
 export function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
-  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  const out = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(out).set(buffer);
+  return out;
 }

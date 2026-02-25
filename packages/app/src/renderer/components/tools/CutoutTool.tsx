@@ -17,7 +17,8 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store';
 import { useCutoutStore } from './cutout-store';
-import type { PointPrompt } from '@photoshop-app/types';
+import type { PointPrompt, SegmentationProvider } from '@photoshop-app/types';
+import { findLayerById } from '@photoshop-app/core';
 import { MaskOverlay } from '../overlays/MaskOverlay';
 import {
   paintBrush,
@@ -140,47 +141,82 @@ export function CutoutTool(): React.JSX.Element | null {
   /** Run AI segmentation inference with the given prompts. */
   async function runInference(prompts: PointPrompt[]): Promise<void> {
     setCutoutProcessing(true);
+    let provider: SegmentationProvider | null = null;
     try {
-      const ai = await import('@photoshop-app/ai');
-      const provider = ai.createSegmentationProvider({ runtime: 'onnx' });
-      await provider.initialize();
-
-      // Get the image data from the selected layer or canvas
-      const exportCanvas = window.document.createElement('canvas');
-      const state = useAppStore.getState();
-      if (state.renderForExport) {
-        const rendered = state.renderForExport();
-        if (!rendered) {
-          setCutoutProcessing(false);
-          return;
-        }
-        exportCanvas.width = rendered.width;
-        exportCanvas.height = rendered.height;
-        const ctx = exportCanvas.getContext('2d')!;
-        ctx.drawImage(rendered, 0, 0);
-      } else {
+      const appState = useAppStore.getState();
+      const doc = appState.document;
+      const selectedLayerId = appState.selectedLayerId;
+      if (!doc || !selectedLayerId) {
         setCutoutProcessing(false);
         return;
       }
 
-      const ctx = exportCanvas.getContext('2d')!;
-      const imageData = ctx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
-      await provider.setImage(imageData);
-      const mask = await provider.segment(prompts);
+      const layer = findLayerById(doc.rootGroup, selectedLayerId);
+      if (!layer || layer.type !== 'raster' || !layer.imageData) {
+        setCutoutProcessing(false);
+        useAppStore.getState().setStatusMessage('Select a raster layer with pixels');
+        return;
+      }
+      const raster = layer;
+      const rasterImage = raster.imageData;
+      if (!rasterImage) {
+        setCutoutProcessing(false);
+        useAppStore.getState().setStatusMessage('Select a raster layer with pixels');
+        return;
+      }
+
+      const ai = await import('@photoshop-app/ai');
+      provider = ai.createSegmentationProvider({ runtime: 'onnx' });
+      await provider.initialize();
+
+      const localPrompts: PointPrompt[] = prompts
+        .map((prompt) => ({
+          ...prompt,
+          position: {
+            x: Math.round(prompt.position.x - raster.position.x),
+            y: Math.round(prompt.position.y - raster.position.y),
+          },
+        }))
+        .filter((prompt) => (
+          prompt.position.x >= 0
+          && prompt.position.y >= 0
+          && prompt.position.x < rasterImage.width
+          && prompt.position.y < rasterImage.height
+        ));
+
+      if (localPrompts.length === 0) {
+        setCutoutProcessing(false);
+        useAppStore.getState().setStatusMessage('Add prompts inside the selected layer');
+        return;
+      }
+
+      await provider.setImage(rasterImage, {
+        width: rasterImage.width,
+        height: rasterImage.height,
+      });
+      const mask = await provider.segment(localPrompts);
+
+      const currentCutout = useCutoutStore.getState().cutout;
+      if (!currentCutout) {
+        setCutoutProcessing(false);
+        return;
+      }
 
       // Apply boundary adjustment and feathering
       let finalData = mask.data;
-      if (cutout.boundaryAdjust !== 0) {
-        finalData = adjustBoundary(finalData, mask.size, cutout.boundaryAdjust);
+      if (currentCutout.boundaryAdjust !== 0) {
+        finalData = adjustBoundary(finalData, mask.size, currentCutout.boundaryAdjust);
       }
-      if (cutout.featherRadius > 0) {
-        finalData = featherMask(finalData, mask.size, cutout.featherRadius);
+      if (currentCutout.featherRadius > 0) {
+        finalData = featherMask(finalData, mask.size, currentCutout.featherRadius);
       }
 
       setCutoutMask({ ...mask, data: finalData });
     } catch {
       setCutoutProcessing(false);
       useAppStore.getState().setStatusMessage('AI inference failed');
+    } finally {
+      provider?.dispose();
     }
   }
 
