@@ -307,6 +307,37 @@ export function drawPolygon(
 }
 
 /**
+ * Create a shape on a transparent canvas and return as ImageData (for use as a new layer).
+ *
+ * @param type - Shape type to draw
+ * @param width - Canvas width
+ * @param height - Canvas height
+ * @param color - Shape color (RGBA 0-255)
+ * @param options - Draw options (filled, lineWidth, cornerRadius)
+ */
+export function drawShapeAsNewLayer(
+  type: 'rectangle' | 'ellipse' | 'rounded-rectangle',
+  width: number,
+  height: number,
+  color: Color,
+  options: DrawOptions = {},
+): ImageData {
+  const blank = new ImageData(width, height);
+  const margin = Math.max(options.lineWidth ?? 1, 4);
+
+  switch (type) {
+    case 'rectangle':
+      return drawRectangle(blank, margin, margin, width - margin * 2, height - margin * 2, color, { filled: true, ...options });
+    case 'ellipse':
+      return drawEllipse(blank, width / 2, height / 2, (width - margin * 2) / 2, (height - margin * 2) / 2, color, { filled: true, ...options });
+    case 'rounded-rectangle':
+      return drawRoundedRect(blank, margin, margin, width - margin * 2, height - margin * 2, options.cornerRadius ?? 20, color, { filled: true, ...options });
+    default:
+      return blank;
+  }
+}
+
+/**
  * Draws a rectangle with rounded corners
  */
 export function drawRoundedRect(

@@ -17,9 +17,10 @@
 import React, { useCallback, useRef, useState } from 'react';
 import type { LayerEffect } from '@photoshop-app/types';
 import { useAssetStore } from './asset-store';
+import { t } from '../../i18n';
 
 /** Active tab within the asset browser. */
-type AssetTab = 'brushes' | 'styles';
+type AssetTab = 'brushes' | 'styles' | 'textStyles';
 
 /** Format a list of effects as a short summary string. */
 function formatEffectSummary(effects: readonly LayerEffect[]): string {
@@ -225,7 +226,68 @@ function StylePanel(): React.JSX.Element {
   );
 }
 
-/** Asset browser panel with tabbed brush/style sections. */
+/** Text style preset panel — displays text style presets for one-click application. */
+function TextStylePanel(): React.JSX.Element {
+  const textStylePresets = useAssetStore((s) => s.textStylePresets);
+  const applyTextStyle = useAssetStore((s) => s.applyTextStyle);
+  const saveCurrentAsTextPreset = useAssetStore((s) => s.saveCurrentAsTextPreset);
+  const removeTextStyle = useAssetStore((s) => s.removeTextStyle);
+
+  const handleSave = useCallback((): void => {
+    const name = prompt(t('textStyle.enterName'));
+    if (name && name.trim()) {
+      saveCurrentAsTextPreset(name.trim());
+    }
+  }, [saveCurrentAsTextPreset]);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, presetId: string): void => {
+      e.preventDefault();
+      removeTextStyle(presetId);
+    },
+    [removeTextStyle],
+  );
+
+  return (
+    <>
+      <div className="text-style-list">
+        {textStylePresets.map((preset) => (
+          <div
+            key={preset.id}
+            className="text-style-item"
+            onClick={(): void => applyTextStyle(preset.id)}
+            onContextMenu={(e): void => handleContextMenu(e, preset.id)}
+            title={preset.builtIn ? preset.name : `${preset.name} (right-click to remove)`}
+          >
+            <div
+              className="text-style-item__name"
+              style={{
+                fontFamily: preset.fontFamily,
+                color: `rgb(${preset.color.r},${preset.color.g},${preset.color.b})`,
+                fontWeight: preset.bold ? 'bold' : 'normal',
+                fontStyle: preset.italic ? 'italic' : 'normal',
+              }}
+            >
+              {preset.name}
+            </div>
+            <div className="text-style-item__preview">
+              {preset.fontFamily} / {preset.fontSize}px
+              {preset.effects.length > 0 ? ` + ${formatEffectSummary(preset.effects)}` : ''}
+            </div>
+          </div>
+        ))}
+        {textStylePresets.length === 0 && (
+          <div className="asset-browser__empty">{t('textStyle.noPresets')}</div>
+        )}
+      </div>
+      <button className="text-style-save-btn" onClick={handleSave}>
+        {t('textStyle.saveCurrent')}
+      </button>
+    </>
+  );
+}
+
+/** Asset browser panel with tabbed brush/style/text-style sections. */
 export function AssetBrowser(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<AssetTab>('brushes');
 
@@ -248,8 +310,18 @@ export function AssetBrowser(): React.JSX.Element {
         >
           Styles
         </button>
+        <button
+          className={`asset-browser__tab ${
+            activeTab === 'textStyles' ? 'asset-browser__tab--active' : ''
+          }`}
+          onClick={(): void => setActiveTab('textStyles')}
+        >
+          {t('sidebar.textStyles')}
+        </button>
       </div>
-      {activeTab === 'brushes' ? <BrushPanel /> : <StylePanel />}
+      {activeTab === 'brushes' && <BrushPanel />}
+      {activeTab === 'styles' && <StylePanel />}
+      {activeTab === 'textStyles' && <TextStylePanel />}
     </div>
   );
 }

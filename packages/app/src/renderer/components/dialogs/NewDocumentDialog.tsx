@@ -8,14 +8,42 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '../../store';
 
-/** Preset dimensions for common document sizes. */
-const PRESETS = [
-  { label: 'Custom', width: 0, height: 0 },
-  { label: 'Full HD (1920×1080)', width: 1920, height: 1080 },
-  { label: 'HD (1280×720)', width: 1280, height: 720 },
-  { label: '4K (3840×2160)', width: 3840, height: 2160 },
-  { label: 'Small (800×600)', width: 800, height: 600 },
+/** Preset group for optgroup rendering. */
+interface PresetGroup {
+  label: string;
+  presets: readonly { label: string; width: number; height: number }[];
+}
+
+/** Preset dimensions organised by category. */
+const PRESET_GROUPS: readonly PresetGroup[] = [
+  {
+    label: 'Social Media',
+    presets: [
+      { label: 'YouTube Thumbnail (1280×720)', width: 1280, height: 720 },
+      { label: 'Twitter Header (1500×500)', width: 1500, height: 500 },
+      { label: 'Twitter Post (1200×675)', width: 1200, height: 675 },
+      { label: 'Instagram Square (1080×1080)', width: 1080, height: 1080 },
+      { label: 'Instagram Story (1080×1920)', width: 1080, height: 1920 },
+    ],
+  },
+  {
+    label: 'Standard',
+    presets: [
+      { label: 'Full HD (1920×1080)', width: 1920, height: 1080 },
+      { label: '4K (3840×2160)', width: 3840, height: 2160 },
+      { label: 'Small (800×600)', width: 800, height: 600 },
+    ],
+  },
 ] as const;
+
+/** Flat preset list: Custom entry + all group presets. */
+const PRESETS: readonly { label: string; width: number; height: number }[] = [
+  { label: 'Custom', width: 0, height: 0 },
+  ...PRESET_GROUPS.flatMap((g) => g.presets),
+];
+
+/** Default preset index — YouTube Thumbnail (index 1). */
+const DEFAULT_PRESET_INDEX = 1;
 
 const MIN_SIZE = 1;
 const MAX_SIZE = 16384;
@@ -31,17 +59,17 @@ export function NewDocumentDialog(): React.JSX.Element | null {
   const newDocument = useAppStore((s) => s.newDocument);
 
   const [name, setName] = useState('Untitled');
-  const [width, setWidth] = useState(1920);
-  const [height, setHeight] = useState(1080);
-  const [presetIndex, setPresetIndex] = useState(1); // Full HD
+  const [width, setWidth] = useState(PRESETS[DEFAULT_PRESET_INDEX].width);
+  const [height, setHeight] = useState(PRESETS[DEFAULT_PRESET_INDEX].height);
+  const [presetIndex, setPresetIndex] = useState(DEFAULT_PRESET_INDEX);
 
   // Reset state when dialog opens
   useEffect(() => {
     if (show) {
       setName('Untitled');
-      setWidth(1920);
-      setHeight(1080);
-      setPresetIndex(1);
+      setWidth(PRESETS[DEFAULT_PRESET_INDEX].width);
+      setHeight(PRESETS[DEFAULT_PRESET_INDEX].height);
+      setPresetIndex(DEFAULT_PRESET_INDEX);
     }
   }, [show]);
 
@@ -124,10 +152,18 @@ export function NewDocumentDialog(): React.JSX.Element | null {
               value={presetIndex}
               onChange={handlePresetChange}
             >
-              {PRESETS.map((p, i) => (
-                <option key={p.label} value={i}>
-                  {p.label}
-                </option>
+              <option value={0}>Custom</option>
+              {PRESET_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.presets.map((p) => {
+                    const idx = PRESETS.indexOf(p);
+                    return (
+                      <option key={p.label} value={idx}>
+                        {p.label}
+                      </option>
+                    );
+                  })}
+                </optgroup>
               ))}
             </select>
           </div>

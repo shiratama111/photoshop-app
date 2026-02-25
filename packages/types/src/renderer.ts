@@ -43,7 +43,7 @@ export interface RenderOptions {
   /** Whether to render guides and grid. */
   showGuides: boolean;
   /** Background pattern for transparent areas ('checkerboard' or solid color). */
-  background: 'checkerboard' | 'white' | 'black';
+  background: 'checkerboard' | 'white' | 'black' | 'transparent';
   /** Document dimensions for artboard/pasteboard rendering. */
   documentSize?: { width: number; height: number };
   /** Layer IDs that should be skipped during this render pass. */

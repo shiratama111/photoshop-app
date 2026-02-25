@@ -207,9 +207,25 @@ export {
   drawLine,
   drawPolygon,
   drawRoundedRect,
+  drawShapeAsNewLayer,
 } from './shape-tool';
 export type {
   Color as ShapeColor,
   Point as ShapePoint,
   DrawOptions as ShapeDrawOptions,
 } from './shape-tool';
+
+// Procedural generation — Phase 1-3/1-4
+export {
+  generateGradientBackground,
+  generatePattern,
+  generateConcentrationLines,
+  generateBorderFrame,
+  generateGradientMask,
+} from './procedural';
+export type {
+  ProceduralColor,
+  PatternType,
+  BorderStyle,
+  MaskDirection,
+} from './procedural';

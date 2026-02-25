@@ -79,6 +79,13 @@ export class Canvas2DRenderer implements Renderer {
     canvas: HTMLCanvasElement | CanvasLike,
     options: RenderOptions,
   ): void {
+    const measurePerf =
+      typeof performance !== 'undefined' &&
+      typeof location !== 'undefined' &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:');
+
+    if (measurePerf) performance.mark('render-start');
+
     const ctx = canvas.getContext('2d') as CanvasContext2DLike | null;
     if (!ctx) return;
 
@@ -136,6 +143,13 @@ export class Canvas2DRenderer implements Renderer {
 
       ctx.restore();
     }
+
+    if (measurePerf) {
+      performance.mark('render-end');
+      const measure = performance.measure('Canvas2DRenderer.render', 'render-start', 'render-end');
+      // eslint-disable-next-line no-console
+      console.debug(`[render] ${measure.duration.toFixed(2)}ms (${width}x${height})`);
+    }
   }
 
   /**
@@ -177,9 +191,12 @@ export class Canvas2DRenderer implements Renderer {
     ctx: CanvasContext2DLike,
     width: number,
     height: number,
-    bg: 'checkerboard' | 'white' | 'black',
+    bg: 'checkerboard' | 'white' | 'black' | 'transparent',
   ): void {
-    if (bg === 'white') {
+    if (bg === 'transparent') {
+      // No background — preserve alpha channel for PNG export
+      return;
+    } else if (bg === 'white') {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
     } else if (bg === 'black') {
@@ -826,32 +843,68 @@ export class Canvas2DRenderer implements Renderer {
     layer: RasterLayer | TextLayer,
     effect: DropShadowEffect,
   ): void {
-    const { color, opacity, angle, distance, blur } = effect;
+    const { color, opacity, angle, distance, blur, spread } = effect;
     const rad = (angle * Math.PI) / 180;
     const dx = Math.cos(rad) * distance;
     const dy = -Math.sin(rad) * distance;
 
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    ctx.filter = `blur(${blur}px)`;
-    ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
-
-    if (layer.type === 'raster') {
-      ctx.fillRect(
-        layer.position.x + dx,
-        layer.position.y + dy,
-        layer.bounds.width,
-        layer.bounds.height,
-      );
-    } else if (layer.type === 'text') {
+    if (layer.type === 'text') {
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      const spreadRatio = Math.max(0, Math.min(1, (spread ?? 0) / 100));
+      const effectiveBlur = Math.max(0, blur * (1 - spreadRatio));
+      ctx.filter = `blur(${effectiveBlur}px)`;
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
       const tc = ctx as unknown as CanvasRenderingContext2D;
       tc.translate(dx, dy);
       this.renderTextContent(ctx, layer, {
         fillStyle: `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`,
       });
+      ctx.restore();
+      return;
     }
 
-    ctx.restore();
+    // Raster: use alpha silhouette
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) return;
+
+    const spreadRatio = Math.max(0, Math.min(1, (spread ?? 0) / 100));
+    const effectiveBlur = Math.max(0, blur * (1 - spreadRatio));
+    const padding = Math.ceil(Math.abs(dx) + Math.abs(dy) + blur + 2);
+    const workWidth = bounds.width + padding * 2;
+    const workHeight = bounds.height + padding * 2;
+    if (workWidth <= 0 || workHeight <= 0) return;
+
+    const maskCanvas = this.pool.acquire(workWidth, workHeight);
+    const colorCanvas = this.pool.acquire(workWidth, workHeight);
+
+    try {
+      const maskCtx = maskCanvas.getContext('2d');
+      const colorCtx = colorCanvas.getContext('2d');
+      if (!maskCtx || !colorCtx) return;
+
+      if (!this.renderLayerMask(maskCtx, layer, padding, workWidth, workHeight)) return;
+
+      // Draw shifted mask with blur
+      colorCtx.clearRect(0, 0, workWidth, workHeight);
+      colorCtx.filter = `blur(${effectiveBlur}px)`;
+      colorCtx.drawImage(maskCanvas, dx, dy);
+      colorCtx.filter = 'none';
+
+      // Tint with shadow color
+      colorCtx.globalCompositeOperation = 'source-in';
+      colorCtx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+      colorCtx.fillRect(0, 0, workWidth, workHeight);
+      colorCtx.globalCompositeOperation = 'source-over';
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(colorCanvas, layer.position.x - padding, layer.position.y - padding);
+      ctx.restore();
+    } finally {
+      this.pool.release(maskCanvas);
+      this.pool.release(colorCanvas);
+    }
   }
 
   private renderOuterGlow(
@@ -859,26 +912,63 @@ export class Canvas2DRenderer implements Renderer {
     layer: RasterLayer | TextLayer,
     effect: OuterGlowEffect,
   ): void {
-    const { color, opacity, size } = effect;
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    ctx.filter = `blur(${size}px)`;
-    ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+    const { color, opacity, size, spread } = effect;
 
-    if (layer.type === 'raster') {
-      ctx.fillRect(
-        layer.position.x,
-        layer.position.y,
-        layer.bounds.width,
-        layer.bounds.height,
-      );
-    } else if (layer.type === 'text') {
+    if (layer.type === 'text') {
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      const spreadRatio = Math.max(0, Math.min(1, (spread ?? 0) / 100));
+      const effectiveBlur = Math.max(0, size * (1 - spreadRatio));
+      ctx.filter = `blur(${effectiveBlur}px)`;
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
       this.renderTextContent(ctx, layer, {
         fillStyle: `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`,
       });
+      ctx.restore();
+      return;
     }
 
-    ctx.restore();
+    // Raster: use alpha silhouette
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) return;
+
+    const spreadRatio = Math.max(0, Math.min(1, (spread ?? 0) / 100));
+    const effectiveBlur = Math.max(0, size * (1 - spreadRatio));
+    const padding = Math.ceil(size + 2);
+    const workWidth = bounds.width + padding * 2;
+    const workHeight = bounds.height + padding * 2;
+    if (workWidth <= 0 || workHeight <= 0) return;
+
+    const maskCanvas = this.pool.acquire(workWidth, workHeight);
+    const colorCanvas = this.pool.acquire(workWidth, workHeight);
+
+    try {
+      const maskCtx = maskCanvas.getContext('2d');
+      const colorCtx = colorCanvas.getContext('2d');
+      if (!maskCtx || !colorCtx) return;
+
+      if (!this.renderLayerMask(maskCtx, layer, padding, workWidth, workHeight)) return;
+
+      // Blur the mask
+      colorCtx.clearRect(0, 0, workWidth, workHeight);
+      colorCtx.filter = `blur(${effectiveBlur}px)`;
+      colorCtx.drawImage(maskCanvas, 0, 0);
+      colorCtx.filter = 'none';
+
+      // Tint with glow color
+      colorCtx.globalCompositeOperation = 'source-in';
+      colorCtx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+      colorCtx.fillRect(0, 0, workWidth, workHeight);
+      colorCtx.globalCompositeOperation = 'source-over';
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(colorCanvas, layer.position.x - padding, layer.position.y - padding);
+      ctx.restore();
+    } finally {
+      this.pool.release(maskCanvas);
+      this.pool.release(colorCanvas);
+    }
   }
 
   /**
@@ -1252,17 +1342,7 @@ export class Canvas2DRenderer implements Renderer {
     ctx.save();
     ctx.globalAlpha = opacity;
 
-    if (layer.type === 'raster') {
-      const tc = ctx as unknown as CanvasRenderingContext2D;
-      tc.strokeStyle = strokeColor;
-      tc.lineWidth = strokeSize;
-      tc.strokeRect(
-        layer.position.x,
-        layer.position.y,
-        layer.bounds.width,
-        layer.bounds.height,
-      );
-    } else if (layer.type === 'text') {
+    if (layer.type === 'text') {
       let lineWidth = strokeSize;
       if (position === 'outside') {
         lineWidth = strokeSize * 2;
@@ -1281,6 +1361,105 @@ export class Canvas2DRenderer implements Renderer {
         // Overdraw fill to mask inner half of the stroke
         this.renderTextContent(ctx, layer);
       }
+
+      ctx.restore();
+      return;
+    }
+
+    // Raster: stroke along alpha silhouette boundary
+    const bounds = this.getEffectBounds(layer);
+    if (!bounds) { ctx.restore(); return; }
+
+    const padding = Math.ceil(strokeSize + 2);
+    const workWidth = bounds.width + padding * 2;
+    const workHeight = bounds.height + padding * 2;
+    if (workWidth <= 0 || workHeight <= 0) { ctx.restore(); return; }
+
+    const maskCanvas = this.pool.acquire(workWidth, workHeight);
+    const dilatedCanvas = this.pool.acquire(workWidth, workHeight);
+    const strokeCanvas = this.pool.acquire(workWidth, workHeight);
+
+    try {
+      const maskCtx = maskCanvas.getContext('2d');
+      const dilatedCtx = dilatedCanvas.getContext('2d');
+      const strokeCtx = strokeCanvas.getContext('2d');
+      if (!maskCtx || !dilatedCtx || !strokeCtx) { ctx.restore(); return; }
+
+      if (!this.renderLayerMask(maskCtx, layer, padding, workWidth, workHeight)) {
+        ctx.restore();
+        return;
+      }
+
+      // Dilate mask by drawing shifted copies in a circle pattern
+      const dilateBy = position === 'inside' ? 0 : strokeSize;
+      dilatedCtx.clearRect(0, 0, workWidth, workHeight);
+      if (dilateBy > 0) {
+        const steps = Math.max(8, Math.ceil(dilateBy * 2));
+        for (let i = 0; i < steps; i++) {
+          const angle = (i / steps) * Math.PI * 2;
+          dilatedCtx.drawImage(
+            maskCanvas,
+            Math.cos(angle) * dilateBy,
+            Math.sin(angle) * dilateBy,
+          );
+        }
+        // Also draw center
+        dilatedCtx.drawImage(maskCanvas, 0, 0);
+      } else {
+        dilatedCtx.drawImage(maskCanvas, 0, 0);
+      }
+
+      // Build stroke band
+      strokeCtx.clearRect(0, 0, workWidth, workHeight);
+      if (position === 'outside') {
+        // Dilated minus original
+        strokeCtx.drawImage(dilatedCanvas, 0, 0);
+        strokeCtx.globalCompositeOperation = 'destination-out';
+        strokeCtx.drawImage(maskCanvas, 0, 0);
+        strokeCtx.globalCompositeOperation = 'source-over';
+      } else if (position === 'inside') {
+        // Original minus eroded (approximated by dilating the outside and subtracting)
+        // Erode = invert → dilate → invert. Approximate: mask minus (mask shifted inward)
+        const erodedCanvas = this.pool.acquire(workWidth, workHeight);
+        const erodedCtx = erodedCanvas.getContext('2d');
+        if (erodedCtx) {
+          // Build eroded mask: intersection of all shifted copies
+          erodedCtx.clearRect(0, 0, workWidth, workHeight);
+          erodedCtx.drawImage(maskCanvas, 0, 0);
+          const steps = Math.max(8, Math.ceil(strokeSize * 2));
+          for (let i = 0; i < steps; i++) {
+            const angle = (i / steps) * Math.PI * 2;
+            erodedCtx.globalCompositeOperation = 'destination-in';
+            erodedCtx.drawImage(
+              maskCanvas,
+              Math.cos(angle) * strokeSize,
+              Math.sin(angle) * strokeSize,
+            );
+          }
+          erodedCtx.globalCompositeOperation = 'source-over';
+
+          strokeCtx.drawImage(maskCanvas, 0, 0);
+          strokeCtx.globalCompositeOperation = 'destination-out';
+          strokeCtx.drawImage(erodedCanvas, 0, 0);
+          strokeCtx.globalCompositeOperation = 'source-over';
+        }
+        this.pool.release(erodedCanvas);
+      } else {
+        // Center: half outside, half inside
+        strokeCtx.drawImage(dilatedCanvas, 0, 0);
+      }
+
+      // Tint stroke band with color
+      strokeCtx.globalCompositeOperation = 'source-in';
+      strokeCtx.fillStyle = strokeColor;
+      strokeCtx.fillRect(0, 0, workWidth, workHeight);
+      strokeCtx.globalCompositeOperation = 'source-over';
+
+      ctx.drawImage(strokeCanvas, layer.position.x - padding, layer.position.y - padding);
+    } finally {
+      this.pool.release(maskCanvas);
+      this.pool.release(dilatedCanvas);
+      this.pool.release(strokeCanvas);
     }
 
     ctx.restore();

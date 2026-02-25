@@ -26,6 +26,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore, getViewport } from './store';
 import type { Tool } from './store';
+import type { EditorAction } from './editor-actions/types';
 import { t } from './i18n';
 import {
   invert as invertFilter,
@@ -57,6 +58,11 @@ import { AdjustmentsDialog } from './components/dialogs/AdjustmentsDialog';
 import { ImageSizeDialog } from './components/dialogs/ImageSizeDialog';
 import { CanvasSizeDialog } from './components/dialogs/CanvasSizeDialog';
 import { TextPropertiesPanel, InlineTextEditor } from './components/text-editor';
+import { TemplateDialog } from './components/dialogs/TemplateDialog';
+import { BackgroundDialog } from './components/dialogs/BackgroundDialog';
+import { PatternDialog } from './components/dialogs/PatternDialog';
+import { BorderDialog } from './components/dialogs/BorderDialog';
+import { GradientMaskDialog } from './components/dialogs/GradientMaskDialog';
 import { useCutoutStore } from './components/tools/cutout-store';
 
 type Unsubscribe = () => void;
@@ -87,6 +93,16 @@ interface ElectronMenuAPI {
   onMenuSelectAll?: (callback: () => void) => Unsubscribe | void;
   onMenuDeselect?: (callback: () => void) => Unsubscribe | void;
   onMenuCrop?: (callback: () => void) => Unsubscribe | void;
+  // Phase 1
+  onMenuPlaceImage?: (callback: () => void) => Unsubscribe | void;
+  onMenuSaveTemplate?: (callback: () => void) => Unsubscribe | void;
+  onMenuLoadTemplate?: (callback: () => void) => Unsubscribe | void;
+  openPlaceImageDialog?: () => Promise<{ filePath: string; data: ArrayBuffer } | null>;
+  // Phase 1-3/1-4
+  onMenuInsertBackground?: (callback: () => void) => Unsubscribe | void;
+  onMenuInsertPattern?: (callback: () => void) => Unsubscribe | void;
+  onMenuInsertBorder?: (callback: () => void) => Unsubscribe | void;
+  onMenuGradientMask?: (callback: () => void) => Unsubscribe | void;
 }
 
 let startupChecksInitialized = false;
@@ -548,6 +564,40 @@ export function App(): React.JSX.Element {
       useAppStore.getState().cropToSelection();
     });
 
+    // Phase 1: Place Image
+    register(api.onMenuPlaceImage, () => {
+      const s = useAppStore.getState();
+      if (!s.document) return;
+      void (async () => {
+        const result = await api.openPlaceImageDialog?.();
+        if (!result) return;
+        const name = result.filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') ?? 'Image';
+        void s.addImageAsLayer(result.data, name);
+      })();
+    });
+
+    // Phase 1: Template menu
+    register(api.onMenuSaveTemplate, () => {
+      useAppStore.getState().openTemplateSaveDialog();
+    });
+    register(api.onMenuLoadTemplate, () => {
+      useAppStore.getState().openTemplateLoadDialog();
+    });
+
+    // Phase 1-3/1-4: Insert menu
+    register(api.onMenuInsertBackground, () => {
+      useAppStore.getState().openBackgroundDialog();
+    });
+    register(api.onMenuInsertPattern, () => {
+      useAppStore.getState().openPatternDialog();
+    });
+    register(api.onMenuInsertBorder, () => {
+      useAppStore.getState().openBorderDialog();
+    });
+    register(api.onMenuGradientMask, () => {
+      useAppStore.getState().openGradientMaskDialog();
+    });
+
     return (): void => {
       for (const unsub of unsubs) {
         unsub();
@@ -581,6 +631,26 @@ export function App(): React.JSX.Element {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
+    };
+  }, []);
+
+  // Phase 2-1/2-2: Register global dispatcher for IPC from main process and DevTools.
+  // Uses async dispatch to support getCanvasSnapshot and other async actions.
+  useEffect(() => {
+    const win = window as unknown as Record<string, unknown>;
+    win.__EDITOR_DISPATCH_ACTIONS__ = async (actions: unknown[]): Promise<unknown[]> => {
+      const store = useAppStore.getState();
+      return store.dispatchEditorActionsAsync(actions as EditorAction[]);
+    };
+    // Expose store accessor for DevTools console (always returns fresh state+actions)
+    Object.defineProperty(window, '__APP_STORE__', {
+      get: () => useAppStore.getState(),
+      configurable: true,
+    });
+
+    return (): void => {
+      delete win.__EDITOR_DISPATCH_ACTIONS__;
+      delete win.__APP_STORE__;
     };
   }, []);
 
@@ -625,20 +695,34 @@ export function App(): React.JSX.Element {
       const files = e.dataTransfer.files;
       if (files.length === 0) return;
 
+      const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
       // Open the first supported file
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         // Electron provides the path property on dropped files
         const filePath = (file as unknown as { path: string }).path;
         if (filePath && isSupportedFile(filePath)) {
-          void openFileByPath(filePath);
+          const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+          // If document is open and it's an image file, add as layer instead of opening new doc
+          if (document && IMAGE_EXTENSIONS.has(ext)) {
+            const reader = new FileReader();
+            reader.onload = (): void => {
+              const buffer = reader.result as ArrayBuffer;
+              const name = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') ?? 'Image';
+              void useAppStore.getState().addImageAsLayer(buffer, name);
+            };
+            reader.readAsArrayBuffer(file);
+          } else {
+            void openFileByPath(filePath);
+          }
           return;
         }
       }
 
       useAppStore.getState().setStatusMessage(t('status.dropUnsupportedFormat'));
     },
-    [openFileByPath, setDragOverActive],
+    [document, openFileByPath, setDragOverActive],
   );
 
   return (
@@ -659,9 +743,14 @@ export function App(): React.JSX.Element {
       <CloseConfirmDialog />
       <AboutDialog />
       <NewDocumentDialog />
+      <TemplateDialog />
       <AdjustmentsDialog />
       <ImageSizeDialog />
       <CanvasSizeDialog />
+      <BackgroundDialog />
+      <PatternDialog />
+      <BorderDialog />
+      <GradientMaskDialog />
       {editingTextLayerId && <InlineTextEditor />}
       {layerStyleDialog && <LayerStyleDialog />}
       {dragOverActive && (

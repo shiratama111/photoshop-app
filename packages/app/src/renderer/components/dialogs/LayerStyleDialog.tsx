@@ -71,19 +71,19 @@ const ENABLE_LABEL_KEYS: Record<TabId, string> = {
   'bevel-emboss': 'layerStyle.enable.bevelEmboss',
 };
 
-/** Convert 0-1 Color to hex string. */
+/** Convert 0-255 Color to hex string. */
 function colorToHex(c: Color): string {
-  const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
-  const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
-  const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+  const r = Math.round(c.r).toString(16).padStart(2, '0');
+  const g = Math.round(c.g).toString(16).padStart(2, '0');
+  const b = Math.round(c.b).toString(16).padStart(2, '0');
   return `#${r}${g}${b}`;
 }
 
-/** Convert hex to 0-1 Color. */
+/** Convert hex to 0-255 Color. */
 function hexToColor(hex: string): Color {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
   return { r, g, b, a: 1 };
 }
 
@@ -106,7 +106,7 @@ function ensureTwoStops(stops: GradientOverlayEffect['stops']): GradientOverlayE
     ];
   }
   return [
-    { position: 0, color: { r: 1, g: 1, b: 1, a: 1 } },
+    { position: 0, color: { r: 255, g: 255, b: 255, a: 1 } },
     { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } },
   ];
 }
@@ -134,7 +134,7 @@ const DEFAULT_DROP_SHADOW: DropShadowEffect = {
 const DEFAULT_OUTER_GLOW: OuterGlowEffect = {
   type: 'outer-glow',
   enabled: true,
-  color: { r: 1, g: 1, b: 0.5, a: 1 },
+  color: { r: 255, g: 255, b: 128, a: 1 },
   opacity: 0.75,
   size: 10,
   spread: 0,
@@ -154,7 +154,7 @@ const DEFAULT_INNER_SHADOW: InnerShadowEffect = {
 const DEFAULT_INNER_GLOW: InnerGlowEffect = {
   type: 'inner-glow',
   enabled: true,
-  color: { r: 1, g: 1, b: 0.5, a: 1 },
+  color: { r: 255, g: 255, b: 128, a: 1 },
   opacity: 0.75,
   size: 10,
   choke: 0,
@@ -168,7 +168,7 @@ const DEFAULT_GRADIENT_OVERLAY: GradientOverlayEffect = {
   angle: 90,
   gradientType: 'linear',
   stops: [
-    { position: 0, color: { r: 1, g: 1, b: 1, a: 1 } },
+    { position: 0, color: { r: 255, g: 255, b: 255, a: 1 } },
     { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } },
   ],
   reverse: false,
@@ -185,7 +185,7 @@ const DEFAULT_BEVEL_EMBOSS: BevelEmbossEffect = {
   soften: 0,
   angle: 120,
   altitude: 30,
-  highlightColor: { r: 1, g: 1, b: 1, a: 1 },
+  highlightColor: { r: 255, g: 255, b: 255, a: 1 },
   highlightOpacity: 0.75,
   shadowColor: { r: 0, g: 0, b: 0, a: 1 },
   shadowOpacity: 0.75,
@@ -194,7 +194,7 @@ const DEFAULT_BEVEL_EMBOSS: BevelEmbossEffect = {
 const DEFAULT_COLOR_OVERLAY: ColorOverlayEffect = {
   type: 'color-overlay',
   enabled: true,
-  color: { r: 1, g: 0, b: 0, a: 1 },
+  color: { r: 255, g: 0, b: 0, a: 1 },
   opacity: 1,
 };
 

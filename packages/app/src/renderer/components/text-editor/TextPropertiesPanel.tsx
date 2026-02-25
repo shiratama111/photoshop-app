@@ -8,28 +8,21 @@ import type { TextLayer, Color, TextAlignment, WritingMode } from '@photoshop-ap
 import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
 import { t } from '../../i18n';
+import { FontSelector } from './FontSelector';
 
-const FONTS = [
-  'Arial',
-  'Helvetica',
-  'Times New Roman',
-  'Georgia',
-  'Courier New',
-  'Verdana',
-  'Impact',
-];
-
+/** Convert 0-255 Color to hex string. */
 function colorToHex(c: Color): string {
-  const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
-  const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
-  const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+  const r = Math.round(c.r).toString(16).padStart(2, '0');
+  const g = Math.round(c.g).toString(16).padStart(2, '0');
+  const b = Math.round(c.b).toString(16).padStart(2, '0');
   return `#${r}${g}${b}`;
 }
 
+/** Convert hex to 0-255 Color. */
 function hexToColor(hex: string): Color {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
   return { r, g, b, a: 1 };
 }
 
@@ -39,8 +32,8 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
   const writingMode = textLayer.writingMode ?? 'horizontal-tb';
 
   const onFontChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>): void => {
-      setTextProperty(id, 'fontFamily', e.target.value);
+    (fontFamily: string): void => {
+      setTextProperty(id, 'fontFamily', fontFamily);
     },
     [id, setTextProperty],
   );
@@ -111,15 +104,10 @@ function TextPropertiesPanelInner({ textLayer }: { textLayer: TextLayer }): Reac
 
       <div className="text-property-row">
         <span className="text-property-label">{t('text.font')}</span>
-        <select
-          className="text-property-select"
+        <FontSelector
           value={textLayer.fontFamily}
           onChange={onFontChange}
-        >
-          {FONTS.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
+        />
       </div>
 
       <div className="text-property-row">

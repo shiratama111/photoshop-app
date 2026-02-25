@@ -349,7 +349,9 @@ export class WebGLRenderer implements Renderer {
 
   // ── Background rendering ───────────────────────────────────────
 
-  private drawBackground(width: number, height: number, bg: 'checkerboard' | 'white' | 'black'): void {
+  private drawBackground(width: number, height: number, bg: 'checkerboard' | 'white' | 'black' | 'transparent'): void {
+    if (bg === 'transparent') return;
+
     const gl = this.gl!;
     gl.bindVertexArray(this.quadVAO);
 

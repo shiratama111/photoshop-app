@@ -147,6 +147,37 @@ export const ja: MessageCatalog = {
   'text.strikethrough': '取り消し線',
   'text.align.justify': '均等割付',
 
+  // Font selector
+  'font.importCustom': 'カスタムフォントを追加',
+  'font.customBadge': 'カスタムフォント',
+  'font.loadFailed': 'フォントの読み込みに失敗しました',
+  'font.imported': 'フォントを読み込みました',
+
+  // Text style presets
+  'sidebar.textStyles': 'テキストスタイル',
+  'textStyle.saveCurrent': '現在のスタイルを保存',
+  'textStyle.applied': 'スタイルを適用しました',
+  'textStyle.selectTextLayer': 'テキストレイヤーを選択してください',
+  'textStyle.enterName': 'スタイル名を入力',
+  'textStyle.noPresets': 'プリセットがありません',
+
+  // Place image
+  'menu.file.placeImage': '画像を配置...',
+  'status.placedImage': '画像を配置しました',
+
+  // Templates
+  'menu.file.saveTemplate': 'テンプレートとして保存...',
+  'menu.file.loadTemplate': 'テンプレートを読み込み...',
+  'template.saveTitle': 'テンプレートを保存',
+  'template.loadTitle': 'テンプレートを読み込み',
+  'template.name': '名前',
+  'template.save': '保存',
+  'template.load': '読み込み',
+  'template.delete': '削除',
+  'template.empty': 'テンプレートがありません',
+  'template.saved': 'テンプレートを保存しました',
+  'template.loaded': 'テンプレートを読み込みました',
+
   // Layer style dialog
   'layerStyle.title': 'レイヤースタイル',
   'layerStyle.tab.stroke': '境界線',
@@ -269,6 +300,78 @@ export const ja: MessageCatalog = {
   'status.cutoutApplied': 'マスクを適用しました',
   'status.cutoutSelectRasterToCut': '切り抜くラスターレイヤーを選択してください',
   'status.cutoutCutToNewLayer': '新規レイヤーへ切り抜きました',
+
+  // Insert menu — Phase 1-3/1-4
+  'menu.insert': '挿入',
+  'menu.insert.gradientBackground': 'グラデーション背景...',
+  'menu.insert.patternOverlay': 'パターンオーバーレイ...',
+  'menu.insert.borderFrame': '枠線フレーム...',
+  'menu.insert.gradientMask': 'グラデーションマスク...',
+
+  // Background dialog
+  'insert.backgroundTitle': 'グラデーション背景',
+  'insert.patternTitle': 'パターンオーバーレイ',
+  'insert.borderTitle': '枠線フレーム',
+  'insert.gradientMaskTitle': 'グラデーションマスク',
+  'insert.border': '枠線フレーム',
+  'background.presets': 'プリセット',
+  'background.custom': 'カスタム',
+  'background.type': 'タイプ',
+  'background.angle': '角度',
+  'background.colors': 'カラー',
+  'background.addColor': 'カラーを追加',
+  'background.preset.sunset': 'サンセット',
+  'background.preset.ocean': 'オーシャン',
+  'background.preset.nightSky': 'ナイトスカイ',
+  'background.preset.sakura': 'サクラ',
+  'background.preset.neon': 'ネオン',
+  'background.preset.forest': 'フォレスト',
+  'background.preset.fire': 'ファイア',
+  'background.preset.minimalLight': 'ミニマルライト',
+  'background.preset.minimalDark': 'ミニマルダーク',
+  'background.preset.youtubeRed': 'YouTubeレッド',
+  'background.preset.vaporwave': 'ヴェイパーウェーブ',
+  'background.preset.gold': 'ゴールド',
+
+  // Pattern dialog
+  'pattern.type': 'パターン種別',
+  'pattern.dots': 'ドット',
+  'pattern.stripes': 'ストライプ',
+  'pattern.checker': 'チェッカー',
+  'pattern.diagonalStripes': '斜めストライプ',
+  'pattern.concentrationLines': '集中線',
+  'pattern.spacing': '間隔',
+  'pattern.lineCount': '線の本数',
+  'pattern.innerRadius': '内側半径',
+  'pattern.lineWidth': '線幅',
+
+  // Border dialog
+  'border.width': '枠線幅',
+  'border.color': 'カラー',
+  'border.cornerRadius': '角丸',
+  'border.style': 'スタイル',
+  'border.style.solid': '実線',
+  'border.style.double': '二重線',
+  'border.style.dashed': '破線',
+
+  // Gradient mask dialog
+  'gradientMask.target': '対象レイヤー',
+  'gradientMask.noSelection': '選択なし',
+  'gradientMask.rasterOnly': 'ラスターレイヤーのみ',
+  'gradientMask.direction': '方向',
+  'gradientMask.direction.top': '上',
+  'gradientMask.direction.bottom': '下',
+  'gradientMask.direction.left': '左',
+  'gradientMask.direction.right': '右',
+  'gradientMask.direction.radial': '放射',
+  'gradientMask.fadeStart': 'フェード開始',
+  'gradientMask.fadeEnd': 'フェード終了',
+
+  // Common (Phase 1-3/1-4)
+  'common.preview': 'プレビュー',
+  'common.addAsLayer': 'レイヤーとして追加',
+  'common.applyMask': 'マスクを適用',
+  'status.gradientMaskApplied': 'グラデーションマスクを適用しました',
 
   // Cutout UI
   'cutout.title': 'AI切り抜き',
@@ -430,6 +533,37 @@ export const en: MessageCatalog = {
   'text.strikethrough': 'Strikethrough',
   'text.align.justify': 'Justify',
 
+  // Font selector
+  'font.importCustom': 'Import custom font',
+  'font.customBadge': 'Custom font',
+  'font.loadFailed': 'Failed to load font',
+  'font.imported': 'Font imported',
+
+  // Text style presets
+  'sidebar.textStyles': 'Text Styles',
+  'textStyle.saveCurrent': 'Save current style',
+  'textStyle.applied': 'Style applied',
+  'textStyle.selectTextLayer': 'Select a text layer first',
+  'textStyle.enterName': 'Enter style name',
+  'textStyle.noPresets': 'No presets',
+
+  // Place image
+  'menu.file.placeImage': 'Place Image...',
+  'status.placedImage': 'Placed image as layer',
+
+  // Templates
+  'menu.file.saveTemplate': 'Save as Template...',
+  'menu.file.loadTemplate': 'Load Template...',
+  'template.saveTitle': 'Save Template',
+  'template.loadTitle': 'Load Template',
+  'template.name': 'Name',
+  'template.save': 'Save',
+  'template.load': 'Load',
+  'template.delete': 'Delete',
+  'template.empty': 'No templates',
+  'template.saved': 'Template saved',
+  'template.loaded': 'Template loaded',
+
   // Layer style dialog
   'layerStyle.title': 'Layer Style',
   'layerStyle.tab.stroke': 'Stroke',
@@ -552,6 +686,78 @@ export const en: MessageCatalog = {
   'status.cutoutApplied': 'Applied mask',
   'status.cutoutSelectRasterToCut': 'Select a raster layer to cut',
   'status.cutoutCutToNewLayer': 'Cut to new layer',
+
+  // Insert menu — Phase 1-3/1-4
+  'menu.insert': 'Insert',
+  'menu.insert.gradientBackground': 'Gradient Background...',
+  'menu.insert.patternOverlay': 'Pattern Overlay...',
+  'menu.insert.borderFrame': 'Border Frame...',
+  'menu.insert.gradientMask': 'Gradient Mask...',
+
+  // Background dialog
+  'insert.backgroundTitle': 'Gradient Background',
+  'insert.patternTitle': 'Pattern Overlay',
+  'insert.borderTitle': 'Border Frame',
+  'insert.gradientMaskTitle': 'Gradient Mask',
+  'insert.border': 'Border Frame',
+  'background.presets': 'Presets',
+  'background.custom': 'Custom',
+  'background.type': 'Type',
+  'background.angle': 'Angle',
+  'background.colors': 'Colors',
+  'background.addColor': 'Add Color',
+  'background.preset.sunset': 'Sunset',
+  'background.preset.ocean': 'Ocean',
+  'background.preset.nightSky': 'Night Sky',
+  'background.preset.sakura': 'Sakura',
+  'background.preset.neon': 'Neon',
+  'background.preset.forest': 'Forest',
+  'background.preset.fire': 'Fire',
+  'background.preset.minimalLight': 'Minimal Light',
+  'background.preset.minimalDark': 'Minimal Dark',
+  'background.preset.youtubeRed': 'YouTube Red',
+  'background.preset.vaporwave': 'Vaporwave',
+  'background.preset.gold': 'Gold',
+
+  // Pattern dialog
+  'pattern.type': 'Pattern Type',
+  'pattern.dots': 'Dots',
+  'pattern.stripes': 'Stripes',
+  'pattern.checker': 'Checker',
+  'pattern.diagonalStripes': 'Diagonal Stripes',
+  'pattern.concentrationLines': 'Concentration Lines',
+  'pattern.spacing': 'Spacing',
+  'pattern.lineCount': 'Line Count',
+  'pattern.innerRadius': 'Inner Radius',
+  'pattern.lineWidth': 'Line Width',
+
+  // Border dialog
+  'border.width': 'Border Width',
+  'border.color': 'Color',
+  'border.cornerRadius': 'Corner Radius',
+  'border.style': 'Style',
+  'border.style.solid': 'Solid',
+  'border.style.double': 'Double',
+  'border.style.dashed': 'Dashed',
+
+  // Gradient mask dialog
+  'gradientMask.target': 'Target Layer',
+  'gradientMask.noSelection': 'No selection',
+  'gradientMask.rasterOnly': 'Raster layers only',
+  'gradientMask.direction': 'Direction',
+  'gradientMask.direction.top': 'Top',
+  'gradientMask.direction.bottom': 'Bottom',
+  'gradientMask.direction.left': 'Left',
+  'gradientMask.direction.right': 'Right',
+  'gradientMask.direction.radial': 'Radial',
+  'gradientMask.fadeStart': 'Fade Start',
+  'gradientMask.fadeEnd': 'Fade End',
+
+  // Common (Phase 1-3/1-4)
+  'common.preview': 'Preview',
+  'common.addAsLayer': 'Add as Layer',
+  'common.applyMask': 'Apply Mask',
+  'status.gradientMaskApplied': 'Gradient mask applied',
 
   // Cutout UI
   'cutout.title': 'AI Cutout',

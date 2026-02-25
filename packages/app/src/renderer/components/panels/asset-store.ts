@@ -17,13 +17,20 @@ import { create } from 'zustand';
 import type { BrushPreset, LayerStylePreset, LayerEffect } from '@photoshop-app/types';
 import { parseAbr } from '@photoshop-app/adapter-abr';
 import { parseAsl } from '@photoshop-app/adapter-asl';
+import { findLayerById } from '@photoshop-app/core';
 import { useAppStore } from '../../store';
+import { t } from '../../i18n';
+import type { TextStylePreset } from './text-style-presets';
+import { BUILT_IN_TEXT_STYLES } from './text-style-presets';
 
 /** localStorage key for persisted brush presets. */
 const STORAGE_KEY_BRUSHES = 'photoshop-app:brushPresets';
 
 /** localStorage key for persisted style presets. */
 const STORAGE_KEY_STYLES = 'photoshop-app:stylePresets';
+
+/** localStorage key for text style presets. */
+const STORAGE_KEY_TEXT_STYLES = 'photoshop-app:textStylePresets';
 
 /** Default thumbnail size in pixels. */
 const THUMBNAIL_SIZE = 48;
@@ -176,17 +183,45 @@ function saveStyles(styles: LayerStylePreset[]): void {
   }
 }
 
+/** Load persisted text style presets from localStorage, merging with built-ins. */
+function loadTextStyles(): TextStylePreset[] {
+  const builtInMap = new Map(BUILT_IN_TEXT_STYLES.map((s) => [s.id, s]));
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TEXT_STYLES);
+    if (!raw) return [...BUILT_IN_TEXT_STYLES];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...BUILT_IN_TEXT_STYLES];
+    const custom = (parsed as TextStylePreset[]).filter((s) => !builtInMap.has(s.id));
+    return [...BUILT_IN_TEXT_STYLES, ...custom];
+  } catch {
+    return [...BUILT_IN_TEXT_STYLES];
+  }
+}
+
+/** Save text style presets to localStorage (custom only — built-ins are always loaded). */
+function saveTextStyles(styles: TextStylePreset[]): void {
+  try {
+    const custom = styles.filter((s) => !s.builtIn);
+    localStorage.setItem(STORAGE_KEY_TEXT_STYLES, JSON.stringify(custom));
+  } catch {
+    // quota exceeded
+  }
+}
+
 // Initialize from localStorage (gracefully handles missing APIs in Node.js)
 let initialBrushData: { brushes: BrushPreset[]; thumbnails: Record<string, string> } = {
   brushes: [],
   thumbnails: {},
 };
 let initialStyles: LayerStylePreset[] = [];
+let initialTextStyles: TextStylePreset[] = [];
 try {
   initialBrushData = loadBrushes();
   initialStyles = loadStyles();
+  initialTextStyles = loadTextStyles();
 } catch {
   // localStorage unavailable (Node.js test environment)
+  initialTextStyles = [...BUILT_IN_TEXT_STYLES];
 }
 
 /** Asset store state. */
@@ -199,6 +234,8 @@ export interface AssetState {
   stylePresets: LayerStylePreset[];
   /** Currently selected brush preset ID. */
   selectedBrushId: string | null;
+  /** Text style presets (built-in + custom). */
+  textStylePresets: TextStylePreset[];
 }
 
 /** Asset store actions. */
@@ -219,6 +256,12 @@ export interface AssetActions {
   clearBrushes: () => void;
   /** Remove all style presets. */
   clearStyles: () => void;
+  /** Apply a text style preset to the selected text layer. */
+  applyTextStyle: (presetId: string) => void;
+  /** Save the current text layer's style as a custom preset. */
+  saveCurrentAsTextPreset: (name: string) => void;
+  /** Remove a text style preset (custom only). */
+  removeTextStyle: (id: string) => void;
 }
 
 /** Zustand store for asset (brush/style) preset management. */
@@ -227,6 +270,7 @@ export const useAssetStore = create<AssetState & AssetActions>((set, get) => ({
   brushThumbnails: initialBrushData.thumbnails,
   stylePresets: initialStyles,
   selectedBrushId: null,
+  textStylePresets: initialTextStyles,
 
   importAbr: (buffer, fileName): void => {
     const result = parseAbr(buffer, fileName);
@@ -309,5 +353,70 @@ export const useAssetStore = create<AssetState & AssetActions>((set, get) => ({
   clearStyles: (): void => {
     set({ stylePresets: [] });
     saveStyles([]);
+  },
+
+  applyTextStyle: (presetId): void => {
+    const preset = get().textStylePresets.find((s) => s.id === presetId);
+    if (!preset) return;
+    const appState = useAppStore.getState();
+    const { selectedLayerId, document: doc } = appState;
+    if (!selectedLayerId || !doc) {
+      appState.setStatusMessage(t('textStyle.selectTextLayer'));
+      return;
+    }
+    const layer = findLayerById(doc.rootGroup, selectedLayerId);
+    if (!layer || layer.type !== 'text') {
+      appState.setStatusMessage(t('textStyle.selectTextLayer'));
+      return;
+    }
+    // Apply text properties + effects in batch
+    appState.setTextProperties(selectedLayerId, {
+      fontFamily: preset.fontFamily,
+      fontSize: preset.fontSize,
+      bold: preset.bold,
+      italic: preset.italic,
+      color: { ...preset.color },
+      ...(preset.letterSpacing !== undefined ? { letterSpacing: preset.letterSpacing } : {}),
+      ...(preset.lineHeight !== undefined ? { lineHeight: preset.lineHeight } : {}),
+    });
+    if (preset.effects.length > 0) {
+      appState.setLayerEffects(selectedLayerId, preset.effects.map((e) => ({ ...e })));
+    }
+    appState.setStatusMessage(`${t('textStyle.applied')}: ${preset.name}`);
+  },
+
+  saveCurrentAsTextPreset: (name): void => {
+    const appState = useAppStore.getState();
+    const { selectedLayerId, document: doc } = appState;
+    if (!selectedLayerId || !doc) return;
+    const layer = findLayerById(doc.rootGroup, selectedLayerId);
+    if (!layer || layer.type !== 'text') return;
+
+    const newPreset: TextStylePreset = {
+      id: crypto.randomUUID(),
+      name,
+      category: 'custom',
+      fontFamily: layer.fontFamily,
+      fontSize: layer.fontSize,
+      bold: layer.bold,
+      italic: layer.italic,
+      color: { ...layer.color },
+      letterSpacing: layer.letterSpacing,
+      lineHeight: layer.lineHeight,
+      effects: layer.effects.map((e) => ({ ...e })),
+      source: null,
+      builtIn: false,
+    };
+    const updated = [...get().textStylePresets, newPreset];
+    set({ textStylePresets: updated });
+    saveTextStyles(updated);
+  },
+
+  removeTextStyle: (id): void => {
+    const preset = get().textStylePresets.find((s) => s.id === id);
+    if (!preset || preset.builtIn) return;
+    const updated = get().textStylePresets.filter((s) => s.id !== id);
+    set({ textStylePresets: updated });
+    saveTextStyles(updated);
   },
 }));

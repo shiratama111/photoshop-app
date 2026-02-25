@@ -18,13 +18,15 @@
  * @see APP-008: Auto-save, close confirmation, title bar, drag-drop file read
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { buildMenu } from './menu';
 import { registerFileDialogHandlers } from './file-dialog';
 import { registerAutoSaveHandlers } from './auto-save';
+import { registerFontHandlers } from './font-list';
 import { bufferToArrayBuffer } from './buffer-utils';
+import { startHttpBridge, stopHttpBridge } from './http-bridge';
 
 /** The main application window. */
 let mainWindow: BrowserWindow | null = null;
@@ -139,6 +141,31 @@ function registerWindowHandlers(): void {
     }
   });
 
+  // Place image file dialog — Phase 1
+  ipcMain.handle('dialog:placeImage', async () => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    try {
+      const data = fs.readFileSync(filePath);
+      return { filePath, data: bufferToArrayBuffer(data) };
+    } catch {
+      return null;
+    }
+  });
+
+  // Phase 2-1: Editor Action API — forward to renderer
+  ipcMain.handle('editor:executeActions', async (_event, actions: unknown[]) => {
+    if (!mainWindow) return [];
+    return mainWindow.webContents.executeJavaScript(
+      `window.__EDITOR_DISPATCH_ACTIONS__(${JSON.stringify(actions)})`,
+    );
+  });
+
   // Close confirmation response from renderer \u2014 APP-008
   ipcMain.on('app:confirmClose', (_event, action: string) => {
     if (action === 'cancel') {
@@ -158,8 +185,12 @@ function registerWindowHandlers(): void {
 app.whenReady().then(() => {
   registerFileDialogHandlers(() => mainWindow);
   registerAutoSaveHandlers();
+  registerFontHandlers();
   registerWindowHandlers();
   createWindow();
+
+  // Phase 2-3: Start HTTP bridge for MCP server communication
+  startHttpBridge(() => mainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -169,6 +200,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopHttpBridge();
   if (process.platform !== 'darwin') {
     app.quit();
   }

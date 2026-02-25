@@ -65,6 +65,13 @@ const electronAPI = {
   ): Promise<{ data: ArrayBuffer } | null> =>
     ipcRenderer.invoke('autosave:readRecovery', documentId),
 
+  // Font system
+  getSystemFonts: (): Promise<string[]> =>
+    ipcRenderer.invoke('font:getSystemFonts'),
+
+  loadCustomFont: (filePath: string): Promise<{ data: ArrayBuffer; name: string } | null> =>
+    ipcRenderer.invoke('font:loadCustomFont', filePath),
+
   // Title bar \u2014 APP-008
   setTitle: (title: string): Promise<void> =>
     ipcRenderer.invoke('window:setTitle', title),
@@ -195,6 +202,60 @@ const electronAPI = {
     const listener = (): void => callback();
     ipcRenderer.on('menu:crop', listener);
     return (): void => { ipcRenderer.removeListener('menu:crop', listener); };
+  },
+
+  // Phase 1: Place Image menu
+  onMenuPlaceImage: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:placeImage', listener);
+    return (): void => { ipcRenderer.removeListener('menu:placeImage', listener); };
+  },
+
+  // Phase 1: Template menu
+  onMenuSaveTemplate: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:saveTemplate', listener);
+    return (): void => { ipcRenderer.removeListener('menu:saveTemplate', listener); };
+  },
+  onMenuLoadTemplate: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:loadTemplate', listener);
+    return (): void => { ipcRenderer.removeListener('menu:loadTemplate', listener); };
+  },
+
+  // Phase 1: Place image file dialog
+  openPlaceImageDialog: (): Promise<{ filePath: string; data: ArrayBuffer } | null> =>
+    ipcRenderer.invoke('dialog:placeImage'),
+
+  // Phase 1-3/1-4: Insert menu events
+  onMenuInsertBackground: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:insertBackground', listener);
+    return (): void => { ipcRenderer.removeListener('menu:insertBackground', listener); };
+  },
+  onMenuInsertPattern: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:insertPattern', listener);
+    return (): void => { ipcRenderer.removeListener('menu:insertPattern', listener); };
+  },
+  onMenuInsertBorder: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:insertBorder', listener);
+    return (): void => { ipcRenderer.removeListener('menu:insertBorder', listener); };
+  },
+  onMenuGradientMask: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('menu:gradientMask', listener);
+    return (): void => { ipcRenderer.removeListener('menu:gradientMask', listener); };
+  },
+
+  // Phase 2-1: Editor Action API IPC
+  executeEditorActions: (actions: unknown[]): Promise<unknown[]> =>
+    ipcRenderer.invoke('editor:executeActions', actions),
+  onEditorExecuteActions: (callback: (actions: unknown[]) => unknown[]): (() => void) => {
+    const listener = (_event: unknown, actions: unknown[]): unknown[] => callback(actions);
+    ipcRenderer.on('editor:executeActions', listener as (...args: unknown[]) => void);
+    return (): void => { ipcRenderer.removeListener('editor:executeActions', listener as (...args: unknown[]) => void); };
   },
 };
 

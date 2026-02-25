@@ -58,6 +58,13 @@ import {
 import { importPsd, exportPsd } from '@photoshop-app/adapter-psd';
 import { Canvas2DRenderer, ViewportImpl } from '@photoshop-app/render';
 import { t } from './i18n';
+import type { EditorAction, ActionResult } from './editor-actions/types';
+import {
+  executeAction as dispatchSingleAction,
+  executeActions as dispatchMultipleActions,
+  executeActionAsync as dispatchSingleActionAsync,
+  executeActionsAsync as dispatchMultipleActionsAsync,
+} from './editor-actions/dispatcher';
 
 /** Active tool in the toolbar. */
 export type Tool =
@@ -280,6 +287,16 @@ export interface AppState {
   historyEntries: string[];
   /** Current position in the history entries list. 0 = Original. */
   historyIndex: number;
+
+  // Phase 1-3/1-4 procedural generation dialogs
+  /** Whether the background dialog is visible. */
+  showBackgroundDialog: boolean;
+  /** Whether the pattern dialog is visible. */
+  showPatternDialog: boolean;
+  /** Whether the border dialog is visible. */
+  showBorderDialog: boolean;
+  /** Whether the gradient mask dialog is visible. */
+  showGradientMaskDialog: boolean;
 }
 
 /** Actions on the state. */
@@ -490,6 +507,47 @@ export interface AppActions {
   setShapeType: (type: AppState['shapeType']) => void;
   /** Set the fill tolerance. */
   setFillTolerance: (tolerance: number) => void;
+
+  // Image placement — Phase 1
+  /** Add an image as a new raster layer in the current document. */
+  addImageAsLayer: (data: ArrayBuffer, name: string) => Promise<void>;
+
+  // Batch text property update — Phase 1
+  /** Set multiple text properties at once in a single undo entry. */
+  setTextProperties: (layerId: string, props: Record<string, unknown>) => void;
+
+  // Template dialog — Phase 1
+  /** Show the template dialog in save or load mode. */
+  showTemplateDialog: 'save' | 'load' | null;
+  openTemplateSaveDialog: () => void;
+  openTemplateLoadDialog: () => void;
+  closeTemplateDialog: () => void;
+
+  // Phase 1-3/1-4 procedural generation
+  openBackgroundDialog: () => void;
+  closeBackgroundDialog: () => void;
+  openPatternDialog: () => void;
+  closePatternDialog: () => void;
+  openBorderDialog: () => void;
+  closeBorderDialog: () => void;
+  openGradientMaskDialog: () => void;
+  closeGradientMaskDialog: () => void;
+  /** Add a procedurally generated ImageData as a new raster layer. */
+  addProceduralLayer: (name: string, imageData: ImageData) => void;
+  /** Apply a gradient mask to a raster layer (modifies alpha, undoable). */
+  applyGradientMask: (layerId: string, maskedImageData: ImageData) => void;
+
+  // Phase 2-1: Editor Action API
+  /** Dispatch a single EditorAction with validation. */
+  dispatchEditorAction: (action: EditorAction) => ActionResult;
+  /** Dispatch multiple EditorActions sequentially with validation. */
+  dispatchEditorActions: (actions: EditorAction[]) => ActionResult[];
+
+  // Phase 2-2: Async dispatch (for getCanvasSnapshot etc.)
+  /** Dispatch a single EditorAction, supporting async actions. */
+  dispatchEditorActionAsync: (action: EditorAction) => Promise<ActionResult>;
+  /** Dispatch multiple EditorActions sequentially, supporting async actions. */
+  dispatchEditorActionsAsync: (actions: EditorAction[]) => Promise<ActionResult[]>;
 }
 
 /**
@@ -661,6 +719,8 @@ interface ElectronBridgeAPI {
   setTitle: (title: string) => Promise<void>;
   readFileByPath: (filePath: string) => Promise<{ filePath: string; data: ArrayBuffer } | null>;
   confirmClose: (action: 'save' | 'discard' | 'cancel') => void;
+  getSystemFonts?: () => Promise<string[]>;
+  loadCustomFont?: (filePath: string) => Promise<{ data: ArrayBuffer; name: string } | null>;
 }
 
 function getElectronAPI(): ElectronBridgeAPI {
@@ -839,8 +899,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   selection: null,
   selectionSubTool: 'rect',
   showNewDocumentDialog: false,
+  showTemplateDialog: null,
   historyEntries: ['Original'],
   historyIndex: 0,
+  showBackgroundDialog: false,
+  showPatternDialog: false,
+  showBorderDialog: false,
+  showGradientMaskDialog: false,
 
   // Basic actions
   setDocument: (doc): void => set({ document: doc }),
@@ -1420,7 +1485,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         renderEffects: true,
         showSelection: false,
         showGuides: false,
-        background: format === 'jpeg' ? 'white' : 'checkerboard',
+        background: format === 'jpeg' ? 'white' : 'transparent',
       });
 
       const blob = await offscreen.convertToBlob({ type: mimeType, quality: 0.92 });
@@ -2222,6 +2287,170 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setFillTolerance: (tolerance): void => {
     set({ fillTolerance: Math.max(0, Math.min(255, tolerance)) });
+  },
+
+  // ── Phase 1: Add image as layer ──────────────────────────────────
+  addImageAsLayer: async (data, name): Promise<void> => {
+    const { document: doc } = get();
+    if (!doc) return;
+    try {
+      const blob = new Blob([data]);
+      const bitmap = await createImageBitmap(blob);
+      const { width, height } = bitmap;
+      const offscreen = new OffscreenCanvas(width, height);
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) {
+        bitmap.close();
+        return;
+      }
+      ctx.drawImage(bitmap, 0, 0);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      bitmap.close();
+
+      const layer = createRasterLayer(name, width, height);
+      (layer as unknown as { imageData: ImageData }).imageData = imageData;
+      layer.bounds = { x: 0, y: 0, width, height };
+
+      const cmd = new AddLayerCommand(doc.rootGroup, layer);
+      executeCommand(cmd, set);
+      set({
+        selectedLayerId: layer.id,
+        statusMessage: `${t('status.placedImage')}: ${name} (${width} x ${height})`,
+      });
+      doc.selectedLayerId = layer.id;
+      doc.dirty = true;
+      eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
+      get().updateTitleBar();
+    } catch {
+      set({ statusMessage: `${t('status.failedOpenImage')}: ${name}` });
+    }
+  },
+
+  // ── Phase 1: Batch text property update ──────────────────────────
+  setTextProperties: (layerId, props): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'text') return;
+
+    // Apply all properties as individual commands but group them
+    // by executing sequentially — at minimum they share one undo boundary
+    for (const [key, value] of Object.entries(props)) {
+      const textLayer = layer as Layer & { underline?: boolean; strikethrough?: boolean };
+      if (key === 'writingMode' && layer.writingMode === undefined) {
+        layer.writingMode = 'horizontal-tb';
+      }
+      if (key === 'underline' && textLayer.underline === undefined) {
+        textLayer.underline = false;
+      }
+      if (key === 'strikethrough' && textLayer.strikethrough === undefined) {
+        textLayer.strikethrough = false;
+      }
+      const cmd = new SetLayerPropertyCommand(
+        layer,
+        key as unknown as keyof Layer,
+        value as Layer[keyof Layer],
+      );
+      executeCommand(cmd, set);
+    }
+    doc.dirty = true;
+    eventBus.emit('layer:property-changed', { layerId, property: 'text' });
+    get().updateTitleBar();
+  },
+
+  // ── Phase 1: Template dialog ─────────────────────────────────────
+  openTemplateSaveDialog: (): void => {
+    set({ showTemplateDialog: 'save' });
+  },
+  openTemplateLoadDialog: (): void => {
+    set({ showTemplateDialog: 'load' });
+  },
+  closeTemplateDialog: (): void => {
+    set({ showTemplateDialog: null });
+  },
+
+  // ── Phase 1-3/1-4: Procedural generation dialogs ─────────────────
+  openBackgroundDialog: (): void => {
+    set({ showBackgroundDialog: true });
+  },
+  closeBackgroundDialog: (): void => {
+    set({ showBackgroundDialog: false });
+  },
+  openPatternDialog: (): void => {
+    set({ showPatternDialog: true });
+  },
+  closePatternDialog: (): void => {
+    set({ showPatternDialog: false });
+  },
+  openBorderDialog: (): void => {
+    set({ showBorderDialog: true });
+  },
+  closeBorderDialog: (): void => {
+    set({ showBorderDialog: false });
+  },
+  openGradientMaskDialog: (): void => {
+    set({ showGradientMaskDialog: true });
+  },
+  closeGradientMaskDialog: (): void => {
+    set({ showGradientMaskDialog: false });
+  },
+
+  addProceduralLayer: (name, imageData): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const { width, height } = imageData;
+    const layer = createRasterLayer(name, width, height);
+    layer.imageData = imageData;
+    const cmd = new AddLayerCommand(doc.rootGroup, layer);
+    executeCommand(cmd, set);
+    set({ selectedLayerId: layer.id, statusMessage: `${t('status.added')}: ${name}` });
+    doc.selectedLayerId = layer.id;
+    doc.dirty = true;
+    eventBus.emit('layer:added', { layer, parentId: doc.rootGroup.id });
+    get().updateTitleBar();
+  },
+
+  applyGradientMask: (layerId, maskedImageData): void => {
+    const { document: doc } = get();
+    if (!doc) return;
+    const layer = findLayerById(doc.rootGroup, layerId);
+    if (!layer || layer.type !== 'raster') return;
+    const raster = layer as RasterLayer;
+    if (!raster.imageData) return;
+
+    const oldData = new Uint8ClampedArray(raster.imageData.data);
+    const newData = new Uint8ClampedArray(maskedImageData.data);
+
+    raster.imageData = maskedImageData;
+
+    const cmd = new ModifyPixelsCommand(
+      raster,
+      { x: 0, y: 0, width: raster.bounds.width, height: raster.bounds.height },
+      oldData,
+      newData,
+    );
+    executeCommand(cmd, set);
+    doc.dirty = true;
+    set({ statusMessage: t('status.gradientMaskApplied') });
+    get().updateTitleBar();
+  },
+
+  // ── Phase 2-1: Editor Action API ───────────────────────────────
+  dispatchEditorAction: (action: EditorAction): ActionResult => {
+    return dispatchSingleAction(action);
+  },
+
+  dispatchEditorActions: (actions: EditorAction[]): ActionResult[] => {
+    return dispatchMultipleActions(actions);
+  },
+
+  // ── Phase 2-2: Async dispatch (for getCanvasSnapshot etc.) ────
+  dispatchEditorActionAsync: async (action: EditorAction): Promise<ActionResult> => {
+    return dispatchSingleActionAsync(action);
+  },
+
+  dispatchEditorActionsAsync: async (actions: EditorAction[]): Promise<ActionResult[]> => {
+    return dispatchMultipleActionsAsync(actions);
   },
 
 }));

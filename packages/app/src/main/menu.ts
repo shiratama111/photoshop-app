@@ -75,7 +75,60 @@ export function buildMenu(mainWindow: BrowserWindow): void {
           },
         },
         { type: 'separator' },
+        {
+          label: t('menu.file.placeImage'),
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: (): void => {
+            mainWindow.webContents.send('menu:placeImage');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: t('menu.file.saveTemplate'),
+          click: (): void => {
+            mainWindow.webContents.send('menu:saveTemplate');
+          },
+        },
+        {
+          label: t('menu.file.loadTemplate'),
+          click: (): void => {
+            mainWindow.webContents.send('menu:loadTemplate');
+          },
+        },
+        { type: 'separator' },
         ...(isMac ? [] : [{ role: 'quit' as const }]),
+      ],
+    },
+
+    // Insert menu — Phase 1-3/1-4
+    {
+      label: t('menu.insert'),
+      submenu: [
+        {
+          label: t('menu.insert.gradientBackground'),
+          click: (): void => {
+            mainWindow.webContents.send('menu:insertBackground');
+          },
+        },
+        {
+          label: t('menu.insert.patternOverlay'),
+          click: (): void => {
+            mainWindow.webContents.send('menu:insertPattern');
+          },
+        },
+        {
+          label: t('menu.insert.borderFrame'),
+          click: (): void => {
+            mainWindow.webContents.send('menu:insertBorder');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: t('menu.insert.gradientMask'),
+          click: (): void => {
+            mainWindow.webContents.send('menu:gradientMask');
+          },
+        },
       ],
     },
 
