@@ -1,7 +1,9 @@
 /**
  * @module components/text-editor/TextPropertiesPanel.test
  * Store-level tests for text property mutations via setTextProperty.
+ * PS-TEXT-007: Long text and multi-line regression tests.
  * @see APP-005: Text editing UI
+ * @see docs/agent-briefs/PS-TEXT-007-MANUAL-CHECKLIST.md
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -234,5 +236,90 @@ describe('TextPropertiesPanel store actions', () => {
       const layer = doc.rootGroup.children[BG] as { alignment: string };
       expect(layer.alignment).toBe('justify');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PS-TEXT-007: Long text and multi-line regression
+// ---------------------------------------------------------------------------
+
+describe('PS-TEXT-007: Long text and multi-line regression', () => {
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('should store multi-paragraph Japanese text', () => {
+    createTestDocument();
+    const id = addTextAndSelect();
+    const multiParagraph = [
+      '\u6700\u521d\u306e\u6bb5\u843d\u3067\u3059\u3002',
+      '\u3053\u308c\u306f\u4e8c\u756a\u76ee\u306e\u6bb5\u843d\u3067\u3059\u3002',
+      '\u4e09\u756a\u76ee\u306e\u6bb5\u843d\u306b\u306a\u308a\u307e\u3059\u3002',
+      '\u8907\u6570\u6bb5\u843d\u3092\u307e\u305f\u3044\u3067\u3001',
+      '\u6700\u5f8c\u306e\u6bb5\u843d\u3067\u7d42\u4e86\u3067\u3059\u3002',
+    ].join('\n');
+
+    useAppStore.getState().setTextProperty(id, 'text', multiParagraph);
+    const doc = useAppStore.getState().document!;
+    const layer = doc.rootGroup.children[BG] as { text: string };
+    expect(layer.text).toBe(multiParagraph);
+    expect(layer.text.split('\n').length).toBe(5);
+  });
+
+  it('should store very long single-line text (300+ chars) without truncation', () => {
+    createTestDocument();
+    const id = addTextAndSelect();
+    const longText = 'A'.repeat(300) + '\u3042'.repeat(50);
+
+    useAppStore.getState().setTextProperty(id, 'text', longText);
+    const doc = useAppStore.getState().document!;
+    const layer = doc.rootGroup.children[BG] as { text: string };
+    expect(layer.text).toBe(longText);
+    expect(layer.text.length).toBe(350);
+  });
+
+  it('should store CJK-only text', () => {
+    createTestDocument();
+    const id = addTextAndSelect();
+    const cjkText = '\u65e5\u672c\u8a9e\u4e2d\u56fd\u8a9e\u97d3\u56fd\u8a9e\u6df7\u5728\u30c6\u30ad\u30b9\u30c8';
+
+    useAppStore.getState().setTextProperty(id, 'text', cjkText);
+    const doc = useAppStore.getState().document!;
+    const layer = doc.rootGroup.children[BG] as { text: string };
+    expect(layer.text).toBe(cjkText);
+  });
+
+  it('should store emoji text without corruption', () => {
+    createTestDocument();
+    const id = addTextAndSelect();
+    const emojiText = 'Hello \u{1F600}\u{1F680} World \u2728 \u30c6\u30b9\u30c8 \u{1F44D}';
+
+    useAppStore.getState().setTextProperty(id, 'text', emojiText);
+    const doc = useAppStore.getState().document!;
+    const layer = doc.rootGroup.children[BG] as { text: string };
+    expect(layer.text).toBe(emojiText);
+  });
+
+  it('should store mixed JP-EN multi-line text with properties', () => {
+    createTestDocument();
+    const id = addTextAndSelect();
+    const mixedText = '\u30bf\u30a4\u30c8\u30eb Title\n\u8aac\u660e Description\n\u8a73\u7d30 Details';
+
+    useAppStore.getState().setTextProperty(id, 'text', mixedText);
+    useAppStore.getState().setTextProperty(id, 'bold', true);
+    useAppStore.getState().setTextProperty(id, 'fontSize', 32);
+    useAppStore.getState().setTextProperty(id, 'alignment', 'center');
+
+    const doc = useAppStore.getState().document!;
+    const layer = doc.rootGroup.children[BG] as {
+      text: string;
+      bold: boolean;
+      fontSize: number;
+      alignment: string;
+    };
+    expect(layer.text).toBe(mixedText);
+    expect(layer.bold).toBe(true);
+    expect(layer.fontSize).toBe(32);
+    expect(layer.alignment).toBe('center');
   });
 });

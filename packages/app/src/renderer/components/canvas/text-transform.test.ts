@@ -1,12 +1,14 @@
 /**
  * @module text-transform.test
- * Tests for text layer transform functionality (PS-TEXT-006).
+ * Tests for text layer transform functionality (PS-TEXT-006, PS-TEXT-007).
  *
  * Verifies:
  * - resizeTextLayer updates textBounds + fontSize proportionally
  * - Undo/redo restores previous state
  * - Raster resizeLayer is unaffected (regression)
  * - Edge cases: min fontSize, no textBounds, unchanged dimensions
+ * - PS-TEXT-007: Multi-step create→edit→resize undo/redo chain
+ * - PS-TEXT-007: Raster layer isolation during text transform undo/redo
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -334,5 +336,88 @@ describe('PS-TEXT-006: Text Layer Transform', () => {
     const msg = useAppStore.getState().statusMessage;
     expect(msg).toContain('300');
     expect(msg).toContain('200');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PS-TEXT-007: Multi-step undo/redo for create→edit→resize
+// ---------------------------------------------------------------------------
+
+describe('PS-TEXT-007: Multi-step undo/redo for create→edit→resize', () => {
+  beforeEach(() => {
+    resetStore();
+    vi.clearAllMocks();
+  });
+
+  it('should undo resize→text-edit→create chain to original state', () => {
+    createTestDocument();
+    const doc = useAppStore.getState().document!;
+    const store = useAppStore.getState();
+
+    // Step 1: Create text layer (1 undo entry)
+    store.addTextLayer('Transform Chain', 'Original');
+    const layerId = useAppStore.getState().selectedLayerId!;
+    const layer = findLayerById(doc.rootGroup, layerId) as TextLayer;
+
+    // Step 2: Edit text (1 undo entry)
+    useAppStore.getState().setTextProperty(layerId, 'text', 'Edited');
+
+    // Step 3: Set textBounds (direct mutation, not undoable itself)
+    setTextBounds(layerId, 100, 50);
+    const oldFontSize = layer.fontSize;
+
+    // Step 4: Resize (1 undo entry)
+    useAppStore.getState().resizeTextLayer(layerId, 200, 100);
+    const newFontSize = layer.fontSize;
+    expect(newFontSize).not.toBe(oldFontSize);
+
+    // Undo 3 times: resize → text edit → create
+    useAppStore.getState().undo(); // undo resize
+    expect(layer.fontSize).toBe(oldFontSize);
+
+    useAppStore.getState().undo(); // undo text edit
+    expect(layer.text).toBe('Original');
+
+    useAppStore.getState().undo(); // undo create
+    expect(findLayerById(doc.rootGroup, layerId)).toBeNull();
+
+    // Redo 3 times: create → text edit → resize
+    useAppStore.getState().redo(); // redo create
+    expect(findLayerById(doc.rootGroup, layerId)).toBeDefined();
+
+    useAppStore.getState().redo(); // redo text edit
+    const restored = findLayerById(doc.rootGroup, layerId) as TextLayer;
+    expect(restored.text).toBe('Edited');
+
+    useAppStore.getState().redo(); // redo resize
+    expect(restored.fontSize).toBe(newFontSize);
+  });
+
+  it('should not affect raster layer properties after text resize undo/redo', () => {
+    createTestDocument();
+    const store = useAppStore.getState();
+
+    // Create a raster layer with known pixel data
+    store.addRasterLayer('Raster Check');
+    const rasterId = useAppStore.getState().selectedLayerId!;
+    const doc = useAppStore.getState().document!;
+    giveLayerPixels(rasterId, 100, 100);
+
+    const rasterLayer = findLayerById(doc.rootGroup, rasterId) as RasterLayer;
+    const rasterBoundsBefore = { ...rasterLayer.bounds! };
+
+    // Create a text layer and resize it
+    store.addTextLayer('Text Over Raster', 'Hello');
+    const textId = useAppStore.getState().selectedLayerId!;
+    setTextBounds(textId, 80, 40);
+    useAppStore.getState().resizeTextLayer(textId, 160, 80);
+
+    // Undo the text resize
+    useAppStore.getState().undo();
+
+    // Verify raster layer is completely unchanged
+    const rasterAfter = findLayerById(doc.rootGroup, rasterId) as RasterLayer;
+    expect(rasterAfter.bounds).toEqual(rasterBoundsBefore);
+    expect(rasterAfter.type).toBe('raster');
   });
 });
