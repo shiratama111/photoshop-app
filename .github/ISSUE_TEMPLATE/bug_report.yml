@@ -1,0 +1,75 @@
+name: "Bug Report"
+description: "バグ・不具合の報告"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        バグの報告ありがとうございます。できるだけ詳しく記入してください。
+  - type: textarea
+    id: summary
+    attributes:
+      label: "概要"
+      description: "何が起きたか、簡潔に説明してください"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "再現手順"
+      description: "バグを再現する手順を書いてください"
+      placeholder: |
+        1. ...を開く
+        2. ...をクリック
+        3. ...が表示される
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "期待する動作"
+      description: "本来どうなるべきか"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "実際の動作"
+      description: "実際に何が起きたか"
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: "スクリーンショット"
+      description: "画面キャプチャがあれば貼り付けてください"
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "深刻度"
+      options:
+        - "致命的（クラッシュ・データ消失）"
+        - "重大（主要機能が使えない）"
+        - "中程度（回避策あり）"
+        - "軽微（見た目・UX）"
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: "該当パッケージ"
+      description: "問題が発生しているパッケージ（わかれば）"
+      options:
+        - "app（Electron / UI）"
+        - "core（エディタコア）"
+        - "render（レンダリング）"
+        - "adapter-psd（PSD入出力）"
+        - "adapter-abr（ブラシ）"
+        - "adapter-asl（スタイル）"
+        - "ai（AI推論）"
+        - "types（型定義）"
+        - "不明"
+    validations:
+      required: false

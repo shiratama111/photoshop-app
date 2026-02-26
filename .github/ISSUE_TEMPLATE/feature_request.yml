@@ -1,0 +1,52 @@
+name: "Feature Request"
+description: "機能追加・改善の提案"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        機能提案ありがとうございます。
+  - type: textarea
+    id: summary
+    attributes:
+      label: "概要"
+      description: "追加・改善したい機能を説明してください"
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: "動機・背景"
+      description: "なぜこの機能が必要か、どんな場面で困っているか"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "提案する解決策"
+      description: "具体的にどうなってほしいか（UIイメージ、操作フローなど）"
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: "参考画像・スクリーンショット"
+      description: "イメージがあれば貼り付けてください"
+    validations:
+      required: false
+  - type: dropdown
+    id: package
+    attributes:
+      label: "該当パッケージ"
+      options:
+        - "app（Electron / UI）"
+        - "core（エディタコア）"
+        - "render（レンダリング）"
+        - "adapter-psd（PSD入出力）"
+        - "adapter-abr（ブラシ）"
+        - "adapter-asl（スタイル）"
+        - "ai（AI推論）"
+        - "types（型定義）"
+        - "不明・複数"
+    validations:
+      required: false
