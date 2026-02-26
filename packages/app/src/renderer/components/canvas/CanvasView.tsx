@@ -745,7 +745,8 @@ export function CanvasView(): React.JSX.Element {
 
   // Pan cursor class takes priority over tool cursor (PS-PAN-001)
   const panClass = panCursor === 'grabbing' ? 'canvas-area--panning' : panCursor === 'grab' ? 'canvas-area--space-held' : '';
-  const className = panClass ? `canvas-area ${panClass}` : 'canvas-area';
+  const textClass = isTextTool && !panCursor ? 'canvas-area--text-tool' : '';
+  const className = ['canvas-area', panClass, textClass].filter(Boolean).join(' ');
 
   return (
     <div

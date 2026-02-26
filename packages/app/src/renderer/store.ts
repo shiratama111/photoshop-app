@@ -236,6 +236,8 @@ export interface AppState {
   recentFiles: RecentFileEntry[];
   /** ID of the text layer currently being inline-edited (APP-005). */
   editingTextLayerId: string | null;
+  /** Snapshot of text/bounds at the moment editing started (for cancel). */
+  editingTextSnapshot: { text: string; textBounds: { x: number; y: number; width: number; height: number } | null } | null;
   /** Live text transform preview bounds while dragging handles. */
   textTransformPreview: TextTransformPreview | null;
   /** Default text style for new layers created by the Text tool. */
@@ -357,6 +359,10 @@ export interface AppActions {
   startEditingText: (layerId: string) => void;
   /** Stop inline editing. If expectedLayerId is provided, stop only when it matches current editor. */
   stopEditingText: (expectedLayerId?: string) => void;
+  /** Commit the current inline editor text and stop editing (for options bar ○ button). */
+  commitAndStopEditingText: () => void;
+  /** Cancel editing, restore snapshot text, and stop editing (for options bar × button). */
+  cancelEditingText: () => void;
   /** Set or clear live transform preview for inline text editor UI. */
   setTextTransformPreview: (preview: TextTransformPreview | null) => void;
   /** Open the layer style dialog. */
@@ -877,6 +883,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   pendingPsdImport: null,
   recentFiles: [],
   editingTextLayerId: null,
+  editingTextSnapshot: null,
   textTransformPreview: null,
   textToolDefaults: { ...DEFAULT_TEXT_TOOL_DEFAULTS, color: { ...DEFAULT_TEXT_TOOL_DEFAULTS.color } },
   layerStyleDialog: null,
@@ -1186,6 +1193,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({
       selectedLayerId: layer.id,
       editingTextLayerId: layer.id,
+      editingTextSnapshot: { text: '', textBounds: null },
       statusMessage: `${t('status.added')}: ${layerName}`,
     });
     doc.selectedLayerId = layer.id;
@@ -1291,7 +1299,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!doc) return;
     const layer = findLayerById(doc.rootGroup, layerId);
     if (!layer || layer.type !== 'text') return;
-    set({ editingTextLayerId: layerId, selectedLayerId: layerId });
+    const tl = layer as TextLayer;
+    const snapshot = {
+      text: tl.text,
+      textBounds: tl.textBounds ? { ...tl.textBounds } : null,
+    };
+    set({ editingTextLayerId: layerId, selectedLayerId: layerId, editingTextSnapshot: snapshot });
   },
 
   stopEditingText: (expectedLayerId): void => {
@@ -1299,7 +1312,49 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const { editingTextLayerId } = get();
       if (editingTextLayerId !== expectedLayerId) return;
     }
-    set({ editingTextLayerId: null, textTransformPreview: null });
+    set({ editingTextLayerId: null, editingTextSnapshot: null, textTransformPreview: null });
+  },
+
+  commitAndStopEditingText: (): void => {
+    const { editingTextLayerId, document: doc } = get();
+    if (!editingTextLayerId || !doc) return;
+    // The InlineTextEditor already commits text on every input via setTextProperty,
+    // so we just need to trigger its blur (which commits bounds) and stop editing.
+    // We read the current editor DOM to commit the latest text+bounds.
+    const editorEl = globalThis.document.querySelector('.inline-text-editor') as HTMLDivElement | null;
+    if (editorEl) {
+      // Trigger blur programmatically — the InlineTextEditor's handleBlur will commit state.
+      editorEl.blur();
+    } else {
+      // Editor not found (shouldn't happen), just stop editing.
+      set({ editingTextLayerId: null, editingTextSnapshot: null, textTransformPreview: null });
+    }
+  },
+
+  cancelEditingText: (): void => {
+    const { editingTextLayerId, editingTextSnapshot, document: doc } = get();
+    if (!editingTextLayerId || !doc) return;
+    const layer = findLayerById(doc.rootGroup, editingTextLayerId);
+    if (layer && layer.type === 'text' && editingTextSnapshot) {
+      const tl = layer as TextLayer;
+      // Restore to snapshot state (bypass undo — this is a cancel)
+      tl.text = editingTextSnapshot.text;
+      tl.textBounds = editingTextSnapshot.textBounds;
+    }
+    // Stop editing first
+    set((state) => ({
+      editingTextLayerId: null,
+      editingTextSnapshot: null,
+      textTransformPreview: null,
+      revision: state.revision + 1,
+    }));
+    // If the original text was empty (new layer, user typed nothing), remove the layer
+    if (editingTextSnapshot && editingTextSnapshot.text === '') {
+      const currentLayer = findLayerById(doc.rootGroup, editingTextLayerId);
+      if (currentLayer) {
+        get().removeLayer(editingTextLayerId);
+      }
+    }
   },
 
   setTextTransformPreview: (preview): void => {

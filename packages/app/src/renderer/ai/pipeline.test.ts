@@ -48,8 +48,8 @@ function getTextLayers(design: ThumbnailDesign): TextLayerDesign[] {
 // ---------------------------------------------------------------------------
 
 describe('generateThumbnail', () => {
-  it('generates a successful result from a Japanese instruction', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('generates a successful result from a Japanese instruction', async () => {
+    const result = await generateThumbnail(createTestOptions());
 
     expect(result.success).toBe(true);
     expect(result.error).toBeUndefined();
@@ -59,16 +59,16 @@ describe('generateThumbnail', () => {
     expect(result.actions.length).toBeGreaterThan(0);
   });
 
-  it('generates a design with the correct canvas dimensions for youtube', () => {
-    const result = generateThumbnail(createTestOptions({ platform: 'youtube' }));
+  it('generates a design with the correct canvas dimensions for youtube', async () => {
+    const result = await generateThumbnail(createTestOptions({ platform: 'youtube' }));
 
     expect(result.success).toBe(true);
     expect(result.design.canvas.width).toBe(1280);
     expect(result.design.canvas.height).toBe(720);
   });
 
-  it('generates a design with custom canvas size', () => {
-    const result = generateThumbnail(createTestOptions({
+  it('generates a design with custom canvas size', async () => {
+    const result = await generateThumbnail(createTestOptions({
       canvasSize: { width: 1920, height: 1080 },
     }));
 
@@ -77,24 +77,24 @@ describe('generateThumbnail', () => {
     expect(result.design.canvas.height).toBe(1080);
   });
 
-  it('generates a design for instagram platform', () => {
-    const result = generateThumbnail(createTestOptions({ platform: 'instagram' }));
+  it('generates a design for instagram platform', async () => {
+    const result = await generateThumbnail(createTestOptions({ platform: 'instagram' }));
 
     expect(result.success).toBe(true);
     expect(result.design.canvas.width).toBe(1080);
     expect(result.design.canvas.height).toBe(1080);
   });
 
-  it('generates a design for twitter platform', () => {
-    const result = generateThumbnail(createTestOptions({ platform: 'twitter' }));
+  it('generates a design for twitter platform', async () => {
+    const result = await generateThumbnail(createTestOptions({ platform: 'twitter' }));
 
     expect(result.success).toBe(true);
     expect(result.design.canvas.width).toBe(1200);
     expect(result.design.canvas.height).toBe(675);
   });
 
-  it('applies explicit title text override', () => {
-    const result = generateThumbnail(createTestOptions({
+  it('applies explicit title text override', async () => {
+    const result = await generateThumbnail(createTestOptions({
       title: 'Explicit Title',
     }));
 
@@ -106,8 +106,8 @@ describe('generateThumbnail', () => {
     }
   });
 
-  it('applies explicit category override', () => {
-    const result = generateThumbnail(createTestOptions({
+  it('applies explicit category override', async () => {
+    const result = await generateThumbnail(createTestOptions({
       category: 'howto',
     }));
 
@@ -115,8 +115,8 @@ describe('generateThumbnail', () => {
     expect(result.design.metadata.category).toBe('howto');
   });
 
-  it('includes font recommendations in the result', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('includes font recommendations in the result', async () => {
+    const result = await generateThumbnail(createTestOptions());
 
     expect(result.success).toBe(true);
     expect(result.fontRecommendations).toBeDefined();
@@ -134,8 +134,8 @@ describe('generateThumbnail', () => {
     }
   });
 
-  it('generates actions that include background setup', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('generates actions that include background setup', async () => {
+    const result = await generateThumbnail(createTestOptions());
 
     expect(result.success).toBe(true);
     // First action should be a background action (gradient or pattern)
@@ -145,26 +145,26 @@ describe('generateThumbnail', () => {
     expect(bgAction).toBeDefined();
   });
 
-  it('generates actions that include text layer creation', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('generates actions that include text layer creation', async () => {
+    const result = await generateThumbnail(createTestOptions());
 
     expect(result.success).toBe(true);
     const textActions = result.actions.filter((a) => a.type === 'createTextLayer');
     expect(textActions.length).toBeGreaterThan(0);
   });
 
-  it('generates actions with text property settings', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('generates actions with text property settings', async () => {
+    const result = await generateThumbnail(createTestOptions());
 
     expect(result.success).toBe(true);
     const textPropActions = result.actions.filter((a) => a.type === 'setTextProperties');
     expect(textPropActions.length).toBeGreaterThan(0);
   });
 
-  it('produces consistent results for the same input', () => {
+  it('produces consistent results for the same input', async () => {
     const options = createTestOptions();
-    const result1 = generateThumbnail(options);
-    const result2 = generateThumbnail(options);
+    const result1 = await generateThumbnail(options);
+    const result2 = await generateThumbnail(options);
 
     expect(result1.success).toBe(true);
     expect(result2.success).toBe(true);
@@ -179,7 +179,7 @@ describe('generateThumbnail', () => {
 // ---------------------------------------------------------------------------
 
 describe('generateThumbnail progress', () => {
-  it('calls progress callback for each stage', () => {
+  it('calls progress callback for each stage', async () => {
     const stages: PipelineStage[] = [];
     const messages: string[] = [];
     const onProgress: PipelineProgress = (stage, message) => {
@@ -187,7 +187,7 @@ describe('generateThumbnail progress', () => {
       messages.push(message);
     };
 
-    const result = generateThumbnail(createTestOptions(), onProgress);
+    const result = await generateThumbnail(createTestOptions(), onProgress);
 
     expect(result.success).toBe(true);
     expect(stages).toContain('design');
@@ -200,10 +200,10 @@ describe('generateThumbnail progress', () => {
     }
   });
 
-  it('does not call progress callback on validation error', () => {
+  it('does not call progress callback on validation error', async () => {
     const onProgress = vi.fn();
 
-    const result = generateThumbnail({ instruction: '' }, onProgress);
+    const result = await generateThumbnail({ instruction: '' }, onProgress);
 
     expect(result.success).toBe(false);
     expect(onProgress).not.toHaveBeenCalled();
@@ -215,8 +215,8 @@ describe('generateThumbnail progress', () => {
 // ---------------------------------------------------------------------------
 
 describe('generateThumbnail error handling', () => {
-  it('returns error for empty instruction', () => {
-    const result = generateThumbnail({ instruction: '' });
+  it('returns error for empty instruction', async () => {
+    const result = await generateThumbnail({ instruction: '' });
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
@@ -224,15 +224,15 @@ describe('generateThumbnail error handling', () => {
     expect(result.actions).toEqual([]);
   });
 
-  it('returns error for whitespace-only instruction', () => {
-    const result = generateThumbnail({ instruction: '   ' });
+  it('returns error for whitespace-only instruction', async () => {
+    const result = await generateThumbnail({ instruction: '   ' });
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Instruction is required');
   });
 
-  it('returns an empty design on error', () => {
-    const result = generateThumbnail({ instruction: '' });
+  it('returns an empty design on error', async () => {
+    const result = await generateThumbnail({ instruction: '' });
 
     expect(result.design).toBeDefined();
     expect(result.design.canvas.width).toBe(1280);
@@ -247,27 +247,27 @@ describe('generateThumbnail error handling', () => {
 
 describe('refineThumbnail', () => {
   /** Helper: generate a base design for refinement. */
-  function generateBaseDesign(): ThumbnailDesign {
-    const result = generateThumbnail(createTestOptions());
+  async function generateBaseDesign(): Promise<ThumbnailDesign> {
+    const result = await generateThumbnail(createTestOptions());
     expect(result.success).toBe(true);
     return result.design;
   }
 
-  it('returns a successful result from a refinement instruction', () => {
-    const base = generateBaseDesign();
-    const result = refineThumbnail('もう少し派手にして', base);
+  it('returns a successful result from a refinement instruction', async () => {
+    const base = await generateBaseDesign();
+    const result = await refineThumbnail('もう少し派手にして', base);
 
     expect(result.success).toBe(true);
     expect(result.design).toBeDefined();
     expect(result.actions.length).toBeGreaterThan(0);
   });
 
-  it('increases font size with "文字を大きく"', () => {
-    const base = generateBaseDesign();
+  it('increases font size with "文字を大きく"', async () => {
+    const base = await generateBaseDesign();
     const originalTextLayers = getTextLayers(base);
     const originalSizes = originalTextLayers.map((l) => l.fontSize);
 
-    const result = refineThumbnail('文字を大きくして', base);
+    const result = await refineThumbnail('文字を大きくして', base);
 
     expect(result.success).toBe(true);
     const refinedTextLayers = getTextLayers(result.design);
@@ -276,12 +276,12 @@ describe('refineThumbnail', () => {
     }
   });
 
-  it('decreases font size with "文字を小さく"', () => {
-    const base = generateBaseDesign();
+  it('decreases font size with "文字を小さく"', async () => {
+    const base = await generateBaseDesign();
     const originalTextLayers = getTextLayers(base);
     const originalSizes = originalTextLayers.map((l) => l.fontSize);
 
-    const result = refineThumbnail('文字を小さくして', base);
+    const result = await refineThumbnail('文字を小さくして', base);
 
     expect(result.success).toBe(true);
     const refinedTextLayers = getTextLayers(result.design);
@@ -290,9 +290,9 @@ describe('refineThumbnail', () => {
     }
   });
 
-  it('makes text bold with "太字に"', () => {
-    const base = generateBaseDesign();
-    const result = refineThumbnail('太字にして', base);
+  it('makes text bold with "太字に"', async () => {
+    const base = await generateBaseDesign();
+    const result = await refineThumbnail('太字にして', base);
 
     expect(result.success).toBe(true);
     const refinedTextLayers = getTextLayers(result.design);
@@ -301,29 +301,29 @@ describe('refineThumbnail', () => {
     }
   });
 
-  it('does not mutate the original design', () => {
-    const base = generateBaseDesign();
+  it('does not mutate the original design', async () => {
+    const base = await generateBaseDesign();
     const originalJSON = JSON.stringify(base);
 
-    refineThumbnail('文字を大きくして', base);
+    await refineThumbnail('文字を大きくして', base);
 
     expect(JSON.stringify(base)).toBe(originalJSON);
   });
 
-  it('returns error for empty refinement instruction', () => {
-    const base = generateBaseDesign();
-    const result = refineThumbnail('', base);
+  it('returns error for empty refinement instruction', async () => {
+    const base = await generateBaseDesign();
+    const result = await refineThumbnail('', base);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Refinement instruction is required');
   });
 
-  it('handles "bigger" in English refinement instruction', () => {
-    const base = generateBaseDesign();
+  it('handles "bigger" in English refinement instruction', async () => {
+    const base = await generateBaseDesign();
     const originalTextLayers = getTextLayers(base);
     const originalSizes = originalTextLayers.map((l) => l.fontSize);
 
-    const result = refineThumbnail('make the text bigger', base);
+    const result = await refineThumbnail('make the text bigger', base);
 
     expect(result.success).toBe(true);
     const refinedTextLayers = getTextLayers(result.design);
@@ -332,17 +332,17 @@ describe('refineThumbnail', () => {
     }
   });
 
-  it('preserves canvas dimensions after refinement', () => {
-    const base = generateBaseDesign();
-    const result = refineThumbnail('もっと派手にして', base);
+  it('preserves canvas dimensions after refinement', async () => {
+    const base = await generateBaseDesign();
+    const result = await refineThumbnail('もっと派手にして', base);
 
     expect(result.success).toBe(true);
     expect(result.design.canvas).toEqual(base.canvas);
   });
 
-  it('preserves metadata category after refinement', () => {
-    const base = generateBaseDesign();
-    const result = refineThumbnail('文字を大きくして', base);
+  it('preserves metadata category after refinement', async () => {
+    const base = await generateBaseDesign();
+    const result = await refineThumbnail('文字を大きくして', base);
 
     expect(result.success).toBe(true);
     expect(result.design.metadata.category).toBe(base.metadata.category);
@@ -354,8 +354,8 @@ describe('refineThumbnail', () => {
 // ---------------------------------------------------------------------------
 
 describe('applyFontRecommendations', () => {
-  it('replaces fonts on text layers without mutating the original', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('replaces fonts on text layers without mutating the original', async () => {
+    const result = await generateThumbnail(createTestOptions());
     expect(result.success).toBe(true);
 
     const original = result.design;
@@ -374,8 +374,8 @@ describe('applyFontRecommendations', () => {
     }
   });
 
-  it('returns a design with the same structure', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('returns a design with the same structure', async () => {
+    const result = await generateThumbnail(createTestOptions());
     expect(result.success).toBe(true);
 
     const enriched = applyFontRecommendations(result.design);
@@ -385,8 +385,8 @@ describe('applyFontRecommendations', () => {
     expect(enriched.layers.length).toBe(result.design.layers.length);
   });
 
-  it('does not modify non-text layers', () => {
-    const result = generateThumbnail(createTestOptions());
+  it('does not modify non-text layers', async () => {
+    const result = await generateThumbnail(createTestOptions());
     expect(result.success).toBe(true);
 
     const original = result.design;
@@ -408,8 +408,8 @@ describe('applyFontRecommendations', () => {
 // ---------------------------------------------------------------------------
 
 describe('pipeline integration', () => {
-  it('handles a how-to tutorial instruction', () => {
-    const result = generateThumbnail({
+  it('handles a how-to tutorial instruction', async () => {
+    const result = await generateThumbnail({
       instruction: 'Photoshopの使い方チュートリアル、タイトル「初心者向けガイド」',
     });
 
@@ -418,8 +418,8 @@ describe('pipeline integration', () => {
     expect(result.actions.length).toBeGreaterThan(0);
   });
 
-  it('handles a product review instruction', () => {
-    const result = generateThumbnail({
+  it('handles a product review instruction', async () => {
+    const result = await generateThumbnail({
       instruction: '商品レビューサムネイル、タイトル「最新iPhone徹底レビュー」',
     });
 
@@ -427,8 +427,8 @@ describe('pipeline integration', () => {
     expect(result.actions.length).toBeGreaterThan(0);
   });
 
-  it('handles an English instruction', () => {
-    const result = generateThumbnail({
+  it('handles an English instruction', async () => {
+    const result = await generateThumbnail({
       instruction: 'Gaming thumbnail, title: "Epic Win Compilation"',
     });
 
@@ -436,17 +436,17 @@ describe('pipeline integration', () => {
     expect(result.design.layers.length).toBeGreaterThan(0);
   });
 
-  it('generates then refines in sequence', () => {
+  it('generates then refines in sequence', async () => {
     // Step 1: Generate
-    const gen = generateThumbnail(createTestOptions());
+    const gen = await generateThumbnail(createTestOptions());
     expect(gen.success).toBe(true);
 
     // Step 2: Refine
-    const ref1 = refineThumbnail('文字を大きくして', gen.design);
+    const ref1 = await refineThumbnail('文字を大きくして', gen.design);
     expect(ref1.success).toBe(true);
 
     // Step 3: Refine again
-    const ref2 = refineThumbnail('太字にして', ref1.design);
+    const ref2 = await refineThumbnail('太字にして', ref1.design);
     expect(ref2.success).toBe(true);
 
     // Verify cumulative effects
@@ -462,12 +462,28 @@ describe('pipeline integration', () => {
     }
   });
 
-  it('handles all supported platforms', () => {
+  it('handles all supported platforms', async () => {
     const platforms = ['youtube', 'twitter', 'instagram', 'custom'] as const;
     for (const platform of platforms) {
-      const result = generateThumbnail(createTestOptions({ platform }));
+      const result = await generateThumbnail(createTestOptions({ platform }));
       expect(result.success).toBe(true);
       expect(result.design.metadata.targetPlatform).toBe(platform);
+    }
+  });
+
+  it('applies effect presets to text layers based on mood', async () => {
+    const result = await generateThumbnail(createTestOptions());
+    expect(result.success).toBe(true);
+
+    const textLayers = getTextLayers(result.design);
+    for (const layer of textLayers) {
+      // Every text layer should now have effects from the preset system
+      expect(layer.effects).toBeDefined();
+      expect(layer.effects.length).toBeGreaterThanOrEqual(1);
+      // Each effect should have a type
+      for (const effect of layer.effects) {
+        expect(effect.type).toBeDefined();
+      }
     }
   });
 });

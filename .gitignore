@@ -14,3 +14,5 @@ release/
 *.asar
 temp/
 .auto-save/
+.booth-session.json
+download-state.json
