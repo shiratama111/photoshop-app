@@ -146,6 +146,8 @@ export const ja: MessageCatalog = {
   'text.underline': '下線',
   'text.strikethrough': '取り消し線',
   'text.align.justify': '均等割付',
+  'text.commit': '確定',
+  'text.cancel': 'キャンセル',
 
   // Font selector
   'font.importCustom': 'カスタムフォントを追加',
@@ -569,6 +571,8 @@ export const en: MessageCatalog = {
   'text.underline': 'Underline',
   'text.strikethrough': 'Strikethrough',
   'text.align.justify': 'Justify',
+  'text.commit': 'Commit',
+  'text.cancel': 'Cancel',
 
   // Font selector
   'font.importCustom': 'Import custom font',

@@ -155,7 +155,10 @@ export function TransformHandles(): React.JSX.Element | null {
   // When the text tool is active, disable move-hit areas so the canvas cursor
   // stays as I-beam and clicks pass through for text creation/editing (Issue #5).
   // Resize handles remain interactive during text editing for box resizing.
+  // When text tool is active but NOT editing, hide handles entirely to prevent
+  // any cursor interference (crosshair leak).
   const isTextToolActive = activeTool === 'text';
+  if (isTextToolActive && !isEditingSelectedTextLayer) return null;
   const moveHitsInteractive = !isTextToolActive;
   const resizeHandlesInteractive = !isTextToolActive || isEditingSelectedTextLayer;
 

@@ -23,7 +23,7 @@ const BRUSH_TOOLS = new Set(['brush', 'eraser', 'clone', 'dodge', 'burn']);
 const PANEL_TOOLS = new Set([
   'brush', 'eraser', 'clone', 'dodge', 'burn',
   'gradient', 'fill', 'shape',
-  'select', 'crop',
+  'select', 'crop', 'text',
 ]);
 
 /** BrushOptionsPanel — shown when brush, eraser, or other tools are active. */
@@ -49,6 +49,9 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
   const setSelectionSubTool = useAppStore((s) => s.setSelectionSubTool);
   const selection = useAppStore((s) => s.selection);
   const cropToSelection = useAppStore((s) => s.cropToSelection);
+  const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
+  const commitAndStopEditingText = useAppStore((s) => s.commitAndStopEditingText);
+  const cancelEditingText = useAppStore((s) => s.cancelEditingText);
 
   const [showPicker, setShowPicker] = useState(false);
 
@@ -205,6 +208,36 @@ export function BrushOptionsPanel(): React.JSX.Element | null {
             className="brush-option__slider"
           />
           <span className="brush-option__value">{brushSize}px</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Text tool: show commit/cancel buttons only when editing
+  if (activeTool === 'text') {
+    if (!editingTextLayerId) return null;
+    // Prevent mousedown from stealing focus from InlineTextEditor (which would
+    // trigger handleBlur → commit before the onClick handler fires).
+    const preventBlur = (e: React.MouseEvent): void => { e.preventDefault(); };
+    return (
+      <div className="brush-options-panel" data-testid="text-options">
+        <div className="text-commit-buttons">
+          <button
+            className="text-commit-btn text-commit-btn--ok"
+            onMouseDown={preventBlur}
+            onClick={(): void => commitAndStopEditingText()}
+            title={t('text.commit')}
+          >
+            ○
+          </button>
+          <button
+            className="text-commit-btn text-commit-btn--cancel"
+            onMouseDown={preventBlur}
+            onClick={(): void => cancelEditingText()}
+            title={t('text.cancel')}
+          >
+            ×
+          </button>
         </div>
       </div>
     );

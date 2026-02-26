@@ -301,6 +301,13 @@ html, body, #root {
 .canvas-area--space-held { cursor: grab !important; }
 .canvas-area--panning { cursor: grabbing !important; }
 
+/* Text tool cursor — Issue #5: force I-beam on container AND all direct children.
+   The <canvas> element covers the full area and receives mouse events, so cursor
+   must be set explicitly on it too — CSS cursor inheritance from the parent div
+   is unreliable for positioned canvas elements in Electron/Chromium. */
+.canvas-area--text-tool,
+.canvas-area--text-tool > * { cursor: text !important; }
+
 .canvas-area canvas { display: block; position: absolute; top: 0; left: 0; }
 .editor-canvas { image-rendering: pixelated; }
 
@@ -1666,6 +1673,35 @@ html, body, #root {
 
 .shape-type-btn:hover { background: var(--bg-hover); }
 .shape-type-btn--active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Text Commit/Cancel Buttons — Photoshop-style ○× in options bar */
+.text-commit-buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.text-commit-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.text-commit-btn:hover { background: var(--bg-hover); border-color: var(--text-secondary); }
+.text-commit-btn--ok:hover { background: #1a6b35; border-color: #2ea05a; color: #fff; }
+.text-commit-btn--cancel:hover { background: #6b1a1a; border-color: #a02e2e; color: #fff; }
 
 /* Eyedropper cursor */
 .eyedropper-cursor { cursor: crosshair !important; }
