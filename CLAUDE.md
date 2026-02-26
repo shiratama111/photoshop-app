@@ -67,8 +67,28 @@ AI-friendly layered image editor built with Electron, specialized for YouTube/pr
 - PR マージ時に Issue を自動クローズする（`Closes #42` を PR 本文に記載）
 - ラベルで分類: `bug`, `enhancement`, `UX`, `performance`, `priority:high/low`, `pkg:*`
 
+### Issue の起票方法
+ユーザーは以下のいずれの方法でも Issue を起票できる。Claude Code が `gh issue create` で代行する。
+
+**パターン A — 会話から即 Issue + 修正**
+ユーザーが口頭で問題や要望を伝えた場合：
+1. 内容を整理し `gh issue create` で Issue を作成（タイトル・本文・ラベル付き）
+2. 作成された Issue 番号をユーザーに報告
+3. そのまま修正作業に着手
+
+**パターン B — GitHub で先に Issue**
+ユーザーが GitHub 上で事前に起票済みの場合：
+1. 「#5 やって」のように Issue 番号で指示を受ける
+2. `gh issue view` で内容を取得して作業開始
+
+**パターン C — まとめて Issue 登録**
+ユーザーが複数の気づきを箇条書きで伝えた場合：
+1. 各項目を個別の Issue として `gh issue create` で一括登録
+2. 作成した Issue 一覧をユーザーに報告
+3. 優先度についてユーザーに確認し、指示された Issue から着手
+
 ### Claude Code での作業フロー
-1. ユーザーが Issue 番号または内容を伝える
+1. Issue が存在しない場合 → 上記パターン A/C で Issue を先に作成
 2. バグ → `/debug-fix` ワークフロー、機能追加 → 計画モードで設計
 3. Issue 用ブランチを作成して作業
 4. `pnpm lint && pnpm test && pnpm build` 全PASS を確認
