@@ -152,10 +152,12 @@ export function TransformHandles(): React.JSX.Element | null {
   const layer = findLayerById(document.rootGroup, selectedLayerId);
   if (!layer || (layer.type !== 'raster' && layer.type !== 'text')) return null;
   const isEditingSelectedTextLayer = layer.type === 'text' && editingTextLayerId === layer.id;
-  // When the text tool is active but NOT editing, disable handle interaction
-  // so clicks pass through to the canvas for text creation/editing (Issue #5).
-  // When actively editing a text layer, keep handles interactive for resizing.
-  const handlesInteractive = activeTool !== 'text' || isEditingSelectedTextLayer;
+  // When the text tool is active, disable move-hit areas so the canvas cursor
+  // stays as I-beam and clicks pass through for text creation/editing (Issue #5).
+  // Resize handles remain interactive during text editing for box resizing.
+  const isTextToolActive = activeTool === 'text';
+  const moveHitsInteractive = !isTextToolActive;
+  const resizeHandlesInteractive = !isTextToolActive || isEditingSelectedTextLayer;
 
   // Get layer bounds in document coordinates.
   let layerBounds: Bounds;
@@ -369,9 +371,9 @@ export function TransformHandles(): React.JSX.Element | null {
           top: `${sy - MOVE_HIT_SIZE / 2}px`,
           width: `${Math.max(1, sw - HANDLE_SIZE)}px`,
           height: `${MOVE_HIT_SIZE}px`,
-          pointerEvents: handlesInteractive ? 'all' : 'none',
+          pointerEvents: moveHitsInteractive ? 'all' : 'none',
         }}
-        onMouseDown={handlesInteractive ? (e): void => startDrag(e, 'move') : undefined}
+        onMouseDown={moveHitsInteractive ? (e): void => startDrag(e, 'move') : undefined}
       />
       <div
         className="transform-move-hit"
@@ -381,9 +383,9 @@ export function TransformHandles(): React.JSX.Element | null {
           top: `${sy + half}px`,
           width: `${MOVE_HIT_SIZE}px`,
           height: `${Math.max(1, sh - HANDLE_SIZE)}px`,
-          pointerEvents: handlesInteractive ? 'all' : 'none',
+          pointerEvents: moveHitsInteractive ? 'all' : 'none',
         }}
-        onMouseDown={handlesInteractive ? (e): void => startDrag(e, 'move') : undefined}
+        onMouseDown={moveHitsInteractive ? (e): void => startDrag(e, 'move') : undefined}
       />
       <div
         className="transform-move-hit"
@@ -393,9 +395,9 @@ export function TransformHandles(): React.JSX.Element | null {
           top: `${sy + sh - MOVE_HIT_SIZE / 2}px`,
           width: `${Math.max(1, sw - HANDLE_SIZE)}px`,
           height: `${MOVE_HIT_SIZE}px`,
-          pointerEvents: handlesInteractive ? 'all' : 'none',
+          pointerEvents: moveHitsInteractive ? 'all' : 'none',
         }}
-        onMouseDown={handlesInteractive ? (e): void => startDrag(e, 'move') : undefined}
+        onMouseDown={moveHitsInteractive ? (e): void => startDrag(e, 'move') : undefined}
       />
       <div
         className="transform-move-hit"
@@ -405,25 +407,25 @@ export function TransformHandles(): React.JSX.Element | null {
           top: `${sy + half}px`,
           width: `${MOVE_HIT_SIZE}px`,
           height: `${Math.max(1, sh - HANDLE_SIZE)}px`,
-          pointerEvents: handlesInteractive ? 'all' : 'none',
+          pointerEvents: moveHitsInteractive ? 'all' : 'none',
         }}
-        onMouseDown={handlesInteractive ? (e): void => startDrag(e, 'move') : undefined}
+        onMouseDown={moveHitsInteractive ? (e): void => startDrag(e, 'move') : undefined}
       />
       {/* 8 resize handles */}
       {handles.map((h) => (
         <div
           key={h.position}
-          className={`transform-handle${handlesInteractive ? '' : ' transform-handle--inactive'}`}
+          className={`transform-handle${resizeHandlesInteractive ? '' : ' transform-handle--inactive'}`}
           data-testid={`handle-${h.position}`}
           style={{
             left: `${h.x}px`,
             top: `${h.y}px`,
             width: `${HANDLE_SIZE}px`,
             height: `${HANDLE_SIZE}px`,
-            cursor: handlesInteractive ? HANDLE_CURSORS[h.position] : 'inherit',
-            pointerEvents: handlesInteractive ? 'all' : 'none',
+            cursor: resizeHandlesInteractive ? HANDLE_CURSORS[h.position] : 'inherit',
+            pointerEvents: resizeHandlesInteractive ? 'all' : 'none',
           }}
-          onMouseDown={handlesInteractive ? (e): void => startDrag(e, 'resize', h.position) : undefined}
+          onMouseDown={resizeHandlesInteractive ? (e): void => startDrag(e, 'resize', h.position) : undefined}
         />
       ))}
     </div>
