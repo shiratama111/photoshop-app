@@ -22,7 +22,8 @@
  */
 
 import type { FontCategory, FontMetadata, FontTag } from './font-catalog';
-import { FONT_CATALOG, TAG_ENGLISH_MAP } from './font-catalog';
+import { TAG_ENGLISH_MAP } from './font-catalog';
+import { getMergedCatalog } from './local-font-catalog';
 
 // ---------------------------------------------------------------------------
 // Public Types
@@ -40,6 +41,8 @@ export interface FontSelectionOptions {
   language?: 'ja' | 'en';
   /** Maximum number of recommendations to return (default: 5). */
   limit?: number;
+  /** Custom font catalog to score against. Defaults to getMergedCatalog() (55 built-in + 776 local). */
+  catalog?: readonly FontMetadata[];
 }
 
 /** A single font recommendation with score breakdown. */
@@ -264,6 +267,7 @@ export function recommendFonts(options: FontSelectionOptions): FontRecommendatio
     mood = [],
     category,
     limit = DEFAULT_LIMIT,
+    catalog,
   } = options;
 
   // Determine language
@@ -272,8 +276,11 @@ export function recommendFonts(options: FontSelectionOptions): FontRecommendatio
   // Resolve moods to tags
   const resolvedTags = resolveMoodsToTags(mood);
 
+  // Use provided catalog, or merged catalog (55 built-in + 776 local)
+  const fontList = catalog ?? getMergedCatalog();
+
   // Score all fonts
-  const scored = FONT_CATALOG.map((font) =>
+  const scored = fontList.map((font) =>
     scoreFont(font, resolvedTags, language, category, text.length),
   );
 

@@ -28,6 +28,9 @@ import { generateDesign, designToActions } from './thumbnail-architect';
 import type { GenerateDesignOptions } from './thumbnail-architect';
 import { recommendFonts } from './font-selector-ai';
 import type { FontRecommendation } from './font-selector-ai';
+import { getEffectsForMoodAndCategory } from './effect-presets';
+import { isLocalFont } from './local-font-catalog';
+import { useLocalFontsStore } from './local-fonts-store';
 
 // ---------------------------------------------------------------------------
 // Public Types
@@ -91,8 +94,8 @@ export type PipelineProgress = (stage: PipelineStage, message: string) => void;
  *
  * This is the primary pipeline entry point. It orchestrates:
  * 1. Design blueprint generation from the instruction
- * 2. AI font recommendation for each text layer
- * 3. Application of font recommendations to the design
+ * 2. AI font recommendation + effect preset application for each text layer
+ * 3. Lazy-loading of selected local fonts into the browser (async)
  * 4. Conversion of the finalized design to EditorActions
  *
  * The pipeline does NOT execute the actions. The caller is responsible for
@@ -104,7 +107,7 @@ export type PipelineProgress = (stage: PipelineStage, message: string) => void;
  *
  * @example
  * ```ts
- * const result = generateThumbnail({
+ * const result = await generateThumbnail({
  *   instruction: "衝撃ニュース系サムネ、タイトル「AIが世界を変える」",
  *   platform: 'youtube',
  * });
@@ -113,10 +116,10 @@ export type PipelineProgress = (stage: PipelineStage, message: string) => void;
  * }
  * ```
  */
-export function generateThumbnail(
+export async function generateThumbnail(
   options: PipelineOptions,
   onProgress?: PipelineProgress,
-): PipelineResult {
+): Promise<PipelineResult> {
   try {
     // Validate input
     if (!options.instruction || options.instruction.trim().length === 0) {
@@ -140,11 +143,14 @@ export function generateThumbnail(
     };
     const design = generateDesign(options.instruction, designOptions);
 
-    // Stage 2: Recommend and apply fonts
+    // Stage 2: Recommend fonts + apply effect presets
     onProgress?.('fonts', 'Selecting optimal fonts...');
     const { design: fontEnrichedDesign, recommendations } = applyFontRecommendationsInternal(design);
 
-    // Stage 3: Convert to EditorActions
+    // Stage 3: Lazy-load local fonts into the browser runtime
+    await ensureSelectedFontsLoaded(fontEnrichedDesign);
+
+    // Stage 4: Convert to EditorActions
     onProgress?.('actions', 'Converting design to editor actions...');
     const actions = designToActions(fontEnrichedDesign);
 
@@ -193,10 +199,10 @@ export function generateThumbnail(
  * }
  * ```
  */
-export function refineThumbnail(
+export async function refineThumbnail(
   instruction: string,
   currentDesign: ThumbnailDesign,
-): PipelineResult {
+): Promise<PipelineResult> {
   try {
     if (!instruction || instruction.trim().length === 0) {
       return {
@@ -215,6 +221,9 @@ export function refineThumbnail(
 
     // Re-apply font recommendations
     const { design: fontEnrichedDesign, recommendations } = applyFontRecommendationsInternal(design);
+
+    // Lazy-load any new local fonts
+    await ensureSelectedFontsLoaded(fontEnrichedDesign);
 
     // Convert to actions
     const actions = designToActions(fontEnrichedDesign);
@@ -279,8 +288,12 @@ interface FontRecommendationEntry {
 }
 
 /**
- * Internal implementation of font recommendation application.
+ * Internal implementation of font recommendation and effect preset application.
  * Mutates the design in place and returns recommendation metadata.
+ *
+ * For each text layer:
+ * 1. Recommends the optimal font from the merged catalog (55 + 776 fonts)
+ * 2. Applies mood × category effect presets to the layer
  *
  * @param design - The design to modify (will be mutated).
  * @returns The modified design and recommendation entries.
@@ -305,6 +318,11 @@ function applyFontRecommendationsInternal(design: ThumbnailDesign): {
     if (recs.length > 0) {
       const topRec = recs[0];
       textLayer.fontFamily = topRec.font.family;
+
+      // Apply mood × category effect presets
+      const effects = getEffectsForMoodAndCategory(mood, topRec.font.category);
+      textLayer.effects = effects.map((e) => ({ ...e }));
+
       recommendations.push({
         layerName: textLayer.name,
         fontFamily: topRec.font.family,
@@ -314,6 +332,28 @@ function applyFontRecommendationsInternal(design: ThumbnailDesign): {
   }
 
   return { design, recommendations };
+}
+
+/**
+ * Lazy-load all local fonts referenced in the design into the browser runtime.
+ * Called after font selection but before action conversion / rendering.
+ *
+ * @param design - The design whose text layers' fonts to ensure are loaded.
+ */
+async function ensureSelectedFontsLoaded(design: ThumbnailDesign): Promise<void> {
+  const families: string[] = [];
+  for (const layer of design.layers) {
+    if (layer.kind === 'text') {
+      const family = (layer as TextLayerDesign).fontFamily;
+      if (family && isLocalFont(family)) {
+        families.push(family);
+      }
+    }
+  }
+  if (families.length === 0) return;
+
+  const store = useLocalFontsStore.getState();
+  await store.ensureFontsLoaded(families);
 }
 
 /**

@@ -32,6 +32,7 @@ import {
   resolveMoodsToTags,
   recommendFonts,
 } from './font-selector-ai';
+import { getMergedCatalog } from './local-font-catalog';
 
 // ---------------------------------------------------------------------------
 // 1. Font Catalog Completeness Tests
@@ -513,8 +514,9 @@ describe('recommendFonts — edge cases', () => {
   });
 
   it('should not crash when limit is very large', () => {
+    const merged = getMergedCatalog();
     const recs = recommendFonts({ text: 'Test', limit: 1000 });
-    expect(recs.length).toBeLessThanOrEqual(FONT_CATALOG.length);
+    expect(recs.length).toBeLessThanOrEqual(merged.length);
   });
 });
 
@@ -566,5 +568,66 @@ describe('recommendFonts — genre-based scenarios', () => {
     const topFont = recs[0];
     expect(topFont.font.japaneseSupport).toBe(true);
     expect(topFont.font.tags).toContain('エレガント');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. Merged Catalog Recommendation Tests
+// ---------------------------------------------------------------------------
+
+describe('recommendFonts — merged catalog (55 + 776)', () => {
+  const merged = getMergedCatalog();
+
+  it('should use merged catalog by default (more than 55 fonts scored)', () => {
+    const recs = recommendFonts({
+      text: '衝撃',
+      mood: ['力強い'],
+      limit: 20,
+    });
+    // With 800+ fonts, we should get 20 results
+    expect(recs.length).toBe(20);
+  });
+
+  it('should still prioritize Japanese fonts for Japanese text with merged catalog', () => {
+    const recs = recommendFonts({
+      text: '衝撃の事実',
+      mood: ['力強い', 'インパクト'],
+      limit: 5,
+    });
+    for (const rec of recs) {
+      expect(rec.font.japaneseSupport).toBe(true);
+    }
+  });
+
+  it('should score local fonts using the same algorithm', () => {
+    const recs = recommendFonts({
+      text: 'Test',
+      mood: ['elegant'],
+      catalog: merged,
+      limit: 10,
+    });
+    // All results should be sorted by score
+    for (let i = 1; i < recs.length; i++) {
+      expect(recs[i - 1].score).toBeGreaterThanOrEqual(recs[i].score);
+    }
+  });
+
+  it('should accept explicit catalog parameter', () => {
+    const recs = recommendFonts({
+      text: 'Test',
+      catalog: FONT_CATALOG, // Only the 55 built-in fonts
+      limit: 55,
+    });
+    expect(recs.length).toBe(55);
+  });
+
+  it('should find handwriting fonts for 手書き mood with merged catalog', () => {
+    const recs = recommendFonts({
+      text: '手書きメッセージ',
+      mood: ['手書き風', 'カジュアル'],
+      limit: 10,
+    });
+    const hwFonts = recs.filter((r) => r.font.category === 'handwriting');
+    expect(hwFonts.length).toBeGreaterThanOrEqual(3);
   });
 });

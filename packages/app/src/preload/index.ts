@@ -72,6 +72,9 @@ const electronAPI = {
   loadCustomFont: (filePath: string): Promise<{ data: ArrayBuffer; name: string } | null> =>
     ipcRenderer.invoke('font:loadCustomFont', filePath),
 
+  loadLocalFont: (relativePath: string): Promise<{ data: ArrayBuffer; name: string } | null> =>
+    ipcRenderer.invoke('font:loadLocalFont', relativePath),
+
   // Google Fonts — FONT-001
   searchGoogleFonts: (
     query: string,
