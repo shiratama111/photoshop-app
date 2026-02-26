@@ -152,9 +152,10 @@ export function TransformHandles(): React.JSX.Element | null {
   const layer = findLayerById(document.rootGroup, selectedLayerId);
   if (!layer || (layer.type !== 'raster' && layer.type !== 'text')) return null;
   const isEditingSelectedTextLayer = layer.type === 'text' && editingTextLayerId === layer.id;
-  // When the text tool is active, disable handle interaction so clicks pass
-  // through to the canvas for text creation/editing (Issue #5).
-  const handlesInteractive = activeTool !== 'text';
+  // When the text tool is active but NOT editing, disable handle interaction
+  // so clicks pass through to the canvas for text creation/editing (Issue #5).
+  // When actively editing a text layer, keep handles interactive for resizing.
+  const handlesInteractive = activeTool !== 'text' || isEditingSelectedTextLayer;
 
   // Get layer bounds in document coordinates.
   let layerBounds: Bounds;
