@@ -58,7 +58,7 @@ import { HistoryPanel } from './components/panels/HistoryPanel';
 import { AdjustmentsDialog } from './components/dialogs/AdjustmentsDialog';
 import { ImageSizeDialog } from './components/dialogs/ImageSizeDialog';
 import { CanvasSizeDialog } from './components/dialogs/CanvasSizeDialog';
-import { TextPropertiesPanel, InlineTextEditor } from './components/text-editor';
+import { TextPropertiesPanel } from './components/text-editor';
 import { TemplateDialog } from './components/dialogs/TemplateDialog';
 import { BackgroundDialog } from './components/dialogs/BackgroundDialog';
 import { PatternDialog } from './components/dialogs/PatternDialog';
@@ -281,7 +281,6 @@ export function App(): React.JSX.Element {
   const hideContextMenu = useAppStore((s) => s.hideContextMenu);
   const showAbout = useAppStore((s) => s.showAbout);
   const toggleAbout = useAppStore((s) => s.toggleAbout);
-  const editingTextLayerId = useAppStore((s) => s.editingTextLayerId);
   const layerStyleDialog = useAppStore((s) => s.layerStyleDialog);
   const stopEditingText = useAppStore((s) => s.stopEditingText);
   const dragOverActive = useAppStore((s) => s.dragOverActive);
@@ -757,7 +756,6 @@ export function App(): React.JSX.Element {
       <PatternDialog />
       <BorderDialog />
       <GradientMaskDialog />
-      {editingTextLayerId && <InlineTextEditor />}
       {layerStyleDialog && <LayerStyleDialog />}
       {dragOverActive && (
         <div className="drag-overlay">

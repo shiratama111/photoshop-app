@@ -35,6 +35,7 @@ import { t } from '../../i18n';
 import { TransformHandles } from './TransformHandles';
 import { SelectionOverlay } from './SelectionOverlay';
 import { CutoutTool } from '../tools/CutoutTool';
+import { InlineTextEditor } from '../text-editor';
 import { spacePanState } from './spacePanState';
 import { getTextLayerHitBounds, isPointInBounds } from './text-hit-test';
 
@@ -766,6 +767,7 @@ export function CanvasView(): React.JSX.Element {
             className="editor-canvas"
           />
           <TransformHandles />
+          {editingTextLayerId && <InlineTextEditor />}
           <SelectionOverlay />
           <CutoutTool />
           {isBrushTool && (

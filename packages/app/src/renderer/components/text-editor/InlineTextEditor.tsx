@@ -281,12 +281,10 @@ export function InlineTextEditor(): React.JSX.Element | null {
     y: activePreview?.y ?? textLayer.position.y,
   });
 
-  // Account for the canvas-area element offset
-  const canvasArea = globalThis.document.querySelector('.canvas-area');
-  const canvasRect = canvasArea?.getBoundingClientRect() ?? { left: 0, top: 0 };
-
-  const left = canvasRect.left + screenPos.x;
-  const top = canvasRect.top + screenPos.y;
+  // The editor is rendered inside .canvas-area (position: relative),
+  // so screen coordinates from documentToScreen are used directly.
+  const left = screenPos.x;
+  const top = screenPos.y;
   const fontSize = textLayer.fontSize * zoom;
 
   // If textBounds exists, set initial size in screen coordinates

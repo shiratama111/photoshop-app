@@ -32,26 +32,6 @@ function createTestDocument(): void {
 /** Helper: number of children including the default background layer. */
 const BG = 1;
 
-function resetStore(): void {
-  useAppStore.setState({
-    document: null,
-    activeTool: 'select',
-    zoom: 1,
-    panOffset: { x: 0, y: 0 },
-    statusMessage: 'Ready',
-    showAbout: false,
-    selectedLayerId: null,
-    canUndo: false,
-    canRedo: false,
-    revision: 0,
-    contextMenu: null,
-  });
-}
-
-function createTestDocument(): void {
-  useAppStore.getState().newDocument('Test', 800, 600);
-}
-
 describe('useAppStore', () => {
   beforeEach(() => {
     resetStore();
