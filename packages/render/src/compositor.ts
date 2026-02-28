@@ -92,6 +92,7 @@ export class Canvas2DRenderer implements Renderer {
     const { width, height } = canvas;
     const docSize = options.documentSize;
     const hiddenLayerIds = options.hiddenLayerIds ? new Set(options.hiddenLayerIds) : null;
+    const effectsOnlyLayerIds = options.effectsOnlyLayerIds ? new Set(options.effectsOnlyLayerIds) : null;
 
     if (docSize) {
       // Pasteboard/artboard mode: dark pasteboard, then white artboard inside viewport
@@ -119,7 +120,7 @@ export class Canvas2DRenderer implements Renderer {
       ctx.fillRect(0, 0, docSize.width, docSize.height);
 
       // 4. Render layer tree bottom-to-top
-      this.renderGroup(ctx, document.rootGroup, options, hiddenLayerIds);
+      this.renderGroup(ctx, document.rootGroup, options, hiddenLayerIds, effectsOnlyLayerIds);
 
       ctx.restore();
     } else {
@@ -139,7 +140,7 @@ export class Canvas2DRenderer implements Renderer {
         vp.offset.y * pixelRatio,
       );
 
-      this.renderGroup(ctx, document.rootGroup, options, hiddenLayerIds);
+      this.renderGroup(ctx, document.rootGroup, options, hiddenLayerIds, effectsOnlyLayerIds);
 
       ctx.restore();
     }
@@ -285,6 +286,7 @@ export class Canvas2DRenderer implements Renderer {
     group: LayerGroup,
     options: RenderOptions,
     hiddenLayerIds: ReadonlySet<string> | null,
+    effectsOnlyLayerIds?: ReadonlySet<string> | null,
   ): void {
     const children = group.children;
     let i = 0;
@@ -297,7 +299,7 @@ export class Canvas2DRenderer implements Renderer {
       if (!this.isClippingLayer(layer)) {
         const clippedRun = this.collectClippedRun(children, i);
         if (clippedRun.length > 0) {
-          this.renderClippingGroup(ctx, layer, clippedRun, options, hiddenLayerIds);
+          this.renderClippingGroup(ctx, layer, clippedRun, options, hiddenLayerIds, effectsOnlyLayerIds);
           // Skip past the base + its clipped layers.
           i += 1 + clippedRun.length;
           continue;
@@ -309,9 +311,11 @@ export class Canvas2DRenderer implements Renderer {
       if (hiddenLayerIds?.has(layer.id)) { i++; continue; }
 
       if (layer.type === 'group') {
-        this.renderGroupAsComposite(ctx, layer, options, hiddenLayerIds);
+        this.renderGroupAsComposite(ctx, layer, options, hiddenLayerIds, effectsOnlyLayerIds);
       } else {
-        this.renderLayer(ctx, layer, options);
+        // Effects-only: render layer effects but skip content (text/raster).
+        const effectsOnly = effectsOnlyLayerIds?.has(layer.id) ?? false;
+        this.renderLayer(ctx, layer, options, effectsOnly);
       }
       i++;
     }
@@ -364,6 +368,7 @@ export class Canvas2DRenderer implements Renderer {
     clippedLayers: Layer[],
     options: RenderOptions,
     hiddenLayerIds: ReadonlySet<string> | null,
+    effectsOnlyLayerIds?: ReadonlySet<string> | null,
   ): void {
     // If the base itself is not visible, skip the entire group.
     if (!baseLayer.visible) return;
@@ -378,7 +383,7 @@ export class Canvas2DRenderer implements Renderer {
 
     // Step 1: Render base layer to the clip canvas.
     if (baseLayer.type === 'group') {
-      this.renderGroup(clipCtx, baseLayer, options, hiddenLayerIds);
+      this.renderGroup(clipCtx, baseLayer, options, hiddenLayerIds, effectsOnlyLayerIds);
     } else {
       this.renderLayerDirect(clipCtx, baseLayer, options);
     }
@@ -400,7 +405,7 @@ export class Canvas2DRenderer implements Renderer {
       layerCtx.clearRect(0, 0, width, height);
 
       if (clipped.type === 'group') {
-        this.renderGroup(layerCtx, clipped, options, hiddenLayerIds);
+        this.renderGroup(layerCtx, clipped, options, hiddenLayerIds, effectsOnlyLayerIds);
       } else {
         this.renderLayerDirect(layerCtx, clipped, options);
       }
@@ -472,6 +477,7 @@ export class Canvas2DRenderer implements Renderer {
     group: LayerGroup,
     options: RenderOptions,
     hiddenLayerIds: ReadonlySet<string> | null,
+    effectsOnlyLayerIds?: ReadonlySet<string> | null,
   ): void {
     const { width, height } = ctx.canvas;
     const tempCanvas = this.pool.acquire(width, height);
@@ -481,7 +487,7 @@ export class Canvas2DRenderer implements Renderer {
     tempCtx.clearRect(0, 0, width, height);
 
     // Render children to temp canvas
-    this.renderGroup(tempCtx, group, options, hiddenLayerIds);
+    this.renderGroup(tempCtx, group, options, hiddenLayerIds, effectsOnlyLayerIds);
 
     // Composite to parent with group opacity/blend
     ctx.save();
@@ -500,23 +506,28 @@ export class Canvas2DRenderer implements Renderer {
     ctx: CanvasContext2DLike,
     layer: RasterLayer | TextLayer,
     options: RenderOptions,
+    effectsOnly = false,
   ): void {
     // Render effects before the layer (behind effects like shadow)
     if (options.renderEffects && layer.effects.length > 0) {
       this.renderEffectsBehind(ctx, layer);
     }
 
-    ctx.save();
-    ctx.globalAlpha = layer.opacity;
-    ctx.globalCompositeOperation = layer.blendMode;
+    // When effectsOnly is true, skip drawing the actual layer content
+    // (the text/raster) so the inline editor overlay can show it instead.
+    if (!effectsOnly) {
+      ctx.save();
+      ctx.globalAlpha = layer.opacity;
+      ctx.globalCompositeOperation = layer.blendMode;
 
-    if (layer.type === 'raster') {
-      this.drawRasterLayer(ctx, layer);
-    } else {
-      this.drawTextLayer(ctx, layer);
+      if (layer.type === 'raster') {
+        this.drawRasterLayer(ctx, layer);
+      } else {
+        this.drawTextLayer(ctx, layer);
+      }
+
+      ctx.restore();
     }
-
-    ctx.restore();
 
     // Render effects after (in front effects like stroke)
     if (options.renderEffects && layer.effects.length > 0) {

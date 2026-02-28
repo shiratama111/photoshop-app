@@ -48,6 +48,8 @@ export interface RenderOptions {
   documentSize?: { width: number; height: number };
   /** Layer IDs that should be skipped during this render pass. */
   hiddenLayerIds?: string[];
+  /** Layer IDs whose content should be skipped but effects still rendered. */
+  effectsOnlyLayerIds?: string[];
 }
 
 /** Renderer interface for compositing layers onto a canvas. */

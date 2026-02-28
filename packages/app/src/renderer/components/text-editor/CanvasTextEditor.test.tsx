@@ -110,9 +110,9 @@ describe('CanvasTextEditor (PS-TEXT-005)', () => {
       expect(source).toContain("window.addEventListener('focus', handleFocus)");
     });
 
-    it('passes editing layer id as hiddenLayerIds to prevent double text rendering', () => {
+    it('passes editing layer id as effectsOnlyLayerIds to render effects without text content', () => {
       const source = fs.readFileSync(path.resolve(__dirname, '../../store.ts'), 'utf8');
-      expect(source).toContain('hiddenLayerIds: editingTextLayerId ? [editingTextLayerId] : undefined');
+      expect(source).toContain('effectsOnlyLayerIds: editingTextLayerId ? [editingTextLayerId] : undefined');
     });
 
     it('keeps text tool defaults and reuses them for new text layer creation', () => {

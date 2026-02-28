@@ -1424,7 +1424,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         showGuides: false,
         background: 'checkerboard',
         documentSize: { width: doc.canvas.size.width, height: doc.canvas.size.height },
-        hiddenLayerIds: editingTextLayerId ? [editingTextLayerId] : undefined,
+        effectsOnlyLayerIds: editingTextLayerId ? [editingTextLayerId] : undefined,
       });
     } catch {
       const renderFailedMessage = t('status.renderFailed');
